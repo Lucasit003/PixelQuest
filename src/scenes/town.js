@@ -25,6 +25,23 @@ import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
 const MAP_W = 1280;
 const MAP_H = 800;
 
+// Potion Shop artwork (real transparent PNG). Loaded once; drawn directly with
+// nearest-neighbor rendering. Authored to the game's native footprint so no
+// runtime scaling/blur is needed.
+const POTION_IMG = new Image();
+let POTION_READY = false;
+POTION_IMG.onload = () => { POTION_READY = true; };
+POTION_IMG.src = 'assets/potion_shop.png';
+// On-screen size in world units (aspect preserved from the source art).
+const POTION_W = 113, POTION_H = 80;
+
+// Crystal Plaza fountain artwork (real transparent PNG).
+const FOUNTAIN_IMG = new Image();
+let FOUNTAIN_READY = false;
+FOUNTAIN_IMG.onload = () => { FOUNTAIN_READY = true; };
+FOUNTAIN_IMG.src = 'assets/fountain.png';
+const FOUNTAIN_W = 79, FOUNTAIN_H = 54; // world units (127x86 authored @ zoom 1.6)
+
 // Town camera zoom: the world is drawn scaled up so the player sees roughly one
 // district plus a little of its neighbours, and the character reads at a good
 // size. Pure 2D — this only changes framing, not the pixel art.
@@ -88,8 +105,8 @@ export class TownScene {
         draw: (g) => drawTrainingGround(g, 792, 190, this.t), solid: { x: 700, y: 232, w: 12, h: 12 } },
       { id: 'dungeon', name: 'Dungeon Gate', dx: 1196, dy: 392, action: 'dungeon', district: 'Dungeon Approach',
         draw: (g) => drawDungeonGate(g, 1196, 372, this.t), solid: { x: 1150, y: 284, w: 92, h: 92 } },
-      { id: 'potion', name: 'Potion Shop', dx: 686, dy: 396, action: 'potion', district: 'Commercial District',
-        draw: (g) => drawPotionShop(g, 686, 368, this.t), solid: { x: 646, y: 330, w: 80, h: 36 } },
+      { id: 'potion', name: 'Potion Shop', dx: 686, dy: 372, action: 'potion', district: 'Commercial District',
+        sortY: 368, draw: (g) => drawPotionShop(g, 686, 368, this.t), solid: null },
       { id: 'pets', name: 'Pet Keeper', dx: 946, dy: 392, action: 'pets', district: 'Pet Sanctuary',
         draw: (g) => drawPetKeeper(g, 946, 368, this.t), solid: { x: 912, y: 328, w: 70, h: 42 } },
       { id: 'market', name: 'Market Square', dx: 336, dy: 620, action: 'market', district: 'Market Square', zone: true,
@@ -98,8 +115,8 @@ export class TownScene {
         draw: (g) => drawTavern(g, 636, 660, this.t), solid: { x: 578, y: 596, w: 116, h: 66 } },
       { id: 'quest', name: 'Quest Board', dx: 1010, dy: 500, action: 'quest', district: 'Dungeon Approach',
         draw: (g) => drawQuestBoard(g, 1010, 484, this.t, !!this.hero.activeQuest()), solid: { x: 998, y: 468, w: 24, h: 18 } },
-      { id: 'plaza', name: 'Crystal Plaza', dx: 560, dy: 470, action: 'rest', district: 'Crystal Plaza',
-        draw: (g) => {}, solid: { x: 544, y: 400, w: 32, h: 24 } },
+      { id: 'plaza', name: 'Crystal Plaza', dx: 560, dy: 438, action: 'rest', district: 'Crystal Plaza',
+        draw: (g) => drawFountainSprite(g, 560, 426, this.t), solid: { x: 534, y: 410, w: 52, h: 16 } },
       { id: 'home', name: 'Your House', dx: 190, dy: 588, action: 'house', district: 'Residential Quarter',
         draw: (g) => drawPlayerHouse(g, 190, 560, this.t), solid: { x: 150, y: 512, w: 80, h: 48 } },
       // decorative NPC homes
@@ -113,6 +130,10 @@ export class TownScene {
 
     // collision solids: footprints + pond + stream banks
     this.solids = this.locations.filter((l) => l.solid).map((l) => l.solid);
+    // Potion Shop: two wall blocks with a gap left open at the centre doorway so
+    // the player can walk up to the door (building base spans x≈630..742, y≈288..368).
+    this.solids.push({ x: 632, y: 314, w: 44, h: 50 }); // left wall
+    this.solids.push({ x: 696, y: 314, w: 44, h: 50 }); // right wall
     this.pond = { cx: 1058, cy: 552, rx: 48, ry: 26 };
     this.solids.push({ x: this.pond.cx - this.pond.rx, y: this.pond.cy - this.pond.ry, w: this.pond.rx * 2, h: this.pond.ry * 2 });
     // stream runs vertically ~x1120; blocked except at the bridge (road y≈415)
@@ -176,16 +197,12 @@ export class TownScene {
     this.propGroups = [
       // blacksmith yard
       { fn: (g) => { barrel(g, 402, 236); barrel(g, 392, 246); crate(g, 500, 240); logPile(g, 506, 250); } },
-      // potion shop storefront: cobble entrance patch, display table, barrels, garden
+      // potion shop: just a short cobble path linking the door to the road (the
+      // PNG art already includes barrels, herbs, bottles, planters, etc.)
       { fn: (g) => {
-        fillEllipse(g, 686, 402, 30, 11, '#8f8570');
-        fillEllipse(g, 686, 401, 28, 10, '#a89c82');
-        for (let a = 0; a < Math.PI * 2; a += 0.4) rect(g, Math.round(686 + Math.cos(a) * 28), Math.round(402 + Math.sin(a) * 10), 1, 1, '#7c7260');
-        potionTable(g, 644, 394);       // left display
-        planter(g, 636, 404);
-        drawBush(g, 624, 398, 0.9);
-        barrel(g, 730, 392); crate(g, 738, 402);   // right stock
-        flowerbed(g, 716, 406);
+        fillEllipse(g, 686, 376, 22, 8, '#8f8570');
+        fillEllipse(g, 686, 375, 20, 7, '#a89c82');
+        for (let a = 0; a < Math.PI * 2; a += 0.5) rect(g, Math.round(686 + Math.cos(a) * 20), Math.round(376 + Math.sin(a) * 7), 1, 1, '#7c7260');
       } },
       // guild tables + barrels
       { fn: (g) => { outdoorTable(g, 566, 688); outdoorTable(g, 706, 690); barrel(g, 690, 668); barrel(g, 700, 676); } },
@@ -246,10 +263,8 @@ export class TownScene {
     if (this.introHintT > 0) this.introHintT -= dt;
     if (this.districtBannerT > 0) this.districtBannerT -= dt;
 
-    // fountain sparkle
-    if (Math.random() < dt * 3) this.particles.spawn({ x: 560 + rand2(-8, 8), y: 418, kind: 'star', color: '#b58bff', vx: 0, vy: -8, life: 1, size: 1 });
-    // subtle magic drifting up from the Potion Shop sign
-    if (Math.random() < dt * 2) this.particles.spawn({ x: 665 + rand2(-5, 5), y: 342 + rand2(-3, 3), kind: 'ember', color: '#c96ad0', vx: rand2(-4, 4), vy: -9, life: 0.8, size: 1 });
+    // crystal sparkle glow (separate from any physical shadow)
+    if (Math.random() < dt * 3) this.particles.spawn({ x: 560 + rand2(-7, 7), y: 388, kind: 'star', color: '#b58bff', vx: 0, vy: -8, life: 1, size: 1 });
 
     // wandering sanctuary pets
     for (const p of this.sanctuaryPets) {
@@ -402,11 +417,10 @@ export class TownScene {
     // and the fountain are entities too, so the player naturally passes behind
     // things north of them and in front of things south of them.
     const ents = [];
-    for (const loc of this.locations) ents.push({ y: loc.solid ? loc.solid.y + loc.solid.h : loc.dy, draw: (gg) => this._drawLocation(gg, loc) });
+    for (const loc of this.locations) ents.push({ y: loc.sortY != null ? loc.sortY : (loc.solid ? loc.solid.y + loc.solid.h : loc.dy), draw: (gg) => this._drawLocation(gg, loc) });
     for (const tr of this.trees) ents.push({ y: tr.y, draw: (gg) => bigTree(gg, tr.x, tr.y, tr.kind === 'pine' ? 'pine' : 'oak', this.t) });
     for (const n of this.npcs) ents.push({ y: n.y, draw: (gg) => { contactShadow(gg, n.x, n.y, 6, 2); drawActor(gg, { x: n.x, y: n.y, facing: n.facing, sprite: n.sprite, weapon: n.sprite === 'warrior' ? 'sword' : (n.sprite === 'mage' ? 'staff' : 'none'), state: 'idle', animTime: this.t + n.x }); } });
     for (const p of this.sanctuaryPets) ents.push({ y: p.y, draw: (gg) => drawPet(gg, p, p.x, p.y, this.t) });
-    ents.push({ y: 424, draw: (gg) => fountainCrystal(gg, 560, 418, this.t) }); // Crystal Plaza fountain (base bottom ≈ 424)
     ents.push({ y: this.py, draw: (gg) => this._drawPlayer(gg) });
     ents.sort((a, b) => a.y - b.y);
     for (const e of ents) e.draw(g);
@@ -742,41 +756,23 @@ function drawBlacksmith(g, cx, baseY, t) {
   weaponRack(g, cx + 34, baseY + 2);
 }
 
-// The Potion Shop — a detailed 3/4 fantasy potion shop with a big purple tiled
-// roof, timber-framed walls, a giant hanging potion-bottle sign, a striped
-// awning, warm windows with potion silhouettes, hanging herbs and a chimney.
-// Purely visual: collision/interaction live on the location entry. This one
-// function is the swap point if a dedicated PNG sprite is authored later.
+// The Potion Shop — rendered directly from the authored transparent PNG (real
+// alpha, no baked background). Anchored bottom-centre at the shop's ground
+// position with a subtle contact shadow. Nearest-neighbor, no smoothing.
 function drawPotionShop(g, cx, baseY, t) {
-  const w = 84, h = 46;
-  const b = wallBox(g, cx, baseY, w, h, '#6f5f8c', '#4c3f68', '#241a2a');
-  const x = b.x, y = b.y;
-  rect(g, x + 2, y + 2, w - 4, h - 6, '#7c6c9a');            // plaster fill
-  rect(g, x + 2, y + 2, w - 4, 1, '#928bb4');                // lit top of plaster
-  rect(g, x, y + Math.round(h * 0.52), w, 2, '#3a2f4c');     // mid rail beam
-  for (let bx = x + 5; bx < x + w - 3; bx += 15) rect(g, bx, y, 2, h, '#3a2f4c'); // studs
-  rect(g, x, y, w, 2, '#a091c0');                            // top plate lit
-  rect(g, x + w - 1, y, 1, h, '#332944');                    // right edge shade
-  // big purple tiled roof (~40%), large overhang + eave shadow
-  pitchedRoof(g, cx, y - 22, w, 24, '#7a45ac', '#48286e', '#241a2a', 11);
-  rect(g, cx - w / 2 - 7, y - 20, 12, 1, '#a877d8');         // bright upper-left tiles
-  rect(g, cx - w / 2 - 7, y - 17, 8, 1, '#9866c8');
-  // chimney with slow purple smoke
-  rect(g, cx + w / 2 - 12, y - 30, 7, 13, '#5a4a6a'); rect(g, cx + w / 2 - 13, y - 32, 9, 3, '#3a2e46');
-  if (Math.random() < 0.10) rect(g, cx + w / 2 - 10, y - 34 - ((t * 5) % 8), 2, 2, 'rgba(150,110,180,0.4)');
-  // windows with tiny potion silhouettes
-  potionWindow(g, cx - w / 2 + 9, baseY - 30);
-  potionWindow(g, cx + w / 2 - 19, baseY - 30);
-  // striped awning over the storefront
-  awningStriped(g, cx, baseY - 15, 48);
-  // hanging herbs under the awning
-  hangingHerbs(g, cx - 20, baseY - 12); hangingHerbs(g, cx + 16, baseY - 12);
-  // recessed doorway
-  door(g, cx, baseY, 16, 20, '#3f2a55');
-  // GIANT potion-bottle sign on a wooden bracket
-  rect(g, cx - 34, baseY - 40, 14, 2, '#3a2f4c');
-  rect(g, cx - 22, baseY - 40, 2, 4, '#3a2f4c');
-  potionSign(g, cx - 21, baseY - 28, t);
+  // subtle ground/contact shadow (light from upper-left -> shadow lower-right)
+  contactShadow(g, cx, baseY, POTION_W * 0.42, 6, 0.30);
+  if (!POTION_READY) return; // image not loaded yet this frame
+  g.drawImage(POTION_IMG, Math.round(cx - POTION_W / 2), Math.round(baseY - POTION_H), POTION_W, POTION_H);
+}
+
+// The Crystal Plaza fountain — rendered from the authored transparent PNG.
+// Anchored bottom-centre on the plaza with only a very subtle contact shadow
+// beneath the stone base (the crystal glow/sparkles are separate particles).
+function drawFountainSprite(g, cx, baseY, t) {
+  contactShadow(g, cx, baseY, FOUNTAIN_W * 0.30, 3, 0.22); // tiny, base-only
+  if (!FOUNTAIN_READY) return;
+  g.drawImage(FOUNTAIN_IMG, Math.round(cx - FOUNTAIN_W / 2), Math.round(baseY - FOUNTAIN_H), FOUNTAIN_W, FOUNTAIN_H);
 }
 
 function potionWindow(g, x, y) {
@@ -974,27 +970,39 @@ function drawDungeonGate(g, cx, baseY, t) {
 
 // ---------------------------------------------------------------- props
 
+// Cobblestone road styled after the Asset Kit: rounded, beveled stones set in
+// warm mortar, an offset (brick-like) layout, with lit top-left and shaded
+// bottom-right faces per stone, occasional mossy stones, and grass creeping in
+// along the edges.
 function roadSeg(g, x, y, w, h) {
-  // dark grout base so individual stones read
-  rect(g, x, y, w, h, '#6f6656');
-  for (let ry = 1; ry < h - 1; ry += 5) {
-    const off = ((ry / 5 | 0) % 2) * 3;
-    for (let rx = 1; rx < w - 2; rx += 6) {
-      const hh = hash((x + rx) * 1.3 + (y + ry) * 0.7);
-      if (hh > 0.9) continue;                       // missing stone -> grout shows
-      const sx = x + rx + (off % 6), sy = y + ry;
-      if (sx + 4 > x + w) continue;
-      const shade = hh < 0.33 ? '#b2a68a' : hh < 0.66 ? '#a89c82' : '#988d76';
-      rect(g, sx, sy, 4, 3, shade);
-      rect(g, sx, sy, 4, 1, '#c2b698');             // upper-left highlight
-      rect(g, sx, sy + 2, 4, 1, '#7c7260');         // lower-right shade
-      if (hh > 0.8) rect(g, sx + 1, sy + 1, 2, 1, '#6f6656'); // crack
+  rect(g, x, y, w, h, '#5c5346');                 // dark mortar base
+  rect(g, x, y, w, 1, '#6b6153');                 // mortar top light
+  const SW = 7, SH = 5;                           // stone cell
+  for (let ry = 1; ry < h - 1; ry += SH) {
+    const off = ((ry / SH | 0) % 2) * Math.floor(SW / 2);
+    for (let rx = 1; rx < w - 1; rx += SW) {
+      const sx = x + rx + (off % SW), sy = y + ry;
+      if (sx + SW - 1 > x + w) continue;
+      const hh = hash((sx) * 1.3 + (sy) * 0.7);
+      if (hh > 0.94) continue;                     // rare missing stone -> mortar
+      const moss = hh > 0.86;
+      const base = moss ? '#6f7a54' : (hh < 0.33 ? '#b4a888' : hh < 0.66 ? '#a99d80' : '#9a8f74');
+      const lite = moss ? '#8a9668' : '#c8bc9e';
+      const dark = moss ? '#566040' : '#7c7058';
+      const sw = SW - 2, sh = SH - 1;
+      // rounded stone body (clip the 4 corners)
+      rect(g, sx + 1, sy, sw - 2, sh, base);
+      rect(g, sx, sy + 1, sw, sh - 2, base);
+      rect(g, sx + 1, sy, sw - 2, 1, lite);        // top-left highlight
+      rect(g, sx, sy + 1, 1, sh - 2, lite);
+      rect(g, sx + 1, sy + sh - 1, sw - 2, 1, dark); // bottom-right shade
+      rect(g, sx + sw - 1, sy + 1, 1, sh - 2, dark);
     }
   }
-  // irregular grassy edges (grass creeping over the stones)
+  // grass creeping over the edges
   for (let i = 0; i < w; i += 3) {
-    if (hash((x + i) * 2.1) > 0.62) rect(g, x + i, y - 1, 2, 1, '#357338');
-    if (hash((x + i) * 1.4 + 9) > 0.62) rect(g, x + i, y + h - 1, 2, 1, '#2c6630');
+    if (hash((x + i) * 2.1) > 0.6) { rect(g, x + i, y - 1, 2, 1, '#357338'); rect(g, x + i, y, 1, 1, '#2c6630'); }
+    if (hash((x + i) * 1.4 + 9) > 0.6) rect(g, x + i, y + h - 1, 2, 1, '#2c6630');
   }
 }
 

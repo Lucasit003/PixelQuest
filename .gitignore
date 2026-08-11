@@ -13,3 +13,6 @@ npm-debug.log*
 *.log
 /tmp/
 scratchpad/
+
+# Large source art (keep the game-ready versions only)
+assets/*_source.png
