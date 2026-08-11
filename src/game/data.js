@@ -1,0 +1,245 @@
+// Static game data: classes, skill trees, abilities, weapons, potions, enemies,
+// pets, and the loot/economy tables. Pure data + small helpers — no rendering,
+// no game state. The design rule from the spec is enforced here: abilities are
+// unlocked by TRAINING MASTERY, never bought.
+
+// ------------------------------------------------------------- rarities
+
+export const RARITY = {
+  common:    { name: 'Common',    color: '#c8cfe0', order: 0, mult: 1.0 },
+  uncommon:  { name: 'Uncommon',  color: '#57d98a', order: 1, mult: 1.25 },
+  rare:      { name: 'Rare',      color: '#5b8cf2', order: 2, mult: 1.6 },
+  epic:      { name: 'Epic',      color: '#a56bd9', order: 3, mult: 2.1 },
+  legendary: { name: 'Legendary', color: '#f2a03f', order: 4, mult: 2.8 },
+};
+
+// --------------------------------------------------------- academic model
+// Three academic LEVELS (not difficulties): Middle / High / College.
+// Seven CATEGORIES. Mastery is tracked per (category) 0..100 and per level.
+
+export const LEVELS = [
+  { id: 'middle',  name: 'Middle School', short: 'MS', tier: 'Apprentice', color: '#57d98a' },
+  { id: 'high',    name: 'High School',   short: 'HS', tier: 'Adventurer',  color: '#5b8cf2' },
+  { id: 'college', name: 'College',       short: 'CO', tier: 'Master',      color: '#e05a5a' },
+];
+
+export const CATEGORIES = [
+  { id: 'math',    name: 'Math & Logic',       icon: 'book', color: '#5b8cf2', stat: 'magic' },
+  { id: 'cs',      name: 'Computer Science',    icon: 'book', color: '#57d98a', stat: 'attack' },
+  { id: 'science', name: 'Science',             icon: 'book', color: '#a56bd9', stat: 'magic' },
+  { id: 'geo',     name: 'World & Geography',    icon: 'book', color: '#3fd9c9', stat: 'hp' },
+  { id: 'history', name: 'History',             icon: 'book', color: '#f2a03f', stat: 'defense' },
+  { id: 'lang',    name: 'Language & Comm.',     icon: 'book', color: '#e0679a', stat: 'mana' },
+  { id: 'finance', name: 'Finance & Economics',  icon: 'coin', color: '#f2c94f', stat: 'gold' },
+];
+
+// --------------------------------------------------------------- abilities
+// Each ability belongs to a class + skill-tree branch, and is gated behind a
+// mastery threshold in a specific academic category. Training that category
+// past the threshold unlocks it.
+
+export const ABILITIES = {
+  // ---- Warrior ----
+  heavy_strike: {
+    name: 'Heavy Strike', cls: 'warrior', branch: 'Might', icon: 'sword',
+    gate: { cat: 'cs', mastery: 0 }, // starter, effectively free
+    mana: 0, cd: 3.5, dmg: 34, kind: 'melee', range: 34, kb: 90,
+    desc: 'A crushing overhead blow with big knockback.',
+  },
+  shield_bash: {
+    name: 'Shield Bash', cls: 'warrior', branch: 'Guard', icon: 'shield',
+    gate: { cat: 'history', mastery: 25 },
+    mana: 10, cd: 6, dmg: 18, kind: 'melee', range: 26, kb: 140, stun: 1.1,
+    desc: 'Stuns and knocks back everything in front of you.',
+  },
+  ground_slam: {
+    name: 'Ground Slam', cls: 'warrior', branch: 'Might', icon: 'axe',
+    gate: { cat: 'math', mastery: 45 },
+    mana: 18, cd: 8, dmg: 40, kind: 'aoe', range: 42, kb: 120,
+    desc: 'Slam the earth; damages and launches all nearby foes.',
+  },
+  berserker_rage: {
+    name: "Berserker Rage", cls: 'warrior', branch: 'Fury', icon: 'star',
+    gate: { cat: 'science', mastery: 60 },
+    mana: 25, cd: 16, kind: 'buff', dur: 6, atkMult: 1.6, speedMult: 1.3,
+    desc: '+60% damage and +30% speed for 6 seconds.',
+  },
+  // ---- Mage ----
+  fireball: {
+    name: 'Fireball', cls: 'mage', branch: 'Fire', icon: 'staff',
+    gate: { cat: 'math', mastery: 0 }, // starter
+    mana: 8, cd: 1.6, dmg: 22, kind: 'projectile', speed: 150, range: 220, element: 'fire',
+    desc: 'Hurl a bolt of flame that pierces on impact.',
+  },
+  frost_nova: {
+    name: 'Frost Nova', cls: 'mage', branch: 'Ice', icon: 'star',
+    gate: { cat: 'science', mastery: 30 },
+    mana: 16, cd: 7, dmg: 16, kind: 'aoe', range: 46, freeze: 2.2, element: 'ice',
+    desc: 'Freeze all nearby enemies solid for a moment.',
+  },
+  lightning: {
+    name: 'Chain Lightning', cls: 'mage', branch: 'Storm', icon: 'staff',
+    gate: { cat: 'cs', mastery: 45 },
+    mana: 20, cd: 5, dmg: 30, kind: 'chain', chains: 3, range: 200, element: 'storm',
+    desc: 'Lightning leaps between up to three enemies.',
+  },
+  arcane_shield: {
+    name: 'Arcane Shield', cls: 'mage', branch: 'Arcane', icon: 'shield',
+    gate: { cat: 'lang', mastery: 55 },
+    mana: 22, cd: 14, kind: 'buff', dur: 7, shield: 60,
+    desc: 'Absorbs the next 60 damage for 7 seconds.',
+  },
+};
+
+export function abilitiesForClass(cls) {
+  return Object.entries(ABILITIES)
+    .filter(([, a]) => a.cls === cls)
+    .map(([id, a]) => ({ id, ...a }));
+}
+
+// The two starter abilities every class gets immediately.
+export const STARTER_ABILITY = { warrior: 'heavy_strike', mage: 'fireball' };
+
+// ----------------------------------------------------------------- classes
+
+export const CLASSES = {
+  warrior: {
+    id: 'warrior', name: 'Warrior', sprite: 'warrior',
+    color: '#c8cfe0',
+    blurb: 'Balanced fighter with strong defense and reliable offense. High HP, heavy melee, shrugs off hits.',
+    resource: 'Stamina', resourceColor: '#f2a03f',
+    base: { hp: 140, mana: 40, attack: 22, defense: 14, magic: 6, speed: 62 },
+    growth: { hp: 22, mana: 4, attack: 3.2, defense: 2.4, magic: 0.6, speed: 1.2 },
+    weapon: 'sword', combo: [16, 20, 30], reach: 26,
+    trees: ['Might', 'Guard', 'Fury'],
+    critBase: 0.06,
+  },
+  mage: {
+    id: 'mage', name: 'Mage', sprite: 'mage',
+    color: '#9d8bff',
+    blurb: 'Master of the arcane. Uses powerful spells to control the battlefield. Big mana, low armour.',
+    resource: 'Mana', resourceColor: '#5b8cf2',
+    base: { hp: 92, mana: 120, attack: 12, defense: 7, magic: 24, speed: 66 },
+    growth: { hp: 12, mana: 14, attack: 1.4, defense: 1.1, magic: 3.4, speed: 1.3 },
+    weapon: 'staff', combo: [12, 14, 20], reach: 24,
+    trees: ['Fire', 'Ice', 'Storm', 'Arcane'],
+    critBase: 0.08,
+  },
+};
+
+// ----------------------------------------------------------------- weapons
+// Shop stock + drop pool. `stat` fields are added to the hero.
+
+export const WEAPONS = {
+  // starters (owned from the beginning)
+  worn_sword:  { name: 'Worn Sword',  slot: 'weapon', cls: 'warrior', icon: 'sword',  rarity: 'common', attack: 0,  desc: 'It has seen better days.' },
+  cracked_staff:{ name: 'Cracked Staff', slot: 'weapon', cls: 'mage', icon: 'staff',  rarity: 'common', magic: 0,   desc: 'Barely holds a spark.' },
+
+  // warrior weapons
+  iron_sword:  { name: 'Iron Sword',   slot: 'weapon', cls: 'warrior', icon: 'sword', rarity: 'common',   attack: 6,  price: 60,  desc: 'Reliable steel.' },
+  battle_axe:  { name: 'Battle Axe',   slot: 'weapon', cls: 'warrior', icon: 'axe',   rarity: 'uncommon', attack: 11, speed: -4, price: 140, desc: 'Slow but brutal.' },
+  knight_blade:{ name: 'Knight Blade', slot: 'weapon', cls: 'warrior', icon: 'sword', rarity: 'rare',     attack: 16, crit: 0.04, price: 320, desc: 'Balanced and keen.' },
+  dragon_cleaver:{ name: 'Dragon Cleaver', slot: 'weapon', cls: 'warrior', icon: 'axe', rarity: 'epic',   attack: 24, defense: 4, price: 640, desc: 'Forged from a wyrm fang.' },
+  excalibur:   { name: 'Sunforged Edge', slot: 'weapon', cls: 'warrior', icon: 'sword', rarity: 'legendary', attack: 34, crit: 0.1, magic: 8, price: 1200, desc: 'It hums with dawnlight.' },
+
+  // mage weapons
+  oak_staff:   { name: 'Oak Staff',    slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'common',   magic: 6,  price: 60,  desc: 'A sturdy focus.' },
+  crystal_wand:{ name: 'Crystal Wand', slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'uncommon', magic: 11, mana: 20, price: 140, desc: 'Cool to the touch.' },
+  runed_staff: { name: 'Runed Staff',  slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'rare',     magic: 16, crit: 0.04, price: 320, desc: 'Glyphs crawl along it.' },
+  storm_scepter:{ name: 'Storm Scepter', slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'epic',   magic: 24, mana: 40, price: 640, desc: 'Distant thunder answers it.' },
+  archmage_rod:{ name: 'Archmage Rod', slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'legendary', magic: 34, mana: 60, crit: 0.08, price: 1200, desc: 'Reality bends politely.' },
+
+  // shared trinkets (any class)
+  leather_charm:{ name: 'Leather Charm', slot: 'trinket', icon: 'shield', rarity: 'common',   defense: 3, hp: 20, price: 80, desc: 'A lucky cord.' },
+  guard_ring:  { name: 'Guardian Ring', slot: 'trinket', icon: 'shield', rarity: 'uncommon', defense: 6, hp: 40, price: 180, desc: 'Warm and protective.' },
+  sage_amulet: { name: 'Sage Amulet',   slot: 'trinket', icon: 'star',   rarity: 'rare',     magic: 8, mana: 30, price: 260, desc: 'For the studious.' },
+  swift_boots: { name: 'Swift Boots',   slot: 'trinket', icon: 'star',   rarity: 'uncommon', speed: 10, crit: 0.03, price: 200, desc: 'Light on the feet.' },
+};
+
+export function weaponsFor(cls) {
+  return Object.entries(WEAPONS)
+    .filter(([, w]) => (!w.cls || w.cls === cls) && w.price)
+    .map(([id, w]) => ({ id, ...w }));
+}
+
+// ----------------------------------------------------------------- potions
+
+export const POTIONS = {
+  health:  { name: 'Health Potion',  icon: 'potionRed',    color: '#e05a5a', price: 25,  heal: 60,  desc: 'Restore 60 HP.' },
+  mana:    { name: 'Mana Potion',    icon: 'potionBlue',   color: '#5b8cf2', price: 25,  mana: 60,  desc: 'Restore 60 MP.' },
+  speed:   { name: 'Speed Draught',  icon: 'potionGreen',  color: '#57d98a', price: 40,  buff: 'speed', dur: 12, desc: '+40% speed for 12s.' },
+  defense: { name: 'Iron Skin Brew', icon: 'potionYellow', color: '#f2c94f', price: 40,  buff: 'defense', dur: 12, desc: 'Halve damage for 12s.' },
+};
+
+// ------------------------------------------------------------------ enemies
+
+export const ENEMIES = {
+  goblin: {
+    name: 'Goblin', sprite: 'goblin', hp: 34, attack: 8, speed: 46, defense: 2,
+    reach: 20, gold: [4, 9], xp: 6, behavior: 'chase', attackCd: 1.4, w: 12,
+  },
+  slime: {
+    name: 'Slime', sprite: 'slime', hp: 26, attack: 6, speed: 30, defense: 0,
+    reach: 16, gold: [2, 6], xp: 4, behavior: 'hop', attackCd: 1.8, w: 14,
+    tint: '#3fb872', tintDark: '#2a8a52', tintLite: '#7fe8a8',
+  },
+  slime_blue: {
+    name: 'Frost Slime', sprite: 'slime', hp: 40, attack: 9, speed: 26, defense: 3,
+    reach: 16, gold: [4, 8], xp: 7, behavior: 'hop', attackCd: 1.6, w: 14,
+    tint: '#4f9fe0', tintDark: '#2f6fb0', tintLite: '#9fd0ff',
+  },
+  skeleton: {
+    name: 'Skeleton', sprite: 'skeleton', hp: 30, attack: 10, speed: 40, defense: 4,
+    reach: 22, gold: [5, 11], xp: 8, behavior: 'chase', attackCd: 1.2, w: 12,
+  },
+  skeleton_archer: {
+    name: 'Bone Archer', sprite: 'skeleton', hp: 24, attack: 9, speed: 34, defense: 2,
+    reach: 140, gold: [6, 12], xp: 10, behavior: 'ranged', attackCd: 2.2, w: 12,
+    projectile: true, projSpeed: 130,
+  },
+};
+
+// Goblin King boss with four phases as specified.
+export const BOSS = {
+  goblin_king: {
+    name: 'Goblin King', sprite: 'king', hp: 520, attack: 16, speed: 40, defense: 6,
+    reach: 34, w: 24, gold: [120, 180], xp: 140,
+    phases: [
+      { at: 1.0,  name: 'The Warlord',   summon: 0, speed: 40, cd: 1.8, note: 'Club sweeps.' },
+      { at: 0.7,  name: 'Call the Horde', summon: 3, speed: 44, cd: 1.6, note: 'Summons goblins!' },
+      { at: 0.4,  name: 'Enraged',       summon: 2, speed: 60, cd: 1.1, note: 'Faster and furious!' },
+      { at: 0.18, name: 'Last Stand',    summon: 4, speed: 66, cd: 0.9, note: 'Ground-shaking slams!' },
+    ],
+  },
+};
+
+// -------------------------------------------------------------------- pets
+
+export const PETS = {
+  ember_dragon: { name: 'Ember Dragon', sprite: 'dragon', bonus: 'fireDmg',  amount: 0.05, desc: '+5% Fire damage.' },
+  arcane_owl:   { name: 'Arcane Owl',   sprite: 'owl',    bonus: 'trainXp',  amount: 0.05, desc: '+5% Training XP.' },
+  shadow_fox:   { name: 'Shadow Fox',   sprite: 'fox',    bonus: 'moveSpeed',amount: 0.05, desc: '+5% Movement speed.' },
+  ancient_turtle:{ name: 'Ancient Turtle', sprite: 'turtle', bonus: 'defense', amount: 0.05, desc: '+5% Defense.' },
+  lucky_rabbit: { name: 'Lucky Rabbit', sprite: 'rabbit', bonus: 'rareLoot', amount: 0.05, desc: '+5% Rare loot chance.' },
+};
+
+// --------------------------------------------------------- leveling curve
+
+export function xpForLevel(level) {
+  return Math.floor(40 * Math.pow(level, 1.5)) + 30;
+}
+
+// Mastery gained per correct answer, scaled by academic level difficulty.
+export function masteryGain(levelId, correct) {
+  const base = correct ? 6 : 1;
+  const scale = levelId === 'college' ? 1.4 : levelId === 'high' ? 1.15 : 1.0;
+  return base * scale;
+}
+
+// Training XP -> hero XP conversion.
+export function trainingXp(levelId, correct, streak) {
+  if (!correct) return 2;
+  const base = levelId === 'college' ? 18 : levelId === 'high' ? 13 : 9;
+  const streakBonus = Math.min(2, 1 + streak * 0.1);
+  return Math.round(base * streakBonus);
+}
