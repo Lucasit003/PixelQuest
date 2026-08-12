@@ -303,13 +303,13 @@ export class TownScene {
 
     this.roads = [
       // Plaza <-> Commercial courtyard (east) — short and direct
-      ...roadPath([[PZ.x + 120, PZ.y - 10], [PZ.x + 250, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
+      ...roadPath([[PZ.x, PZ.y - 10], [PZ.x + 250, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
       // Plaza <-> Market (south-southeast)
-      ...roadPath([[PZ.x + 40, PZ.y + 120], [PZ.x + 110, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
+      ...roadPath([[PZ.x + 10, PZ.y], [PZ.x + 110, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
       // Market <-> South Road
       ...roadPath([[D.market.x - 20, D.market.y + 150], [D.southRoad.x, D.southRoad.y]], mainWidth),
       // Plaza <-> Residential entry (southwest)
-      ...roadPath([[PZ.x - 110, PZ.y + 60], [PZ.x - 280, PZ.y + 150], [D.residential.x + 200, D.residential.y - 40]], mainWidth),
+      ...roadPath([[PZ.x, PZ.y + 10], [PZ.x - 280, PZ.y + 150], [D.residential.x + 200, D.residential.y - 40]], mainWidth),
       // Residential neighborhood loop (organic ring with lot frontage)
       ...roadPath([
         [D.residential.x + 200, D.residential.y - 40],
@@ -321,10 +321,10 @@ export class TownScene {
         [D.residential.x + 200, D.residential.y - 40],
       ], mainWidth),
       // Plaza <-> Guild courtyard (west-northwest)
-      ...roadPath([[PZ.x - 120, PZ.y - 40], [PZ.x - 270, PZ.y - 90], [D.guild.x, D.guild.y + 55]], mainWidth),
+      ...roadPath([[PZ.x, PZ.y - 20], [PZ.x - 270, PZ.y - 90], [D.guild.x, D.guild.y + 55]], mainWidth),
 
       // ---- Adventure route: plaza north -> Watch -> Gate, wide + direct ----
-      ...roadPath([[PZ.x, PZ.y - 125], [PZ.x + 30, PZ.y - 340], [D.watch.x, D.watch.y + 45]], advWidth),
+      ...roadPath([[PZ.x, PZ.y], [PZ.x + 30, PZ.y - 340], [D.watch.x, D.watch.y + 45]], advWidth),
       ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 40, D.watch.y - 200], [D.gate.x, D.gate.y + 50]], advWidth),
       // Guild -> adventure road (the adventurer route past the tavern)
       ...roadPath([[D.guild.x + 70, D.guild.y - 35], [D.guild.x + 260, D.guild.y - 200], [PZ.x + 10, PZ.y - 400]], mainWidth),
@@ -358,12 +358,6 @@ export class TownScene {
         const r0 = Math.floor(r.y / ROAD_TILE), r1 = Math.floor((r.y + r.h) / ROAD_TILE);
         for (let rr = r0; rr <= r1; rr++) for (let k = 0; k < across; k++) this.roadCells.add(`${cx + k},${rr}`);
       }
-    }
-    // clear road cells inside the plaza disc — the plaza floor replaces them
-    for (const key of [...this.roadCells]) {
-      const [c, r] = key.split(',').map(Number);
-      const x = c * ROAD_TILE + ROAD_TILE / 2, y = r * ROAD_TILE + ROAD_TILE / 2;
-      if (Math.hypot(x - PZ.x, (y - (PZ.y + 2)) * 1.25) < this.plazaRadius - 10) this.roadCells.delete(key);
     }
 
     // ----------------------------------------------------------- terrain --
@@ -723,10 +717,6 @@ export class TownScene {
 
     // roads: autotiled cobblestone from the authored tileset
     this._drawRoadTiles(g, visW, visH);
-
-    // plaza cobblestone disc (the fountain itself is a depth-sorted entity) —
-    // sized so the fountain takes ~30% of the diameter, per the reference.
-    plaza(g, this.plazaCenter.x, this.plazaCenter.y + 2, this.plazaRadius);
 
     // Market Square ground: one big organic open square (packed dirt with a
     // stone edge), stalls live on its rim, center stays open.
