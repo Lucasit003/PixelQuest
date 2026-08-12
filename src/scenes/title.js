@@ -87,7 +87,7 @@ export class TitleScene {
   }
 
   _updatePress(dt) {
-    this.pressAlpha = 0.55 + Math.sin(this.t * 3) * 0.45; // pulse
+    this.pressAlpha = 0.825 + Math.sin(this.t * 4.5) * 0.175; // pulse 65%-100%, ~1.4s loop
     if (Input.anyPressed('confirm', 'light', 'interact', 'jump')) {
       Audio.confirm();
       this.mode = 'menu';
@@ -276,7 +276,22 @@ export class TitleScene {
   _drawPress(g) {
     if (this.pressAlpha <= 0.01) return;
     g.globalAlpha = clamp01(this.pressAlpha);
-    drawText(g, 'PRESS ENTER', this.W / 2, PRESS_Y, { color: '#f2c94f', align: 'center', scale: 2, shadow: '#0a0812' });
+
+    // Chunky 16-bit RPG prompt: cream/gold fill, dark outline, tiny gold
+    // drop-shadow — matches the PIXEL QUEST logo's treatment instead of the
+    // plain single-shadow style used for regular UI text.
+    const scale = 1.6, tracking = 2;
+    const arrow = '▶', label = 'PRESS ENTER';
+    const gap = 5;
+    const arrowW = textWidth(arrow, scale, tracking);
+    const labelW = textWidth(label, scale, tracking);
+    const totalW = arrowW + gap + labelW;
+    const startX = this.W / 2 - totalW / 2;
+    const arrowShift = Math.round(Math.sin(this.t * 4.5) * 1.3);
+
+    pressPromptText(g, arrow, startX + arrowW / 2 + arrowShift, PRESS_Y, scale, tracking);
+    pressPromptText(g, label, startX + arrowW + gap + labelW / 2, PRESS_Y, scale, tracking);
+
     g.globalAlpha = 1;
   }
 
@@ -358,6 +373,16 @@ function logoWord(g, str, cx, topY, scale, main, hi, outline) {
   for (const [dx, dy] of OUTLINE) drawText(g, str, cx + dx, topY + dy, { color: outline, scale, align: 'center', tracking: 1 });
   drawText(g, str, cx, topY, { color: hi, scale, align: 'center', tracking: 1 });          // highlight underneath
   drawText(g, str, cx, topY + 1, { color: main, scale, align: 'center', tracking: 1 });     // main, 1px down -> top edge stays bright
+}
+
+// Chunky retro-RPG prompt text: dark outline + tiny gold drop-shadow behind
+// a warm cream/gold fill, in the same family as the logo's treatment but
+// without the top highlight (so it reads as a prompt, not a title).
+const PRESS_OUTLINE = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+function pressPromptText(g, str, cx, topY, scale, tracking) {
+  drawText(g, str, cx + 2, topY + 2, { color: '#b8862c', scale, align: 'center', tracking }); // tiny gold shadow
+  for (const [dx, dy] of PRESS_OUTLINE) drawText(g, str, cx + dx, topY + dy, { color: '#2a1c08', scale, align: 'center', tracking });
+  drawText(g, str, cx, topY, { color: '#f4dfa0', scale, align: 'center', tracking });
 }
 
 // Small crossed-sword-and-open-book emblem (reusable icon placeholder).
