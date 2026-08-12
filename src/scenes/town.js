@@ -943,6 +943,34 @@ function drawFountainSprite(g, cx, baseY, t) {
 // geometry below is measured from the source art (127x86 px, drawn at
 // FOUNTAIN_W x FOUNTAIN_H) and expressed as offsets from (cx, baseY).
 const FX_BASIN = { cx: 0, cy: -24, rx: 26, ry: 12 };   // water ellipse
+
+// Pixel-exact water mask sampled from the fountain art itself, so ripple and
+// shimmer dots can only ever land on real water pixels — never on the stone
+// arms, pedestal, rim, or crystal that sit inside the basin's bounding ellipse.
+let FOUNTAIN_MASK = null, FOUNTAIN_MASK_W = 0, FOUNTAIN_MASK_H = 0;
+function buildFountainMask() {
+  if (FOUNTAIN_MASK || !FOUNTAIN_READY) return;
+  const c = document.createElement('canvas');
+  FOUNTAIN_MASK_W = FOUNTAIN_IMG.naturalWidth;
+  FOUNTAIN_MASK_H = FOUNTAIN_IMG.naturalHeight;
+  c.width = FOUNTAIN_MASK_W; c.height = FOUNTAIN_MASK_H;
+  const mg = c.getContext('2d');
+  mg.drawImage(FOUNTAIN_IMG, 0, 0);
+  const d = mg.getImageData(0, 0, FOUNTAIN_MASK_W, FOUNTAIN_MASK_H).data;
+  FOUNTAIN_MASK = new Uint8Array(FOUNTAIN_MASK_W * FOUNTAIN_MASK_H);
+  for (let i = 0; i < FOUNTAIN_MASK.length; i++) {
+    const r = d[i * 4], gr = d[i * 4 + 1], b = d[i * 4 + 2], a = d[i * 4 + 3];
+    if (a > 120 && b > 170 && gr > 140 && b > r && r < 170) FOUNTAIN_MASK[i] = 1;
+  }
+}
+// dx/dy are world-unit offsets from the fountain anchor (cx, baseY).
+function fountainWaterAt(dx, dy) {
+  if (!FOUNTAIN_MASK) return false;
+  const sx = Math.round((dx + FOUNTAIN_W / 2) * (FOUNTAIN_MASK_W / FOUNTAIN_W));
+  const sy = Math.round((dy + FOUNTAIN_H) * (FOUNTAIN_MASK_H / FOUNTAIN_H));
+  if (sx < 0 || sy < 0 || sx >= FOUNTAIN_MASK_W || sy >= FOUNTAIN_MASK_H) return false;
+  return FOUNTAIN_MASK[sy * FOUNTAIN_MASK_W + sx] === 1;
+}
 const FX_CRYSTAL = { cx: 0, cy: -38, rx: 9, ry: 14 };  // main crystal silhouette
 // The art's real water channels: two cascades sheet down from under the
 // crystal platform, hugging the sides of the front pedestal, then spread
@@ -954,6 +982,7 @@ const FX_FALLS = [
 const FX_RUNE_ARC = { cx: 0, cy: -14, rx: 13, y: -14, count: 6 }; // pedestal rune row
 
 function drawFountainFX(g, cx, baseY, t) {
+  buildFountainMask();
   g.save();
   fxRipples(g, cx, baseY, t);
   fxStreams(g, cx, baseY, t);
@@ -964,22 +993,30 @@ function drawFountainFX(g, cx, baseY, t) {
   g.restore();
 }
 
-// 1. Water ripples: small -> expand -> fade, staggered, looping.
+// 1. Water ripples: small -> expand -> fade, staggered, looping. Spawn points
+// are rejection-sampled against the water mask (a few hash-salted tries per
+// loop), and each ring dot is masked too, so nothing ever lands on stone.
 function fxRipples(g, cx, baseY, t) {
   const N = 4;
+  const mask = (x, y) => fountainWaterAt(x - cx, y - baseY);
   for (let i = 0; i < N; i++) {
     const period = 2.4 + i * 0.31;
     const loop = Math.floor((t + i * 5.1) / period);
     const phase = ((t + i * 5.1) % period) / period; // 0..1
-    const seedA = hash(i * 11.7 + loop * 3.3);
-    const seedB = hash(i * 7.1 + loop * 9.9 + 1);
-    const px = FX_BASIN.cx + (seedA * 2 - 1) * (FX_BASIN.rx - 4);
-    const py = FX_BASIN.cy + (seedB * 2 - 1) * (FX_BASIN.ry - 2);
+    let px = 0, py = 0, found = false;
+    for (let tries = 0; tries < 4 && !found; tries++) {
+      const seedA = hash(i * 11.7 + loop * 3.3 + tries * 17.9);
+      const seedB = hash(i * 7.1 + loop * 9.9 + 1 + tries * 13.3);
+      px = FX_BASIN.cx + (seedA * 2 - 1) * (FX_BASIN.rx - 4);
+      py = FX_BASIN.cy + (seedB * 2 - 1) * (FX_BASIN.ry - 2);
+      found = fountainWaterAt(px, py);
+    }
+    if (!found) continue;
     const grow = clamp01(phase / 0.35);           // small -> expand
     const fade = 1 - clamp01((phase - 0.5) / 0.5); // hold -> fade
     if (fade <= 0.02) continue;
     const r = lerp(1, 4.2, grow);
-    pixelRingDots(g, cx + px, baseY + py, r, r * 0.55, 'rgba(200,240,255,' + (fade * 0.55).toFixed(2) + ')');
+    pixelRingDots(g, cx + px, baseY + py, r, r * 0.55, 'rgba(200,240,255,' + (fade * 0.55).toFixed(2) + ')', mask);
   }
 }
 
@@ -1016,8 +1053,10 @@ function fxStreams(g, cx, baseY, t) {
     for (let p = 0; p < 3; p++) {
       const wob = Math.sin(t * 6 + p * 2.1 + f * 3) ;
       const a = 0.35 + Math.abs(Math.sin(t * 4 + p * 1.7 + f)) * 0.45;
+      const fx2 = lx - 2 + p * 2 + Math.round(wob), fy2 = ly + (p % 2);
+      if (!fountainWaterAt(fx2 - cx, fy2 - baseY)) continue; // foam stays on water
       g.globalAlpha = a;
-      rect(g, lx - 2 + p * 2 + Math.round(wob), ly + (p % 2), 1, 1, p === 1 ? '#ffffff' : '#d4f6ff');
+      rect(g, fx2, fy2, 1, 1, p === 1 ? '#ffffff' : '#d4f6ff');
       g.globalAlpha = 1;
     }
   }
@@ -1038,6 +1077,7 @@ function fxHighlights(g, cx, baseY, t) {
     const k = phase / 0.6;
     const alpha = Math.sin(k * Math.PI) * 0.8;
     const drift = k * 2;
+    if (!fountainWaterAt(px + drift, py)) continue; // water only, never stone
     rect(g, Math.round(cx + px + drift), Math.round(baseY + py), 1, 1, `rgba(255,255,255,${alpha.toFixed(2)})`);
   }
 }
@@ -1109,12 +1149,13 @@ function fxMotes(g, cx, baseY, t) {
 }
 
 // Crisp scattered-dot "ring" — reads as a ripple crest without a true stroke.
-function pixelRingDots(g, cx, cy, rx, ry, color) {
+function pixelRingDots(g, cx, cy, rx, ry, color, maskFn = null) {
   const DOTS = 8;
   for (let i = 0; i < DOTS; i++) {
     const a = (i / DOTS) * Math.PI * 2;
     const x = cx + Math.cos(a) * rx;
     const y = cy + Math.sin(a) * ry;
+    if (maskFn && !maskFn(x, y)) continue; // e.g. keep fountain dots off the stone
     rect(g, Math.round(x), Math.round(y), 1, 1, color);
   }
 }
