@@ -247,23 +247,16 @@ export class TownScene {
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
         draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t, this.plazaRadius), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
 
-      // ---- North approach: a large crystal lamp on each side of the road,
-      // right where the plaza's circular edge ends and the straight path
-      // starts, just outside the road surface. The east lamp is mirrored so
-      // its lantern arm reaches inward toward the path, matching the west one.
+      // ---- North approach: a single large crystal lamp on the west side of
+      // the road, right where the plaza's circular edge ends and the
+      // straight path starts, just outside the road surface.
       { id: 'lampNorthW', name: null, dx: null, dy: null, action: null, sortY: FC.y - this.plazaRadius - 10,
         draw: (g) => drawPropArt(g, LAMP_CRYSTAL_ART, FC.x - 30, FC.y - this.plazaRadius - 10, LAMP_W, LAMP_H, 6),
         solid: { x: FC.x - 30 - 4, y: FC.y - this.plazaRadius - 10 - 4, w: 8, h: 8 } },
-      { id: 'lampNorthE', name: null, dx: null, dy: null, action: null, sortY: FC.y - this.plazaRadius - 10,
-        draw: (g) => drawPropArt(g, LAMP_CRYSTAL_ART, FC.x + 30, FC.y - this.plazaRadius - 10, LAMP_W, LAMP_H, 6, true),
-        solid: { x: FC.x + 30 - 4, y: FC.y - this.plazaRadius - 10 - 4, w: 8, h: 8 } },
 
-      // ---- South approach: mirrored, using lamp style #4. Wider apart and
-      // further south than the north pair so they read as exit markers on
-      // the road itself, not props still sitting inside the plaza ring.
-      { id: 'lampSouthW', name: null, dx: null, dy: null, action: null, sortY: FC.y + this.plazaRadius + 28,
-        draw: (g) => drawPropArt(g, LAMP4_ART, FC.x - 34, FC.y + this.plazaRadius + 28, LAMP4_W, LAMP4_H, 6),
-        solid: { x: FC.x - 34 - 4, y: FC.y + this.plazaRadius + 28 - 4, w: 8, h: 8 } },
+      // ---- South approach: a single lamp (style #4) on the east side,
+      // wider apart and further south than the north lamp so it reads as
+      // an exit marker on the road itself, not a prop inside the ring.
       { id: 'lampSouthE', name: null, dx: null, dy: null, action: null, sortY: FC.y + this.plazaRadius + 28,
         draw: (g) => drawPropArt(g, LAMP4_ART, FC.x + 34, FC.y + this.plazaRadius + 28, LAMP4_W, LAMP4_H, 6, true),
         solid: { x: FC.x + 34 - 4, y: FC.y + this.plazaRadius + 28 - 4, w: 8, h: 8 } },
