@@ -42,6 +42,22 @@ FOUNTAIN_IMG.onload = () => { FOUNTAIN_READY = true; };
 FOUNTAIN_IMG.src = 'assets/fountain.png';
 const FOUNTAIN_W = 79, FOUNTAIN_H = 54; // world units (127x86 authored @ zoom 1.6)
 
+// Building artwork (real transparent PNGs), same load/draw pattern as the
+// Potion Shop above. Each authored to the game's native footprint.
+function loadBuildingArt(src) {
+  const img = new Image();
+  const state = { img, ready: false };
+  img.onload = () => { state.ready = true; };
+  img.src = src;
+  return state;
+}
+const GUILD_ART = loadBuildingArt('assets/guild.png');
+const GUILD_W = 122, GUILD_H = 78;
+const BLACKSMITH_ART = loadBuildingArt('assets/blacksmith.png');
+const BLACKSMITH_W = 112, BLACKSMITH_H = 68;
+const HOUSE_ART = loadBuildingArt('assets/house.png');
+const HOUSE_W = 75, HOUSE_H = 66;
+
 // ------------------------------------------------------------ road tileset
 // Authored cobblestone tiles (96px squares, real alpha) with corners,
 // T-junctions, intersections and end caps. The town's road network is rasterised
@@ -125,7 +141,7 @@ export class TownScene {
     // Player House, Training Grounds NW, and the Dungeon Gate as the south exit.
     this.locations = [
       { id: 'guild', name: "Adventurer's Guild & Tavern", dx: 630, dy: 194, action: 'guild', district: "Adventurer's Guild",
-        draw: (g) => drawTavern(g, 630, 186, this.t), solid: { x: 572, y: 120, w: 116, h: 66 } },
+        draw: (g) => drawTavern(g, 630, 186, this.t), solid: { x: 569, y: 98, w: 122, h: 88 } },
       { id: 'library', name: 'Library & Archive', dx: 854, dy: 222, action: 'library', district: 'Library District',
         draw: (g) => drawLibrary(g, 854, 216, this.t), solid: { x: 812, y: 164, w: 84, h: 52 } },
       { id: 'training', name: 'Training Grounds', dx: 350, dy: 230, action: 'training', district: 'Training Grounds', zone: true,
@@ -133,7 +149,7 @@ export class TownScene {
       { id: 'potion', name: 'Potion Shop', dx: 440, dy: 510, action: 'potion', district: 'Commercial Street',
         sortY: 506, draw: (g) => drawPotionShop(g, 440, 506, this.t), solid: null },
       { id: 'blacksmith', name: 'Weapon Shop & Blacksmith', dx: 560, dy: 510, action: 'weapon', district: 'Commercial Street',
-        draw: (g) => drawBlacksmith(g, 560, 506, this.t), solid: { x: 510, y: 448, w: 100, h: 58 } },
+        draw: (g) => drawBlacksmith(g, 560, 506, this.t), solid: { x: 504, y: 428, w: 112, h: 78 } },
       { id: 'market', name: 'Market Square', dx: 854, dy: 462, action: 'market', district: 'Market Square', zone: true,
         draw: (g) => drawMarket(g, 854, 486, this.t), solid: { x: 848, y: 490, w: 12, h: 10 } },
       { id: 'pets', name: 'Pet Keeper', dx: 952, dy: 392, action: 'pets', district: 'Pet Sanctuary',
@@ -145,7 +161,7 @@ export class TownScene {
       { id: 'plaza', name: 'Crystal Plaza', dx: 630, dy: 408, action: 'rest', district: 'Crystal Plaza',
         draw: (g) => drawFountainSprite(g, 630, 390, this.t), solid: { x: 604, y: 374, w: 52, h: 16 } },
       { id: 'home', name: 'Your House', dx: 296, dy: 578, action: 'house', district: 'Residential Quarter',
-        draw: (g) => drawPlayerHouse(g, 296, 574, this.t), solid: { x: 256, y: 526, w: 80, h: 48 } },
+        draw: (g) => drawPlayerHouse(g, 296, 574, this.t), solid: { x: 259, y: 498, w: 75, h: 76 } },
       // decorative NPC homes (Residential Quarter, west)
       { id: 'home1', name: null, dx: 260, dy: 390, action: null,
         draw: (g) => drawCottage(g, 260, 386, '#7a6a58', '#5c4e40', '#8a4a3c', '#6a3329', this.t), solid: { x: 232, y: 350, w: 56, h: 36 } },
@@ -243,10 +259,8 @@ export class TownScene {
 
     // grouped ground props (barrels/crates/benches/flowers…) rendered flat under entities
     this.propGroups = [
-      // blacksmith yard (Commercial Street)
-      { fn: (g) => { barrel(g, 516, 500); barrel(g, 526, 508); crate(g, 600, 502); logPile(g, 606, 494); } },
-      // guild terrace (north)
-      { fn: (g) => { outdoorTable(g, 570, 220); outdoorTable(g, 690, 224); barrel(g, 688, 196); barrel(g, 698, 202); } },
+      // blacksmith and guild art already include their own barrels/crates/
+      // tables/forge dressing, so no extra propGroup clutter is added here.
       // residential gardens + fences + mailbox (west)
       { fn: (g) => { fenceRun(g, 222, 390, 70); flowerbed(g, 230, 386); flowerbed(g, 272, 386); mailbox(g, 296, 384); clothesline(g, 210, 520); } },
       // home2 + home3 yards
@@ -778,28 +792,15 @@ function drawCottage(g, cx, baseY, wall, wallDark, roof, roofDark, t) {
   flowerbed(g, cx - w / 2 - 4, baseY + 5);
 }
 
+// The Player House — rendered from the authored transparent PNG (ivy-covered
+// cottage, flower boxes, mailbox and bench already in the art). A small fenced
+// strip is still added around it for the yard, since the art itself is just
+// the building. Same load/draw contract as the Potion Shop.
 function drawPlayerHouse(g, cx, baseY, t) {
-  const w = 62, h = 36;
-  shadow(g, cx, baseY, w * 0.6, 5, 0.32);
-  const b = wallBox(g, cx, baseY, w, h, '#9a7a56', '#775c40', '#2a1e14');
-  // two-tier roof
-  pitchedRoof(g, cx, b.y - 16, w, 18, '#4a86b0', '#356589', '#22303a', 7);
-  pitchedRoof(g, cx - 16, b.y - 8, 26, 10, '#4a86b0', '#356589', '#22303a', 4);
-  // chimney + smoke
-  rect(g, cx + w / 2 - 12, b.y - 24, 7, 12, '#6b5240');
-  rect(g, cx + w / 2 - 13, b.y - 26, 9, 3, '#4a3628');
-  if (Math.random() < 0.14) rect(g, cx + w / 2 - 10, b.y - 28 - ((t * 6) % 8), 2, 2, 'rgba(160,160,170,0.4)');
-  // porch
-  rect(g, cx - 16, baseY - 6, 32, 6, '#6b4a2e');
-  rect(g, cx - 16, baseY - 12, 2, 12, '#5a3a24'); rect(g, cx + 14, baseY - 12, 2, 12, '#5a3a24');
-  door(g, cx, baseY, 13, 17, '#4a2f1c');
-  windowLit(g, cx - w / 2 + 8, baseY - 26); windowLit(g, cx + w / 2 - 16, baseY - 26);
-  // home emblem (crossed sword + heart) on the gable
-  disc(g, cx, b.y - 20, 4, '#e0679a'); rect(g, cx - 1, b.y - 24, 2, 8, '#dfe6f2');
-  // fenced yard + garden + mailbox
-  fenceRun(g, cx - w / 2 - 12, baseY + 4, w + 24);
-  flowerbed(g, cx - w / 2 - 6, baseY + 6); flowerbed(g, cx + w / 2 - 4, baseY + 6);
-  mailbox(g, cx + w / 2 + 8, baseY + 2);
+  contactShadow(g, cx, baseY, HOUSE_W * 0.42, 6, 0.3);
+  fenceRun(g, cx - HOUSE_W / 2 - 10, baseY + 4, HOUSE_W + 20);
+  if (!HOUSE_ART.ready) return;
+  g.drawImage(HOUSE_ART.img, Math.round(cx - HOUSE_W / 2), Math.round(baseY - HOUSE_H), HOUSE_W, HOUSE_H);
 }
 
 function drawLibrary(g, cx, baseY, t) {
@@ -829,30 +830,12 @@ function drawLibrary(g, cx, baseY, t) {
   rect(g, cx - w / 2 + 3, y + 4, 5, 20, '#4a37a0'); drawIcon(g, 'book', cx - w / 2 + 1, y + 8);
 }
 
+// The Weapon Shop & Blacksmith — rendered from the authored transparent PNG
+// (forge, anvil, weapon rack and sign already in the art).
 function drawBlacksmith(g, cx, baseY, t) {
-  const w = 92, h = 50;
-  shadow(g, cx, baseY, w * 0.55, 6, 0.32);
-  const b = wallBox(g, cx, baseY, w, h, '#7a6a58', '#5c4e40', '#2a1e14');
-  pitchedRoof(g, cx, b.y - 15, w, 17, '#a84a34', '#7a3325', '#2a1e14', 8);
-  // second roof section over the forge
-  pitchedRoof(g, cx + 26, b.y - 8, 30, 10, '#a84a34', '#7a3325', '#2a1e14', 4);
-  door(g, cx - 18, baseY, 15, 19, '#3a2618');
-  windowLit(g, cx + 2, baseY - 26); windowLit(g, cx + 18, baseY - 26);
-  // forge: glowing opening + big chimney + smoke + sparks
-  const fx = cx + 28;
-  rect(g, fx - 8, baseY - 18, 16, 18, '#2a2018');
-  const glow = 0.55 + Math.sin(t * 6) * 0.25;
-  g.globalAlpha = glow; disc(g, fx, baseY - 8, 6, '#f2942b'); disc(g, fx, baseY - 8, 3, '#ffd67a'); g.globalAlpha = 1;
-  rect(g, fx - 4, b.y - 24, 9, 14, '#4a3a2a'); rect(g, fx - 5, b.y - 26, 11, 3, '#2e241a');
-  if (Math.random() < 0.3) rect(g, fx + rand2(-3, 3), baseY - 12 - rand2(0, 6), 1, 1, '#ffd67a'); // spark
-  rect(g, fx - 2, b.y - 28 - ((t * 7) % 8), 3, 3, 'rgba(150,150,160,0.35)');
-  // hanging sword+shield sign
-  rect(g, cx - 34, baseY - 34, 2, 10, '#2a1e14');
-  rect(g, cx - 44, baseY - 24, 22, 13, '#5c4230'); rectOutline(g, cx - 44, baseY - 24, 22, 13, '#2a1a10');
-  drawIcon(g, 'sword', cx - 41, baseY - 21); drawIcon(g, 'shield', cx - 33, baseY - 21);
-  // anvil + weapon rack + barrels out front (also in propGroups)
-  rect(g, cx - 12, baseY + 3, 9, 5, '#3a3e4a'); rect(g, cx - 14, baseY + 3, 13, 1, '#4a4e5a');
-  weaponRack(g, cx + 34, baseY + 2);
+  contactShadow(g, cx, baseY, BLACKSMITH_W * 0.42, 6, 0.32);
+  if (!BLACKSMITH_ART.ready) return;
+  g.drawImage(BLACKSMITH_ART.img, Math.round(cx - BLACKSMITH_W / 2), Math.round(baseY - BLACKSMITH_H), BLACKSMITH_W, BLACKSMITH_H);
 }
 
 // The Potion Shop — rendered directly from the authored transparent PNG (real
@@ -921,30 +904,13 @@ function potionMini(g, x, y, col) {
   rect(g, x - 1, y - 4, 1, 2, mix(col, '#ffffff', 0.45));
 }
 
+// The Adventurer's Guild & Tavern — rendered from the authored transparent
+// PNG (shield-and-mug sign, quest board, lanterns and banner already in the
+// art).
 function drawTavern(g, cx, baseY, t) {
-  const w = 100, h = 56;
-  shadow(g, cx, baseY, w * 0.55, 7, 0.34);
-  const x = Math.round(cx - w / 2), y = Math.round(baseY - h);
-  rect(g, x, y, w, h, '#c9b48a');
-  rect(g, x, y + h / 2, w, 2, '#5a3a24');
-  for (let bx = x; bx < x + w; bx += 15) rect(g, bx, y, 2, h, '#5a3a24');
-  rect(g, x, y, w, 2, '#5a3a24');
-  rect(g, x - 1, baseY - 6, w + 2, 6, '#6b5240');
-  rectOutline(g, x, y, w, h, '#3a2414');
-  // multiple roof sections
-  pitchedRoof(g, cx, y - 18, w, 20, '#7a3e2c', '#5a2c1e', '#2a1a10', 9);
-  pitchedRoof(g, cx - 30, y - 8, 34, 12, '#7a3e2c', '#5a2c1e', '#2a1a10', 5);
-  // chimney + smoke
-  rect(g, cx + w / 2 - 14, y - 24, 8, 14, '#5a4a3a');
-  if (Math.random() < 0.12) rect(g, cx + w / 2 - 12, y - 26 - ((t * 6) % 8), 2, 2, 'rgba(160,160,170,0.4)');
-  door(g, cx, baseY, 18, 22, '#3a2414');
-  windowLit(g, cx - w / 2 + 10, baseY - 32); windowLit(g, cx - w / 2 + 24, baseY - 32);
-  windowLit(g, cx + w / 2 - 18, baseY - 32); windowLit(g, cx + w / 2 - 32, baseY - 32);
-  // Shield & Mug hanging sign
-  rect(g, cx - 2, baseY - h - 12, 4, 12, '#3a2414');
-  rect(g, cx - 30, baseY - h - 2, 60, 14, '#5c4230'); rectOutline(g, cx - 30, baseY - h - 2, 60, 14, '#2a1a10');
-  drawIcon(g, 'shield', cx - 24, baseY - h + 1);
-  drawText(g, 'SHIELD & MUG', cx + 6, baseY - h + 3, { color: '#e8d36a', align: 'center' });
+  contactShadow(g, cx, baseY, GUILD_W * 0.42, 7, 0.34);
+  if (!GUILD_ART.ready) return;
+  g.drawImage(GUILD_ART.img, Math.round(cx - GUILD_W / 2), Math.round(baseY - GUILD_H), GUILD_W, GUILD_H);
 }
 
 function drawTrainingGround(g, cx, cy, t) {
