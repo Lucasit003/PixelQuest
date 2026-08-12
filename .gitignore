@@ -4,6 +4,7 @@
 # Editor
 .vscode/
 .idea/
+.claude/
 
 # Node (not used yet, but here in case tooling is added later)
 node_modules/
