@@ -24,8 +24,8 @@ import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
 
 // Master Town Layout v1: a larger, organic hub built outward from Crystal
 // Plaza. See _buildTown() for the full district/road geography.
-const MAP_W = 2400;
-const MAP_H = 4200;
+const MAP_W = 3200;
+const MAP_H = 2200;
 
 // Potion Shop artwork (real transparent PNG). Loaded once; drawn directly with
 // nearest-neighbor rendering. Authored to the game's native footprint so no
@@ -167,7 +167,7 @@ export class TownScene {
     // are real. Old decorative dressing (NPCs, cottages, pond, river, prop
     // clusters, lamps/braziers) is intentionally dropped this pass — it
     // belonged to the old geometry and districts aren't being decorated yet.
-    const PZ = { x: 1400, y: 3000 };
+    const PZ = { x: 1600, y: 1250 };
     const OFF = (dx, dy) => ({ x: PZ.x + dx, y: PZ.y + dy });
 
     // Anchors follow the user's PIXEL QUEST TOWN reference image: Runebound
@@ -177,16 +177,16 @@ export class TownScene {
     // Commercial District, Market southeast, Residential southwest.
     const D = {
       plaza: PZ,
-      commercial: OFF(580, -75),   // east: Potion + Forge courtyard
-      market: OFF(530, 600),       // southeast: open square, 5 stalls
-      residential: OFF(-670, 450), // southwest: Player House + Cottage
-      southRoad: OFF(0, 800),      // south: reserved expansion stub
-      guild: OFF(-700, -260),      // west: Shield & Stein
-      archive: OFF(560, -1300),    // northeast: Runewood Archive
-      sanctuary: OFF(-820, -1350), // outer northwest: Moonpaw Sanctuary
-      training: OFF(-1150, -700),  // west of Guild: Valorhall (large field)
-      watch: OFF(0, -2000),        // north, on the Adventure Road: checkpoint
-      gate: OFF(0, -2850),         // far north: Runebound Gate
+      commercial: OFF(580, -60),    // east: Potion + Forge courtyard
+      market: OFF(260, 680),        // south: open square, 5 stalls
+      residential: OFF(-850, 180),  // west: Player House + Cottage
+      southRoad: OFF(0, 880),       // south: reserved expansion stub
+      guild: OFF(-120, -480),       // north: Shield & Stein (adventure transition)
+      archive: OFF(1050, -420),     // far east/northeast: Runewood Archive
+      sanctuary: OFF(-1300, -600),  // far west/northwest: Moonpaw Sanctuary
+      training: OFF(-1150, -350),   // far west: Valorhall (large field)
+      watch: OFF(0, -800),          // north, on the Adventure Road: checkpoint
+      gate: OFF(80, -1150),         // far north: Runebound Gate (winding road)
     };
 
     this.plazaCenter = PZ;
@@ -199,9 +199,9 @@ export class TownScene {
       { id: 'potion', name: 'Potion Shop (reserved)', dx: D.commercial.x - 70, dy: D.commercial.y + 45, action: 'potion', district: 'Commercial District',
         draw: (g) => drawMarker(g, D.commercial.x - 70, D.commercial.y - 40, 113, 80, 'Potion Shop'),
         solid: { x: D.commercial.x - 70 - 56, y: D.commercial.y - 40, w: 113, h: 80 } },
-      { id: 'weapon', name: 'Ironhearth Forge (reserved)', dx: D.commercial.x + 80, dy: D.commercial.y + 35, action: 'weapon', district: 'Commercial District',
-        draw: (g) => drawMarker(g, D.commercial.x + 80, D.commercial.y - 33, 112, 68, 'Ironhearth Forge'),
-        solid: { x: D.commercial.x + 80 - 56, y: D.commercial.y - 33, w: 112, h: 68 } },
+      { id: 'weapon', name: 'Ironhearth Forge (reserved)', dx: D.commercial.x + 110, dy: D.commercial.y + 35, action: 'weapon', district: 'Commercial District',
+        draw: (g) => drawMarker(g, D.commercial.x + 110, D.commercial.y - 33, 112, 68, 'Ironhearth Forge'),
+        solid: { x: D.commercial.x + 110 - 56, y: D.commercial.y - 33, w: 112, h: 68 } },
       { id: 'commExpand', name: null, dx: null, dy: null, action: null, sortY: D.commercial.y + 60,
         draw: (g) => drawSignpost(g, D.commercial.x + 260, D.commercial.y + 60, 'Future: Armor Shop') },
 
@@ -322,47 +322,43 @@ export class TownScene {
     // are sliced so far) — the adventure stretch gets a dark wash overlay
     // in _drawRoadTiles so it still reads as a distinct, heavier route.
     // Gentle waypoint bends replace long straight lines throughout.
-    const mainWidth = 20, narrowWidth = 14, advWidth = 18;
+    const mainWidth = 34, narrowWidth = 14, advWidth = 34; // >28 rasterises 2 tiles wide
 
-    // Roads meet the plaza at its rim (not the exact center), so no road tiles
-    // run underneath the fountain and the walking ring stays clear.
+    // Roads meet the plaza at its rim (not the exact center), so no road
+    // tiles run underneath the fountain. Main roads and the Adventure Road
+    // are rasterised two tiles wide (real streets); district paths stay one
+    // tile (quiet lanes). The Adventure Road winds in lazy S-bends so the
+    // Gate stays the longest walk without needing a tall map.
     this.roads = [
       // Plaza <-> Commercial (east)
-      ...roadPath([[PZ.x + 60, PZ.y - 10], [PZ.x + 220, PZ.y - 30], [D.commercial.x, D.commercial.y + 45]], mainWidth),
-      // Plaza <-> Market (southeast)
-      ...roadPath([[PZ.x + 40, PZ.y + 45], [PZ.x + 260, PZ.y + 260], [D.market.x, D.market.y + 70]], mainWidth),
-      // Plaza <-> Residential (southwest)
-      ...roadPath([[PZ.x - 40, PZ.y + 45], [PZ.x - 340, PZ.y + 220], [D.residential.x, D.residential.y + 60]], mainWidth),
-      // Plaza <-> South Road stub
-      ...roadPath([[PZ.x, PZ.y + 50], [D.southRoad.x, D.southRoad.y]], mainWidth),
-      // Plaza <-> Guild (west) — main cobblestone
-      ...roadPath([[PZ.x - 60, PZ.y - 10], [PZ.x - 300, PZ.y - 120], [D.guild.x, D.guild.y + 55]], mainWidth),
+      ...roadPath([[PZ.x + 60, PZ.y - 10], [PZ.x + 260, PZ.y - 40], [D.commercial.x, D.commercial.y + 45]], mainWidth),
+      // Plaza <-> Market (south)
+      ...roadPath([[PZ.x + 30, PZ.y + 45], [PZ.x + 190, PZ.y + 320], [D.market.x, D.market.y + 70]], mainWidth),
+      // Market <-> South Road stub
+      ...roadPath([[D.market.x, D.market.y + 70], [D.southRoad.x, D.southRoad.y]], mainWidth),
+      // Plaza <-> Residential (west)
+      ...roadPath([[PZ.x - 60, PZ.y + 15], [PZ.x - 420, PZ.y + 130], [D.residential.x, D.residential.y + 65]], mainWidth),
+      // Plaza <-> Guild (north) — main cobblestone up to the Guild
+      ...roadPath([[PZ.x, PZ.y - 50], [PZ.x + 220, PZ.y - 260], [D.guild.x, D.guild.y + 60]], mainWidth),
 
-      // ---- Adventure Road: Plaza -> (through Wayfarer's Watch) -> Gate,
-      // straight-ish north with gentle bends, per the reference image. ----
-      ...roadPath([[PZ.x, PZ.y - 50], [PZ.x + 50, PZ.y - 600], [PZ.x - 40, PZ.y - 1050], [D.watch.x, D.watch.y + 40]], advWidth),
-      ...roadPath([[D.watch.x, D.watch.y - 25], [D.watch.x + 40, D.watch.y - 320], [D.gate.x, D.gate.y + 45]], advWidth),
-      // Guild -> Adventure Road link (the "going on an adventure" route)
-      ...roadPath([[D.guild.x, D.guild.y - 45], [D.guild.x + 240, D.guild.y - 420], [PZ.x, PZ.y - 800]], advWidth),
+      // ---- Adventure Road: Guild -> Watch -> Gate, winding S-bends ----
+      ...roadPath([[D.guild.x + 140, D.guild.y + 60], [D.guild.x + 460, D.guild.y - 120], [D.guild.x - 180, D.watch.y + 90], [D.watch.x, D.watch.y + 40]], advWidth),
+      ...roadPath([[D.watch.x, D.watch.y - 30], [D.watch.x + 380, D.watch.y - 150], [D.watch.x - 200, D.gate.y + 80], [D.gate.x, D.gate.y + 50]], advWidth),
 
-      // Plaza <-> Archive (northeast) — narrow secondary path
-      ...roadPath([[PZ.x + 45, PZ.y - 40], [PZ.x + 300, PZ.y - 380], [PZ.x + 480, PZ.y - 780], [D.archive.x, D.archive.y + 40]], narrowWidth),
-      // Archive <-> Commercial — narrow east-side loop, per the reference
-      ...roadPath([[D.archive.x, D.archive.y + 40], [D.archive.x + 60, D.commercial.y - 340], [D.commercial.x + 60, D.commercial.y - 40]], narrowWidth),
-      // Guild <-> Sanctuary (northwest) — narrow, quiet
-      ...roadPath([[D.guild.x, D.guild.y - 45], [D.guild.x - 160, D.guild.y - 480], [D.sanctuary.x, D.sanctuary.y + 55]], narrowWidth),
-      // Sanctuary <-> Training — narrow shortcut between the outer-west districts
-      ...roadPath([[D.sanctuary.x, D.sanctuary.y + 55], [D.sanctuary.x - 150, D.sanctuary.y + 330], [D.training.x, D.training.y + 90]], narrowWidth),
-      // Training <-> Guild — narrow, joining south of the Guild footprint
-      // (Player House -> Training -> Guild -> Adventure progression route)
-      ...roadPath([[D.training.x, D.training.y + 90], [D.training.x + 260, D.guild.y + 65], [D.guild.x - 110, D.guild.y + 65]], narrowWidth),
-      // Residential <-> Training — narrow, completes the progression route
-      ...roadPath([[D.residential.x, D.residential.y + 60], [D.residential.x - 120, D.residential.y - 300], [D.training.x, D.training.y + 90]], narrowWidth),
+      // Plaza <-> Archive (far east) — narrow scholarly path via the northeast
+      ...roadPath([[PZ.x + 60, PZ.y - 30], [PZ.x + 520, PZ.y - 300], [D.archive.x - 220, D.archive.y + 40], [D.archive.x, D.archive.y + 45]], narrowWidth),
+      // Archive <-> Commercial — narrow east loop
+      ...roadPath([[D.archive.x, D.archive.y + 45], [D.archive.x - 120, D.commercial.y - 160], [D.commercial.x + 60, D.commercial.y - 35]], narrowWidth),
+      // Residential <-> Training — narrow, west wing
+      ...roadPath([[D.residential.x, D.residential.y + 65], [D.residential.x - 170, D.residential.y - 240], [D.training.x, D.training.y + 95]], narrowWidth),
+      // Training <-> Sanctuary — narrow, outer west
+      ...roadPath([[D.training.x, D.training.y + 95], [D.sanctuary.x, D.sanctuary.y + 60]], narrowWidth),
+      // Training <-> Guild — narrow diagonal link back to the adventure route
+      ...roadPath([[D.training.x, D.training.y + 95], [D.training.x + 520, D.guild.y + 130], [D.guild.x - 110, D.guild.y + 65]], narrowWidth),
     ];
-
     // North of this line the road tiles get the Adventure Road wash (darker,
     // heavier) — roughly where the town core ends and the wild route begins.
-    this.adventureRoadY = PZ.y - 850;
+    this.adventureRoadY = PZ.y - 560; // north of the Guild = adventure territory
 
     // Rasterise the road rects onto the tile grid: walk each rect's long axis
     // and mark cells along its centreline, so the network becomes 1-tile-wide
@@ -370,14 +366,16 @@ export class TownScene {
     this.roadCells = new Set();
     for (const r of this.roads) {
       const horizontal = r.w >= r.h;
+      // wide rects (main/adventure roads) mark two cells across; narrow one
+      const across = Math.min(r.w, r.h) > ROAD_TILE ? 2 : 1;
       const cy = Math.floor((r.y + r.h / 2) / ROAD_TILE);
       const cx = Math.floor((r.x + r.w / 2) / ROAD_TILE);
       if (horizontal) {
         const c0 = Math.floor(r.x / ROAD_TILE), c1 = Math.floor((r.x + r.w) / ROAD_TILE);
-        for (let c = c0; c <= c1; c++) this.roadCells.add(`${c},${cy}`);
+        for (let c = c0; c <= c1; c++) for (let k = 0; k < across; k++) this.roadCells.add(`${c},${cy + k}`);
       } else {
         const r0 = Math.floor(r.y / ROAD_TILE), r1 = Math.floor((r.y + r.h) / ROAD_TILE);
-        for (let rr = r0; rr <= r1; rr++) this.roadCells.add(`${cx},${rr}`);
+        for (let rr = r0; rr <= r1; rr++) for (let k = 0; k < across; k++) this.roadCells.add(`${cx + k},${rr}`);
       }
     }
 
