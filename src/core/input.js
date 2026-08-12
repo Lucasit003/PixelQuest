@@ -25,6 +25,24 @@ const taps = new Set();
 const repeats = new Set();
 const repeatTimers = new Map();
 
+// Continuous analog axis from a touch joystick. When active it overrides the
+// digital keyboard axis for movement; the joystick also feeds discrete
+// up/down/left/right actions (below threshold) so menu navigation still works.
+const vaxis = { x: 0, y: 0 };
+
+function virtualKeyDown(action) {
+  if (!held.has(action)) {
+    held.add(action);
+    taps.add(action);
+    repeats.add(action);
+    repeatTimers.set(action, REPEAT_DELAY);
+  }
+}
+function virtualKeyUp(action) {
+  held.delete(action);
+  repeatTimers.delete(action);
+}
+
 // Text typed this frame (for the training answer box).
 let textBuffer = '';
 let captureText = false;
@@ -80,6 +98,10 @@ export const Input = {
   anyPressed(...actions) { return actions.some((a) => taps.has(a)); },
 
   axis() {
+    if (vaxis.x || vaxis.y) {
+      const m = Math.hypot(vaxis.x, vaxis.y);
+      return m > 1 ? { x: vaxis.x / m, y: vaxis.y / m } : { x: vaxis.x, y: vaxis.y };
+    }
     let x = 0, y = 0;
     if (held.has('left')) x -= 1;
     if (held.has('right')) x += 1;
@@ -88,6 +110,11 @@ export const Input = {
     if (x && y) { x *= 0.7071; y *= 0.7071; }
     return { x, y };
   },
+
+  // Touch joystick/buttons drive these instead of real key events.
+  virtualDown(action) { virtualKeyDown(action); },
+  virtualUp(action) { virtualKeyUp(action); },
+  setVirtualAxis(x, y) { vaxis.x = x; vaxis.y = y; },
 
   beginTextCapture() { captureText = true; textBuffer = ''; },
   endTextCapture() { captureText = false; },

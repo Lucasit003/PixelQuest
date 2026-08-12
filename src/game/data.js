@@ -164,6 +164,56 @@ export const ABILITIES = {
     mana: 24, cd: 6, dmg: 34, kind: 'chain', chains: 2, range: 200, element: 'storm',
     desc: 'Bolts of light condemn up to two enemies.',
   },
+  // ---- Berserker ----
+  reckless_swing: {
+    name: 'Reckless Swing', cls: 'berserker', branch: 'Fury', icon: 'axe',
+    gate: { cat: 'cs', mastery: 0 }, // starter
+    mana: 0, cd: 2.2, dmg: 30, kind: 'melee', range: 28, kb: 70,
+    desc: 'A wild axe swing that leaves you open but hits hard.',
+  },
+  blood_frenzy: {
+    name: 'Blood Frenzy', cls: 'berserker', branch: 'Bloodlust', icon: 'star',
+    gate: { cat: 'science', mastery: 25 },
+    mana: 12, cd: 8, kind: 'buff', dur: 6, atkMult: 1.5, speedMult: 1.2,
+    desc: 'The more you bleed, the harder you hit: +50% damage for 6 seconds.',
+  },
+  whirling_axes: {
+    name: 'Whirling Axes', cls: 'berserker', branch: 'Onslaught', icon: 'axe',
+    gate: { cat: 'math', mastery: 45 },
+    mana: 20, cd: 9, dmg: 36, kind: 'aoe', range: 46, kb: 130,
+    desc: 'Spin your axes, cleaving everything nearby.',
+  },
+  execute: {
+    name: 'Execute', cls: 'berserker', branch: 'Fury', icon: 'sword',
+    gate: { cat: 'history', mastery: 60 },
+    mana: 26, cd: 12, dmg: 55, kind: 'melee', range: 30, kb: 160,
+    desc: 'A finishing blow that comes down like judgement itself.',
+  },
+  // ---- Summoner ----
+  spirit_bolt: {
+    name: 'Spirit Bolt', cls: 'summoner', branch: 'Spirits', icon: 'staff',
+    gate: { cat: 'math', mastery: 0 }, // starter
+    mana: 8, cd: 1.8, dmg: 20, kind: 'projectile', speed: 170, range: 210,
+    desc: 'Launch a bolt of raw spirit energy.',
+  },
+  wolf_totem: {
+    name: 'Wolf Totem', cls: 'summoner', branch: 'Totems', icon: 'star',
+    gate: { cat: 'geo', mastery: 30 },
+    mana: 18, cd: 8, dmg: 18, kind: 'aoe', range: 48, kb: 80,
+    desc: 'Slam a totem into the ground as spirit wolves burst outward.',
+  },
+  chain_spirits: {
+    name: 'Chain Spirits', cls: 'summoner', branch: 'Spirits', icon: 'staff',
+    gate: { cat: 'lang', mastery: 45 },
+    mana: 22, cd: 6, dmg: 26, kind: 'chain', chains: 3, range: 210,
+    desc: 'Spectral energy arcs between up to three foes.',
+  },
+  wild_growth: {
+    name: 'Wild Growth', cls: 'summoner', branch: 'Wild', icon: 'star',
+    gate: { cat: 'finance', mastery: 60 },
+    mana: 24, cd: 15, kind: 'buff', dur: 7, atkMult: 1.35, speedMult: 1.25,
+    desc: 'Nature answers your call: +35% damage and quicker feet for 7 seconds.',
+  },
 };
 
 export function abilitiesForClass(cls) {
@@ -176,10 +226,12 @@ export function abilitiesForClass(cls) {
 export const STARTER_ABILITY = {
   warrior: 'heavy_strike', mage: 'fireball',
   rogue: 'backstab', ranger: 'precision_shot', paladin: 'holy_strike',
+  berserker: 'reckless_swing', summoner: 'spirit_bolt',
 };
 export const STARTER_WEAPON = {
   warrior: 'worn_sword', mage: 'cracked_staff',
   rogue: 'rusty_dagger', ranger: 'old_bow', paladin: 'squire_blade',
+  berserker: 'chipped_axe', summoner: 'bone_totem_staff',
 };
 
 // ----------------------------------------------------------------- classes
@@ -240,6 +292,28 @@ export const CLASSES = {
     trees: ['Holy', 'Guard', 'Light'],
     critBase: 0.05,
   },
+  berserker: {
+    id: 'berserker', name: 'Berserker', sprite: 'berserker',
+    color: '#e0533f',
+    blurb: 'A wild axe-wielder who grows stronger the harder the fight gets. High damage, fragile defense, no fear.',
+    resource: 'Rage', resourceColor: '#e0533f',
+    base: { hp: 132, mana: 50, attack: 27, defense: 9, magic: 4, speed: 68 },
+    growth: { hp: 21, mana: 5, attack: 3.8, defense: 1.5, magic: 0.4, speed: 1.3 },
+    weapon: 'axe', combo: [18, 22, 32], reach: 28,
+    trees: ['Fury', 'Bloodlust', 'Onslaught'],
+    critBase: 0.1,
+  },
+  summoner: {
+    id: 'summoner', name: 'Summoner', sprite: 'summoner',
+    color: '#5fd6c4',
+    blurb: 'Calls forth spirits and totems to fight at range. Fragile up close, devastating from a distance.',
+    resource: 'Spirit', resourceColor: '#5fd6c4',
+    base: { hp: 88, mana: 130, attack: 10, defense: 6, magic: 26, speed: 64 },
+    growth: { hp: 11, mana: 15, attack: 1.2, defense: 1.0, magic: 3.6, speed: 1.2 },
+    weapon: 'staff', combo: [10, 12, 18], reach: 24,
+    trees: ['Spirits', 'Totems', 'Wild'],
+    critBase: 0.07,
+  },
 };
 
 // ----------------------------------------------------------------- weapons
@@ -252,6 +326,8 @@ export const WEAPONS = {
   rusty_dagger: { name: 'Rusty Dagger', slot: 'weapon', cls: 'rogue', icon: 'sword',  rarity: 'common', attack: 0,  desc: 'Still sharp enough.' },
   old_bow:      { name: 'Old Bow',      slot: 'weapon', cls: 'ranger', icon: 'sword', rarity: 'common', attack: 0,  desc: 'The string creaks.' },
   squire_blade: { name: 'Squire Blade', slot: 'weapon', cls: 'paladin', icon: 'sword', rarity: 'common', attack: 0, desc: 'Polished with pride.' },
+  chipped_axe:  { name: 'Chipped Axe',  slot: 'weapon', cls: 'berserker', icon: 'axe', rarity: 'common', attack: 0, desc: 'Notched from countless swings.' },
+  bone_totem_staff: { name: 'Bone Totem Staff', slot: 'weapon', cls: 'summoner', icon: 'staff', rarity: 'common', magic: 0, desc: 'Carved with half-remembered spirits.' },
 
   // rogue weapons
   steel_dagger: { name: 'Steel Dagger', slot: 'weapon', cls: 'rogue', icon: 'sword', rarity: 'common',  attack: 5, crit: 0.03, price: 60,  desc: 'Quick and quiet.' },
@@ -281,6 +357,16 @@ export const WEAPONS = {
   runed_staff: { name: 'Runed Staff',  slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'rare',     magic: 16, crit: 0.04, price: 320, desc: 'Glyphs crawl along it.' },
   storm_scepter:{ name: 'Storm Scepter', slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'epic',   magic: 24, mana: 40, price: 640, desc: 'Distant thunder answers it.' },
   archmage_rod:{ name: 'Archmage Rod', slot: 'weapon', cls: 'mage', icon: 'staff', rarity: 'legendary', magic: 34, mana: 60, crit: 0.08, price: 1200, desc: 'Reality bends politely.' },
+
+  // berserker weapons
+  rusty_cleaver: { name: 'Rusty Cleaver', slot: 'weapon', cls: 'berserker', icon: 'axe', rarity: 'common',  attack: 5,  price: 60,  desc: 'Heavy and eager.' },
+  bloodaxe:      { name: 'Bloodaxe',      slot: 'weapon', cls: 'berserker', icon: 'axe', rarity: 'rare',    attack: 14, crit: 0.05, price: 320, desc: 'Thirsty for more.' },
+  ragebringer:   { name: 'Ragebringer',   slot: 'weapon', cls: 'berserker', icon: 'axe', rarity: 'epic',    attack: 22, speed: -2, crit: 0.08, price: 640, desc: 'Screams as it swings.' },
+
+  // summoner weapons
+  carved_wand:    { name: 'Carved Wand',    slot: 'weapon', cls: 'summoner', icon: 'staff', rarity: 'common', magic: 6,  price: 60,  desc: 'Whittled beneath a full moon.' },
+  spirit_scepter: { name: 'Spirit Scepter', slot: 'weapon', cls: 'summoner', icon: 'staff', rarity: 'rare',   magic: 14, mana: 20, price: 320, desc: 'Voices linger in the wood.' },
+  ancestral_staff:{ name: 'Ancestral Staff',slot: 'weapon', cls: 'summoner', icon: 'staff', rarity: 'epic',   magic: 21, mana: 34, price: 640, desc: 'Generations of spirits answer.' },
 
   // shared trinkets (any class)
   leather_charm:{ name: 'Leather Charm', slot: 'trinket', icon: 'shield', rarity: 'common',   defense: 3, hp: 20, price: 80, desc: 'A lucky cord.' },

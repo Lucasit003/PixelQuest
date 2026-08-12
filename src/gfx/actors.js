@@ -71,6 +71,18 @@ export const PALETTES = {
     a: '#d8b24a', b: '#8a6a2f', t: '#ffd86a',
     w: '#e6eef7', g: '#3d6d8f', p: '#8a6a2f',
   },
+  berserker: {
+    k: '#1a0e0e', m: '#8a3a2a', l: '#c2503a', d: '#5c2418',
+    s: '#e8b58a', e: '#241a2e', h: '#7a2010',
+    a: '#f2743f', b: '#5c1810', t: '#ffb02f',
+    w: '#dfe6f2', g: '#8a3a2a', p: '#4a2010',
+  },
+  summoner: {
+    k: '#0e1626', m: '#2f5c6b', l: '#4a8a9c', d: '#1c3a44',
+    s: '#e8b58a', e: '#241a2e', h: '#245a68',
+    a: '#7fe8c9', b: '#1c3a44', t: '#a0f2d8',
+    w: '#c8f5ea', g: '#2f5c6b', p: '#3a6a5a',
+  },
 };
 
 // ------------------------------------------------------------------- heads
@@ -276,6 +288,8 @@ const SPECS = {
   rogue:    { pal: 'rogue',    head: 'mageHood',    torso: 'warrior',  weapon: 'dagger', h: 25 },
   ranger:   { pal: 'ranger',   head: 'mageHood',    torso: 'villager', weapon: 'bow',    h: 25 },
   paladin:  { pal: 'paladin',  head: 'warriorHelm', torso: 'warrior',  weapon: 'sword',  h: 26 },
+  berserker:{ pal: 'berserker',head: 'warriorHelm', torso: 'warrior',  weapon: 'axe',    h: 26 },
+  summoner: { pal: 'summoner', head: 'mageHood',    torso: 'mage',     weapon: 'staff',  h: 26 },
   goblin:   { pal: 'goblin',   head: 'goblin',      torso: 'goblin',   weapon: 'dagger', h: 22 },
   skeleton: { pal: 'skeleton', head: 'skull',       torso: 'skeleton', weapon: 'bone',   h: 24 },
   king:     { pal: 'king',     head: 'kingHelm',    torso: 'king',     weapon: 'club',   h: 34, scale: 1.6 },

@@ -4,6 +4,7 @@
 import { Game } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Audio } from './core/audio.js';
+import { TouchControls } from './core/touch.js';
 import { TitleScene } from './scenes/title.js';
 import { TownScene } from './scenes/town.js';
 import { TrainingScene } from './scenes/training.js';
@@ -32,6 +33,12 @@ resize();
 
 const game = new Game(canvas);
 Input.install(window);
+// Some environments report touch capability a tick late, so retry a few times.
+TouchControls.install();
+window.addEventListener('load', () => TouchControls.install());
+window.addEventListener('pointerdown', () => TouchControls.install(), { once: true });
+setTimeout(() => TouchControls.install(), 300);
+setTimeout(() => TouchControls.install(), 1000);
 
 // Unlock audio on first interaction (browser autoplay policy).
 const unlock = () => { Audio.unlock(); window.removeEventListener('keydown', unlock); window.removeEventListener('pointerdown', unlock); };
