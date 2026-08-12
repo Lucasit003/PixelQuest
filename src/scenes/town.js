@@ -72,6 +72,21 @@ const BLACKSMITH_W = 112, BLACKSMITH_H = 68;
 const HOUSE_ART = loadBuildingArt('assets/house.png');
 const HOUSE_W = 75, HOUSE_H = 66;
 
+// Crystal Plaza decoration set (real transparent PNGs, cropped from the
+// approved town prop sheet). Civic-grade lamp + bench dressing — the crystal
+// motifs tie them to the fountain, kept distinct from the plainer wood
+// props used in rustic districts like the Market or the Forge.
+const LAMP_CRYSTAL_ART = loadBuildingArt('assets/props/lamp_crystal.png');
+const LAMP_W = 16, LAMP_H = 22;
+const BENCH_CRYSTAL_ART = loadBuildingArt('assets/props/bench_crystal.png');
+const BENCH_CRYSTAL_W = 29, BENCH_CRYSTAL_H = 24;
+const BENCH_VINE_ART = loadBuildingArt('assets/props/bench_vine.png');
+const BENCH_VINE_W = 28, BENCH_VINE_H = 20;
+const FLOWERBOX1_ART = loadBuildingArt('assets/props/flower_box_1.png');
+const FLOWERBOX1_W = 27, FLOWERBOX1_H = 17;
+const FLOWERBOX2_ART = loadBuildingArt('assets/props/flower_box_2.png');
+const FLOWERBOX2_W = 23, FLOWERBOX2_H = 18;
+
 // ------------------------------------------------------------ road tileset
 // Authored cobblestone tiles (96px squares, real alpha) with corners,
 // T-junctions, intersections and end caps. The town's road network is rasterised
@@ -152,6 +167,24 @@ function contactShadow(g, cx, by, rx, ry, alpha = 0.32) {
   }
 }
 
+// Generic bottom-anchored prop sprite (lamp posts, benches, flower boxes):
+// same load/draw pattern as the buildings, just smaller. `flip` mirrors the
+// art horizontally, used so benches on the west side of the plaza read as
+// facing the same way (toward the fountain) as their east-side twins.
+function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false) {
+  contactShadow(g, x, y, shadowRx, Math.max(2, shadowRx * 0.4), 0.22);
+  if (!art.ready) return;
+  if (flip) {
+    g.save();
+    g.translate(Math.round(x), 0);
+    g.scale(-1, 1);
+    g.drawImage(art.img, Math.round(-w / 2), Math.round(y - h), w, h);
+    g.restore();
+  } else {
+    g.drawImage(art.img, Math.round(x - w / 2), Math.round(y - h), w, h);
+  }
+}
+
 export class TownScene {
   constructor(hero, hooks) {
     this.hero = hero;
@@ -182,6 +215,70 @@ export class TownScene {
   }
 
   // ---- town definition ----------------------------------------------------
+
+  // Crystal Plaza decoration pass: lamps + benches in the outer half of the
+  // plaza on the four diagonals (between the road exits, never on them),
+  // flower beds tucked into the diagonal gaps, all non-symmetric so it reads
+  // as a real place rather than a stamped template. Fountain, paving, ring
+  // and the four road exits are locked — this only adds props around them.
+  _plazaDecor(FC, R) {
+    const polar = (deg, r) => ({ x: FC.x + Math.cos(deg * Math.PI / 180) * r, y: FC.y + Math.sin(deg * Math.PI / 180) * r });
+    const out = [];
+
+    // Lamps: dead center of each diagonal quadrant (45/135/225/315 — as far
+    // from every road centerline as possible), in the outer half of the
+    // plaza but well clear of the fountain.
+    const lampR = R * 0.68;
+    const lamps = [[225, 'lampNW'], [315, 'lampNE'], [135, 'lampSW'], [45, 'lampSE']];
+    for (const [deg, id] of lamps) {
+      const p = polar(deg, lampR);
+      out.push({ id, name: null, dx: null, dy: null, action: null, sortY: p.y,
+        draw: (g) => drawPropArt(g, LAMP_CRYSTAL_ART, p.x, p.y, LAMP_W, LAMP_H, 3),
+        solid: { x: p.x - 3, y: p.y - 3, w: 6, h: 6 } });
+    }
+
+    // Benches: offset from the lamps within each quadrant, angled toward
+    // the fountain-facing side (flip mirrors the art so west-side benches
+    // read the same way as east-side ones). Radius/angle vary per bench —
+    // deliberately not a symmetric ring. Southeast uses the vine-and-flower
+    // sprite as the "optional" accent bench called out in the brief.
+    const benchDefs = [
+      { deg: 203, r: 0.80, art: BENCH_CRYSTAL_ART, w: BENCH_CRYSTAL_W, h: BENCH_CRYSTAL_H, flip: false, id: 'benchNW' },
+      { deg: 338, r: 0.83, art: BENCH_CRYSTAL_ART, w: BENCH_CRYSTAL_W, h: BENCH_CRYSTAL_H, flip: true, id: 'benchNE' },
+      { deg: 151, r: 0.81, art: BENCH_CRYSTAL_ART, w: BENCH_CRYSTAL_W, h: BENCH_CRYSTAL_H, flip: false, id: 'benchSW' },
+      { deg: 25, r: 0.77, art: BENCH_VINE_ART, w: BENCH_VINE_W, h: BENCH_VINE_H, flip: true, id: 'benchSE' },
+    ];
+    for (const b of benchDefs) {
+      const p = polar(b.deg, R * b.r);
+      out.push({ id: b.id, name: null, dx: null, dy: null, action: null, sortY: p.y,
+        draw: (g) => drawPropArt(g, b.art, p.x, p.y, b.w, b.h, b.w * 0.32, b.flip),
+        solid: { x: p.x - b.w * 0.35, y: p.y - 6, w: b.w * 0.7, h: 8 } });
+    }
+
+    // Flower beds: right where the paving meets grass, in the diagonal gaps
+    // only. NE/SW get the real flower-box planters; SE/NW get a smaller
+    // procedural cluster (flowerbed dots + a low bush) for variety so all
+    // four corners don't look stamped from the same template.
+    const boxNE = polar(295, R * 0.95);
+    out.push({ id: 'flowerBoxNE', name: null, dx: null, dy: null, action: null, sortY: boxNE.y,
+      draw: (g) => drawPropArt(g, FLOWERBOX1_ART, boxNE.x, boxNE.y, FLOWERBOX1_W, FLOWERBOX1_H, 5),
+      solid: { x: boxNE.x - FLOWERBOX1_W * 0.35, y: boxNE.y - 4, w: FLOWERBOX1_W * 0.7, h: 6 } });
+
+    const boxSW = polar(117, R * 0.95);
+    out.push({ id: 'flowerBoxSW', name: null, dx: null, dy: null, action: null, sortY: boxSW.y,
+      draw: (g) => drawPropArt(g, FLOWERBOX2_ART, boxSW.x, boxSW.y, FLOWERBOX2_W, FLOWERBOX2_H, 5),
+      solid: { x: boxSW.x - FLOWERBOX2_W * 0.35, y: boxSW.y - 4, w: FLOWERBOX2_W * 0.7, h: 6 } });
+
+    const clusterSE = polar(65, R * 0.93);
+    out.push({ id: 'flowerClusterSE', name: null, dx: null, dy: null, action: null, sortY: clusterSE.y,
+      draw: (g) => { drawBush(g, clusterSE.x - 6, clusterSE.y, 0.8); flowerbed(g, clusterSE.x, clusterSE.y + 2); } });
+
+    const clusterNW = polar(245, R * 0.93);
+    out.push({ id: 'flowerClusterNW', name: null, dx: null, dy: null, action: null, sortY: clusterNW.y,
+      draw: (g) => { drawBush(g, clusterNW.x + 6, clusterNW.y, 0.8); flowerbed(g, clusterNW.x - 10, clusterNW.y + 2); } });
+
+    return out;
+  }
 
   _buildTown() {
     // ======================================================================
@@ -221,6 +318,8 @@ export class TownScene {
     this.locations = [
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
         draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t, this.plazaRadius), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
+
+      ...this._plazaDecor(FC, this.plazaRadius),
 
       // ---- Commercial District: two shops around one shared courtyard ----
       { id: 'potion', name: 'Potion Shop (reserved)', dx: D.commercial.x - 80, dy: D.commercial.y + 50, action: 'potion', district: 'Commercial District',
