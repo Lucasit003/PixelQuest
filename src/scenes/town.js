@@ -261,9 +261,9 @@ export class TownScene {
         draw: (g) => drawSignpost(g, D.southRoad.x + 40, D.southRoad.y, 'South Road - Future Expansion') },
 
       // ---- Shield & Stein: building + social courtyard ----
-      { id: 'guild', name: 'Shield & Stein', dx: D.guild.x, dy: D.guild.y + 48, action: 'guild', district: 'Shield & Stein',
-        draw: (g) => drawTavern(g, D.guild.x, D.guild.y + 46, this.t),
-        solid: { x: D.guild.x - 61, y: D.guild.y - 32, w: 122, h: 78 } },
+      { id: 'guild', name: 'Shield & Stein', dx: D.guild.x, dy: D.guild.y + 72, action: 'guild', district: 'Shield & Stein',
+        draw: (g) => drawTavern(g, D.guild.x, D.guild.y + 72, this.t),
+        solid: { x: D.guild.x - 61, y: D.guild.y - 6, w: 122, h: 78 } },
 
       // ---- Runewood Archive: landscaped property ----
       { id: 'library', name: 'Runewood Archive', dx: D.archive.x, dy: D.archive.y + 42, action: 'library', district: 'Runewood Archive',
