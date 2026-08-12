@@ -87,10 +87,17 @@ MEADOW_TILE_IMG.onload = () => { MEADOW_TILE_STATE.ready = true; };
 MEADOW_TILE_IMG.src = 'assets/ground/meadow_01.png';
 const MEADOW_TILE = 56;
 
-// Crystal Plaza floor: real modular stone tiles (sliced from the same sheet
-// as the roads, so it's the same masonry family), not a procedural wash.
+// Crystal Plaza floor: real modular stone tiles from the user's Crystal
+// Plaza Modular Stone Pack — base/worn/moss/cracked/weathered variants,
+// crystal accents, and grass-edge tiles. (The pack's "transparent overlay"
+// tiles are RGB with no alpha channel like the earlier sheets, so they're
+// not usable as true overlays — their look is instead achieved by using the
+// equivalent solid weathered/cracked/mossy TILES zonally, which is what the
+// zone system below already does.)
 const PLAZA_TILES = {};
-for (const n of ['plaza_base1', 'plaza_base2', 'plaza_worn', 'plaza_moss']) {
+for (const n of ['base1', 'base2', 'base3', 'base4', 'worn1', 'worn2', 'lightmoss',
+  'grasscracks', 'cracked', 'weathered', 'crystal1', 'crystal2', 'crystal3', 'crystal4',
+  'edge_grass1', 'edge_grass2', 'edge_broken', 'edge_moss']) {
   const img = new Image();
   const st = { img, ready: false };
   img.onload = () => { st.ready = true; };
@@ -1553,16 +1560,41 @@ function corruptedRock(g, x, y) {
 // plain stone-colored square per cell while the images are still loading,
 // never a flat wash circle. `flares` are the road-widen zones at each exit —
 // included so the paving flows into the roads with no hard seam.
+// Pick one of the 4 base stone variants, deterministic per cell.
+function plazaBase(cc, rr) {
+  const h = hash(cc * 7.1 + rr * 3.7);
+  if (h < 0.25) return PLAZA_TILES.base1;
+  if (h < 0.5) return PLAZA_TILES.base2;
+  if (h < 0.75) return PLAZA_TILES.base3;
+  return PLAZA_TILES.base4;
+}
+function plazaWorn(cc, rr) { return hash(cc * 2.9 + rr * 5.3 + 40) < 0.5 ? PLAZA_TILES.worn1 : PLAZA_TILES.worn2; }
+function plazaWeathered(cc, rr) { return hash(cc * 4.1 + rr * 1.7 + 50) < 0.5 ? PLAZA_TILES.cracked : PLAZA_TILES.weathered; }
+
+// Crystal Plaza floor: three concentric zones (inner fountain area, main
+// walking area, outer weathered edge) built from the real modular stone
+// pack, not a single random distribution — see the brief's zone breakdown.
 function plaza(g, cx, cy, r, flares) {
-  // Clip to a true circle (unioned with the flare rects) so the boundary is
-  // pixel-smooth and round instead of the blocky/cross shape a per-tile
-  // inclusion test gives at this radius — the tile art itself is unaffected,
-  // only what's visible through the clip changes.
+  const innerR = Math.min(r * 0.5, FOUNTAIN_W * 0.5 + 12); // fountain radius + ~1 player width
+  const outerStart = r * 0.82; // outer 18% becomes the weathered/edge band
+
+  // Round silhouette with a SUBTLE break (per-angle radius jitter, ~±5%) so
+  // it doesn't read as a mathematically perfect circle, unioned with the 4
+  // road-widen flares so paving still reaches the street edges cleanly.
   g.save();
   g.beginPath();
-  g.arc(cx, cy, r, 0, Math.PI * 2);
+  const STEPS = 48;
+  for (let i = 0; i <= STEPS; i++) {
+    const a = (i / STEPS) * Math.PI * 2;
+    const jitter = 1 + (hash(Math.floor(a * 6.37) * 3.1 + 0.5) - 0.5) * 0.1;
+    const px = cx + Math.cos(a) * r * jitter, py = cy + Math.sin(a) * r * jitter;
+    if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+  }
+  g.closePath();
   for (const f of flares) g.rect(f.x, f.y, f.w, f.h);
   g.clip();
+
+  const nearFlare = (px, py, pad) => flares.some((f) => px > f.x - pad && px < f.x + f.w + pad && py > f.y - pad && py < f.y + f.h + pad);
 
   const c0 = Math.floor((cx - r - 30) / ROAD_TILE), c1 = Math.ceil((cx + r + 30) / ROAD_TILE);
   const r0 = Math.floor((cy - r - 30) / ROAD_TILE), r1 = Math.ceil((cy + r + 30) / ROAD_TILE);
@@ -1571,43 +1603,69 @@ function plaza(g, cx, cy, r, flares) {
     for (let cc = c0; cc <= c1; cc++) {
       const px = cc * ROAD_TILE, py = rr * ROAD_TILE;
       const tcx = px + ROAD_TILE / 2, tcy = py + ROAD_TILE / 2;
-      const dist = Math.hypot(tcx - cx, tcy - cy);
-      if (dist > r + ROAD_TILE) continue; // fully outside even the clip's bounding area -> skip drawing
+      const dx = tcx - cx, dy = tcy - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > r * 1.15 + ROAD_TILE && !nearFlare(tcx, tcy, 0)) continue;
 
       const h = hash(cc * 5.17 + rr * 8.31);
-      let tile, tint = null;
-      if (h < 0.35) tile = PLAZA_TILES.plaza_base1;
-      else if (h < 0.65) tile = PLAZA_TILES.plaza_base2;
-      else if (h < 0.80) tile = PLAZA_TILES.plaza_worn;
-      else if (h < 0.88) tile = PLAZA_TILES.plaza_moss;
-      else if (h < 0.96) { tile = PLAZA_TILES.plaza_worn; tint = 'rgba(60,48,36,0.28)'; } // cracked/weathered
-      else { tile = (hash(cc * 3.3 + rr * 1.7 + 9) < 0.5) ? PLAZA_TILES.plaza_base1 : PLAZA_TILES.plaza_base2; }
-      const crystalAccent = h >= 0.96 && dist < r * 0.55;
+      let tile;
 
-      if (tile.ready) {
-        g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE);
-        if (tint) { g.fillStyle = tint; g.fillRect(px, py, ROAD_TILE, ROAD_TILE); }
+      if (dist < innerR) {
+        // ---- ZONE A: inner fountain area — 85% clean base, 15% worn.
+        // Crystal accents are placed explicitly below (this zone is only
+        // ~7 tiles across at this radius, too small for a sparse per-cell
+        // roll to reliably land even once).
+        tile = h < 0.85 ? plazaBase(cc, rr) : plazaWorn(cc, rr);
+      } else if (dist < outerStart) {
+        // ---- ZONE B: main walking area — old town masonry, worn along the
+        // 4 traffic axes and near road junctions, otherwise mostly base.
+        const onAxis = Math.abs(dx) < 22 || Math.abs(dy) < 22;
+        const junction = nearFlare(tcx, tcy, 26);
+        const hh = h - (onAxis ? 0.22 : 0) - (junction ? 0.3 : 0);
+        if (hh < 0.65) tile = plazaBase(cc, rr);
+        else if (hh < 0.80) tile = plazaWorn(cc, rr);
+        else if (hh < 0.90) tile = plazaWeathered(cc, rr);
+        else if (hh < 0.95) tile = PLAZA_TILES.lightmoss;
+        else tile = PLAZA_TILES.grasscracks;
       } else {
-        rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback, same stone family
+        // ---- ZONE C: outer edge — progressively more weathered/reclaimed
+        // by vegetation as distance from outerStart increases, then grass-
+        // edge tiles right at the boundary.
+        const edgeF = clamp01((dist - outerStart) / Math.max(1, r - outerStart));
+        const hh = h - edgeF * 0.4;
+        if (hh < 0.30) tile = plazaBase(cc, rr);
+        else if (hh < 0.45) tile = plazaWorn(cc, rr);
+        else if (hh < 0.62) tile = plazaWeathered(cc, rr);
+        else if (hh < 0.78) tile = PLAZA_TILES.lightmoss;
+        else if (hh < 0.90) tile = PLAZA_TILES.grasscracks;
+        else {
+          const eh = hash(cc * 2.3 + rr * 4.1 + 3);
+          tile = eh < 0.35 ? PLAZA_TILES.edge_grass1 : eh < 0.6 ? PLAZA_TILES.edge_grass2
+               : eh < 0.8 ? PLAZA_TILES.edge_broken : PLAZA_TILES.edge_moss;
+        }
       }
-      if (crystalAccent) {
-        const sx = px + 8 + Math.round(hash(cc * 9.1 + rr) * 12), sy = py + 8 + Math.round(hash(cc + rr * 9.1) * 12);
-        rect(g, sx, sy, 2, 2, '#8fb8f0');
-        rect(g, sx + 1, sy - 1, 1, 1, '#cfe4ff');
-      }
+
+      if (tile && tile.ready) g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE);
+      else rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback, same stone family
     }
   }
-  g.restore(); // drop the circle+flare clip
 
-  // subtle inner ring around the fountain footprint: cleaner stone (base
-  // tiles only, no worn/moss/crack) with occasional cyan accents and a thin
-  // geometric border line — restrained, not a glowing magic circle.
-  const ringR = Math.min(r - 14, FOUNTAIN_W * 0.62);
-  for (let a = 0; a < Math.PI * 2; a += 0.09) {
-    const px = Math.round(cx + Math.cos(a) * ringR), py = Math.round(cy + Math.sin(a) * ringR * 0.98);
-    const on = hash(a * 37.1) < 0.12;
-    rect(g, px, py, 1, 1, on ? '#9fd4e8' : '#c8bea0');
+  // Explicit crystal-accent placement, rough radial symmetry around the
+  // fountain (diagonal slots, a few skipped so it isn't perfectly
+  // symmetric) — drawn last so it's never buried by a base/worn pick.
+  const accentR = innerR * 0.72;
+  for (let i = 0; i < 4; i++) {
+    if (hash(i * 3.3 + 11) > 0.7) continue; // skip some slots
+    const angle = (i / 4) * Math.PI * 2 + Math.PI / 4; // NE/SE/SW/NW diagonals
+    const acx = Math.round((cx + Math.cos(angle) * accentR) / ROAD_TILE) * ROAD_TILE;
+    const acy = Math.round((cy + Math.sin(angle) * accentR) / ROAD_TILE) * ROAD_TILE;
+    const strong = hash(i * 7.7 + 3) < 0.15; // crystal 1/2 extremely rare vs 3/4
+    const tile = strong ? (hash(i) < 0.5 ? PLAZA_TILES.crystal1 : PLAZA_TILES.crystal2)
+                        : (hash(i * 2) < 0.5 ? PLAZA_TILES.crystal3 : PLAZA_TILES.crystal4);
+    if (tile.ready) g.drawImage(tile.img, acx, acy, ROAD_TILE, ROAD_TILE);
   }
+
+  g.restore();
 }
 
 // ---- Master Town Layout v1: temporary development markers -----------------

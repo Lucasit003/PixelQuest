@@ -16,6 +16,7 @@ scratchpad/
 
 # Large source art (keep the game-ready versions only)
 assets/*_source.png
+assets/Crystal Plaza Road.png
 
 # Raw reference sheets (already sliced into assets/decor/ and assets/roads/)
 assets/*.jpeg
