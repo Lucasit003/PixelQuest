@@ -89,6 +89,81 @@ export const ABILITIES = {
     mana: 22, cd: 14, kind: 'buff', dur: 7, shield: 60,
     desc: 'Absorbs the next 60 damage for 7 seconds.',
   },
+  // ---- Rogue ----
+  backstab: {
+    name: 'Backstab', cls: 'rogue', branch: 'Shadow', icon: 'sword',
+    gate: { cat: 'cs', mastery: 0 }, // starter
+    mana: 0, cd: 2.5, dmg: 26, kind: 'melee', range: 24, kb: 60,
+    desc: 'A vicious lunge that hits where it hurts.',
+  },
+  poison_dagger: {
+    name: 'Poison Dagger', cls: 'rogue', branch: 'Poison', icon: 'sword',
+    gate: { cat: 'science', mastery: 25 },
+    mana: 10, cd: 3.5, dmg: 20, kind: 'projectile', speed: 190, range: 190,
+    desc: 'A thrown blade coated in something unpleasant.',
+  },
+  smoke_bomb: {
+    name: 'Smoke Bomb', cls: 'rogue', branch: 'Shadow', icon: 'star',
+    gate: { cat: 'geo', mastery: 45 },
+    mana: 18, cd: 9, dmg: 10, kind: 'aoe', range: 44, freeze: 1.6, kb: 40,
+    desc: 'Choking smoke leaves everyone around you reeling.',
+  },
+  shadow_rush: {
+    name: 'Shadow Rush', cls: 'rogue', branch: 'Speed', icon: 'star',
+    gate: { cat: 'lang', mastery: 60 },
+    mana: 24, cd: 15, kind: 'buff', dur: 5, atkMult: 1.4, speedMult: 1.5,
+    desc: '+40% damage and +50% speed for 5 seconds.',
+  },
+  // ---- Ranger ----
+  precision_shot: {
+    name: 'Precision Shot', cls: 'ranger', branch: 'Precision', icon: 'sword',
+    gate: { cat: 'math', mastery: 0 }, // starter
+    mana: 0, cd: 2, dmg: 20, kind: 'projectile', speed: 240, range: 260,
+    desc: 'A fast, dead-accurate arrow.',
+  },
+  volley: {
+    name: 'Volley', cls: 'ranger', branch: 'Precision', icon: 'star',
+    gate: { cat: 'geo', mastery: 30 },
+    mana: 16, cd: 6, dmg: 22, kind: 'chain', chains: 3, range: 220,
+    desc: 'A rain of arrows finds up to three targets.',
+  },
+  snare_trap: {
+    name: 'Snare Trap', cls: 'ranger', branch: 'Traps', icon: 'shield',
+    gate: { cat: 'science', mastery: 45 },
+    mana: 18, cd: 9, dmg: 14, kind: 'aoe', range: 42, freeze: 2.0,
+    desc: 'Roots every nearby enemy in place.',
+  },
+  hunters_mark: {
+    name: "Hunter's Mark", cls: 'ranger', branch: 'Nature', icon: 'star',
+    gate: { cat: 'history', mastery: 60 },
+    mana: 22, cd: 14, kind: 'buff', dur: 7, atkMult: 1.45, speedMult: 1.15,
+    desc: '+45% damage and quicker feet for 7 seconds.',
+  },
+  // ---- Paladin ----
+  holy_strike: {
+    name: 'Holy Strike', cls: 'paladin', branch: 'Holy', icon: 'sword',
+    gate: { cat: 'history', mastery: 0 }, // starter
+    mana: 0, cd: 3, dmg: 30, kind: 'melee', range: 30, kb: 80,
+    desc: 'A radiant blow that smites the wicked.',
+  },
+  divine_shield: {
+    name: 'Divine Shield', cls: 'paladin', branch: 'Guard', icon: 'shield',
+    gate: { cat: 'lang', mastery: 25 },
+    mana: 16, cd: 13, kind: 'buff', dur: 8, shield: 70,
+    desc: 'Absorbs the next 70 damage for 8 seconds.',
+  },
+  consecration: {
+    name: 'Consecration', cls: 'paladin', branch: 'Light', icon: 'star',
+    gate: { cat: 'finance', mastery: 45 },
+    mana: 20, cd: 8, dmg: 34, kind: 'aoe', range: 44, kb: 100,
+    desc: 'Holy fire erupts around you, scattering foes.',
+  },
+  judgement: {
+    name: 'Judgement', cls: 'paladin', branch: 'Holy', icon: 'staff',
+    gate: { cat: 'math', mastery: 60 },
+    mana: 24, cd: 6, dmg: 34, kind: 'chain', chains: 2, range: 200, element: 'storm',
+    desc: 'Bolts of light condemn up to two enemies.',
+  },
 };
 
 export function abilitiesForClass(cls) {
@@ -97,8 +172,15 @@ export function abilitiesForClass(cls) {
     .map(([id, a]) => ({ id, ...a }));
 }
 
-// The two starter abilities every class gets immediately.
-export const STARTER_ABILITY = { warrior: 'heavy_strike', mage: 'fireball' };
+// The starter ability and weapon every class begins with.
+export const STARTER_ABILITY = {
+  warrior: 'heavy_strike', mage: 'fireball',
+  rogue: 'backstab', ranger: 'precision_shot', paladin: 'holy_strike',
+};
+export const STARTER_WEAPON = {
+  warrior: 'worn_sword', mage: 'cracked_staff',
+  rogue: 'rusty_dagger', ranger: 'old_bow', paladin: 'squire_blade',
+};
 
 // ----------------------------------------------------------------- classes
 
@@ -125,6 +207,39 @@ export const CLASSES = {
     trees: ['Fire', 'Ice', 'Storm', 'Arcane'],
     critBase: 0.08,
   },
+  rogue: {
+    id: 'rogue', name: 'Rogue', sprite: 'rogue',
+    color: '#b06ad9',
+    blurb: 'Agile and deadly. Strikes fast from the shadows with critical hits and quick escapes.',
+    resource: 'Energy', resourceColor: '#b06ad9',
+    base: { hp: 104, mana: 70, attack: 18, defense: 8, magic: 10, speed: 78 },
+    growth: { hp: 15, mana: 8, attack: 2.8, defense: 1.4, magic: 1.2, speed: 1.8 },
+    weapon: 'dagger', combo: [12, 14, 18, 22], reach: 22,
+    trees: ['Shadow', 'Poison', 'Speed'],
+    critBase: 0.16,
+  },
+  ranger: {
+    id: 'ranger', name: 'Ranger', sprite: 'ranger',
+    color: '#57d98a',
+    blurb: 'Master of ranged combat and nature. Hits hard from a distance and stays on the move.',
+    resource: 'Focus', resourceColor: '#57d98a',
+    base: { hp: 110, mana: 80, attack: 19, defense: 9, magic: 12, speed: 72 },
+    growth: { hp: 16, mana: 9, attack: 2.9, defense: 1.6, magic: 1.6, speed: 1.5 },
+    weapon: 'bow', combo: [14, 16, 22], reach: 30,
+    trees: ['Precision', 'Traps', 'Nature'],
+    critBase: 0.12,
+  },
+  paladin: {
+    id: 'paladin', name: 'Paladin', sprite: 'paladin',
+    color: '#f2c94f',
+    blurb: 'Holy warrior who protects and punishes with divine power. Sturdy, radiant, unbreakable.',
+    resource: 'Holy Power', resourceColor: '#f2c94f',
+    base: { hp: 150, mana: 70, attack: 19, defense: 17, magic: 14, speed: 58 },
+    growth: { hp: 24, mana: 8, attack: 2.6, defense: 2.8, magic: 1.8, speed: 1.0 },
+    weapon: 'sword', combo: [15, 18, 26], reach: 25,
+    trees: ['Holy', 'Guard', 'Light'],
+    critBase: 0.05,
+  },
 };
 
 // ----------------------------------------------------------------- weapons
@@ -134,6 +249,24 @@ export const WEAPONS = {
   // starters (owned from the beginning)
   worn_sword:  { name: 'Worn Sword',  slot: 'weapon', cls: 'warrior', icon: 'sword',  rarity: 'common', attack: 0,  desc: 'It has seen better days.' },
   cracked_staff:{ name: 'Cracked Staff', slot: 'weapon', cls: 'mage', icon: 'staff',  rarity: 'common', magic: 0,   desc: 'Barely holds a spark.' },
+  rusty_dagger: { name: 'Rusty Dagger', slot: 'weapon', cls: 'rogue', icon: 'sword',  rarity: 'common', attack: 0,  desc: 'Still sharp enough.' },
+  old_bow:      { name: 'Old Bow',      slot: 'weapon', cls: 'ranger', icon: 'sword', rarity: 'common', attack: 0,  desc: 'The string creaks.' },
+  squire_blade: { name: 'Squire Blade', slot: 'weapon', cls: 'paladin', icon: 'sword', rarity: 'common', attack: 0, desc: 'Polished with pride.' },
+
+  // rogue weapons
+  steel_dagger: { name: 'Steel Dagger', slot: 'weapon', cls: 'rogue', icon: 'sword', rarity: 'common',  attack: 5, crit: 0.03, price: 60,  desc: 'Quick and quiet.' },
+  venom_fang:   { name: 'Venom Fang',   slot: 'weapon', cls: 'rogue', icon: 'sword', rarity: 'rare',    attack: 13, crit: 0.08, price: 320, desc: 'It drips with malice.' },
+  nightpiercer: { name: 'Nightpiercer', slot: 'weapon', cls: 'rogue', icon: 'sword', rarity: 'epic',    attack: 20, crit: 0.12, speed: 6, price: 640, desc: 'Cut from a moonless sky.' },
+
+  // ranger weapons
+  hunting_bow:  { name: 'Hunting Bow',  slot: 'weapon', cls: 'ranger', icon: 'sword', rarity: 'common',  attack: 5, speed: 4, price: 60,  desc: 'A trusty companion.' },
+  hawk_bow:     { name: 'Hawk Bow',     slot: 'weapon', cls: 'ranger', icon: 'sword', rarity: 'rare',    attack: 14, crit: 0.06, price: 320, desc: 'Sees what you see.' },
+  windrunner:   { name: 'Windrunner',   slot: 'weapon', cls: 'ranger', icon: 'sword', rarity: 'epic',    attack: 21, speed: 8, crit: 0.06, price: 640, desc: 'Arrows race the gale.' },
+
+  // paladin weapons
+  holy_blade:   { name: 'Holy Blade',   slot: 'weapon', cls: 'paladin', icon: 'sword', rarity: 'common', attack: 5, defense: 2, price: 60,  desc: 'Blessed at the temple.' },
+  lightbringer: { name: 'Lightbringer', slot: 'weapon', cls: 'paladin', icon: 'sword', rarity: 'rare',   attack: 14, magic: 6, price: 320, desc: 'It glows near evil.' },
+  dawnhammer:   { name: 'Dawnhammer',   slot: 'weapon', cls: 'paladin', icon: 'axe',  rarity: 'epic',    attack: 22, defense: 6, hp: 30, price: 640, desc: 'Sunrise, weaponized.' },
 
   // warrior weapons
   iron_sword:  { name: 'Iron Sword',   slot: 'weapon', cls: 'warrior', icon: 'sword', rarity: 'common',   attack: 6,  price: 60,  desc: 'Reliable steel.' },

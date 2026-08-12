@@ -23,6 +23,24 @@ export const PALETTES = {
     a: '#c2b2ff', b: '#4a37a0', t: '#ffe08a',
     w: '#d8ccff', g: '#7c68e0', p: '#a6864a',
   },
+  rogue: {
+    k: '#120e1c', m: '#463a5c', l: '#645580', d: '#2e2440',
+    s: '#e8b58a', e: '#241a2e', h: '#38304e',
+    a: '#8a4fc0', b: '#2e2440', t: '#c9a0f2',
+    w: '#dfe6f2', g: '#544870', p: '#5c3a24',
+  },
+  ranger: {
+    k: '#0f1c12', m: '#3d6b42', l: '#57945c', d: '#28472c',
+    s: '#e8b58a', e: '#241a2e', h: '#2f5636',
+    a: '#8a6a3a', b: '#28472c', t: '#e8d36a',
+    w: '#dfe6f2', g: '#477a4e', p: '#6b4a2e',
+  },
+  paladin: {
+    k: '#1e1a12', m: '#cfc9b8', l: '#efe9d8', d: '#9a927c',
+    s: '#e8b58a', e: '#241a2e', h: '#b8ab8a',
+    a: '#e0b34a', b: '#a8832f', t: '#f2c94f',
+    w: '#f5f2e6', g: '#b8b09a', p: '#8a6a2f',
+  },
   goblin: {
     k: '#16240f', m: '#5b8c3a', l: '#7cb356', d: '#3d6127',
     s: '#7cb356', e: '#f2e14a', h: '#3d6127',
@@ -255,6 +273,9 @@ const WEAPONS = {
 const SPECS = {
   warrior:  { pal: 'warrior',  head: 'warriorHelm', torso: 'warrior',  weapon: 'sword',  h: 26 },
   mage:     { pal: 'mage',     head: 'mageHood',    torso: 'mage',     weapon: 'staff',  h: 26 },
+  rogue:    { pal: 'rogue',    head: 'mageHood',    torso: 'warrior',  weapon: 'dagger', h: 25 },
+  ranger:   { pal: 'ranger',   head: 'mageHood',    torso: 'villager', weapon: 'bow',    h: 25 },
+  paladin:  { pal: 'paladin',  head: 'warriorHelm', torso: 'warrior',  weapon: 'sword',  h: 26 },
   goblin:   { pal: 'goblin',   head: 'goblin',      torso: 'goblin',   weapon: 'dagger', h: 22 },
   skeleton: { pal: 'skeleton', head: 'skull',       torso: 'skeleton', weapon: 'bone',   h: 24 },
   king:     { pal: 'king',     head: 'kingHelm',    torso: 'king',     weapon: 'club',   h: 34, scale: 1.6 },

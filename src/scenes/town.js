@@ -42,6 +42,28 @@ FOUNTAIN_IMG.onload = () => { FOUNTAIN_READY = true; };
 FOUNTAIN_IMG.src = 'assets/fountain.png';
 const FOUNTAIN_W = 79, FOUNTAIN_H = 54; // world units (127x86 authored @ zoom 1.6)
 
+// ------------------------------------------------------------ road tileset
+// Authored cobblestone tiles (96px squares, real alpha) with corners,
+// T-junctions, intersections and end caps. The town's road network is rasterised
+// onto a grid and each cell picks its tile from a 4-bit neighbour mask
+// (N=1, E=2, S=4, W=8), so junctions form automatically.
+const ROAD_TILE = 28;               // world units per road cell
+const ROAD_IMGS = {};
+for (const n of ['straight_v', 'straight_h', 'cross', 't_up', 't_down', 't_left', 't_right',
+  'corner_tl', 'corner_tr', 'corner_bl', 'end_s', 'end_s2', 'end_w', 'plaza_wide', 'damaged']) {
+  const img = new Image();
+  img.src = `assets/roads/${n}.png`;
+  ROAD_IMGS[n] = img;
+}
+// mask -> [tile, flipX]
+const ROAD_MASK = {
+  5: ['straight_v', 0], 10: ['straight_h', 0], 15: ['cross', 0],
+  7: ['t_right', 0], 13: ['t_left', 0], 11: ['t_up', 0], 14: ['t_down', 0],
+  6: ['corner_tl', 0], 12: ['corner_bl', 0], 3: ['corner_tr', 0], 9: ['corner_tr', 1],
+  1: ['end_s2', 0], 4: ['end_s', 0], 2: ['end_w', 1], 8: ['end_w', 0],
+  0: ['plaza_wide', 0],
+};
+
 // Town camera zoom: the world is drawn scaled up so the player sees roughly one
 // district plus a little of its neighbours, and the character reads at a good
 // size. Pure 2D — this only changes framing, not the pixel art.
@@ -79,7 +101,7 @@ export class TownScene {
     this.dialogueReveal = 0;
 
     // player starts just south of the plaza
-    this.px = 560; this.py = 520;
+    this.px = 630; this.py = 460;
     this.facing = 1; this.moving = false; this.walkT = 0;
     this.camX = 0; this.camY = 0;
 
@@ -94,85 +116,104 @@ export class TownScene {
   // ---- town definition ----------------------------------------------------
 
   _buildTown() {
-    // Interactable locations: door point (dx,dy), action, procedural draw and a
-    // solid footprint for collision.
+    // Compact grid layout: all streets sit on the ROAD_TILE grid, every building
+    // fronts a street with its door on the road, and leftover pockets are filled
+    // with forest so the town reads dense like the concept art.
+    // Concept-map layout: Crystal Plaza at the centre with four roads meeting it;
+    // Guild north, Library (temple spot) NE, Market east, river + Riverside east
+    // edge, Commercial Street SW (Potion + Blacksmith), Residential west with the
+    // Player House, Training Grounds NW, and the Dungeon Gate as the south exit.
     this.locations = [
-      { id: 'library', name: 'Library & Archive', dx: 190, dy: 226, action: 'library', district: 'Library District',
-        draw: (g) => drawLibrary(g, 190, 200, this.t), solid: { x: 148, y: 150, w: 84, h: 52 } },
-      { id: 'blacksmith', name: 'Weapon Shop & Blacksmith', dx: 450, dy: 236, action: 'weapon', district: 'Commercial District',
-        draw: (g) => drawBlacksmith(g, 450, 208, this.t), solid: { x: 400, y: 152, w: 100, h: 58 } },
-      { id: 'training', name: 'Training Grounds', dx: 792, dy: 264, action: 'training', district: 'Training Grounds', zone: true,
-        draw: (g) => drawTrainingGround(g, 792, 190, this.t), solid: { x: 700, y: 232, w: 12, h: 12 } },
-      { id: 'dungeon', name: 'Dungeon Gate', dx: 1196, dy: 392, action: 'dungeon', district: 'Dungeon Approach',
-        draw: (g) => drawDungeonGate(g, 1196, 372, this.t), solid: { x: 1150, y: 284, w: 92, h: 92 } },
-      { id: 'potion', name: 'Potion Shop', dx: 686, dy: 372, action: 'potion', district: 'Commercial District',
-        sortY: 368, draw: (g) => drawPotionShop(g, 686, 368, this.t), solid: null },
-      { id: 'pets', name: 'Pet Keeper', dx: 946, dy: 392, action: 'pets', district: 'Pet Sanctuary',
-        draw: (g) => drawPetKeeper(g, 946, 368, this.t), solid: { x: 912, y: 328, w: 70, h: 42 } },
-      { id: 'market', name: 'Market Square', dx: 336, dy: 620, action: 'market', district: 'Market Square', zone: true,
-        draw: (g) => drawMarket(g, 336, 596, this.t), solid: { x: 336, y: 620, w: 10, h: 10 } },
-      { id: 'guild', name: "Adventurer's Guild & Tavern", dx: 636, dy: 690, action: 'guild', district: "Adventurer's Guild",
-        draw: (g) => drawTavern(g, 636, 660, this.t), solid: { x: 578, y: 596, w: 116, h: 66 } },
-      { id: 'quest', name: 'Quest Board', dx: 1010, dy: 500, action: 'quest', district: 'Dungeon Approach',
-        draw: (g) => drawQuestBoard(g, 1010, 484, this.t, !!this.hero.activeQuest()), solid: { x: 998, y: 468, w: 24, h: 18 } },
-      { id: 'plaza', name: 'Crystal Plaza', dx: 560, dy: 438, action: 'rest', district: 'Crystal Plaza',
-        draw: (g) => drawFountainSprite(g, 560, 426, this.t), solid: { x: 534, y: 410, w: 52, h: 16 } },
-      { id: 'home', name: 'Your House', dx: 190, dy: 588, action: 'house', district: 'Residential Quarter',
-        draw: (g) => drawPlayerHouse(g, 190, 560, this.t), solid: { x: 150, y: 512, w: 80, h: 48 } },
-      // decorative NPC homes
-      { id: 'home1', name: null, dx: 330, dy: 632, action: null,
-        draw: (g) => drawCottage(g, 330, 610, '#7a6a58', '#5c4e40', '#8a4a3c', '#6a3329', this.t), solid: { x: 302, y: 574, w: 56, h: 36 } },
-      { id: 'home2', name: null, dx: 130, dy: 706, action: null,
-        draw: (g) => drawCottage(g, 130, 686, '#6a7a58', '#4e5c40', '#8a6a3c', '#6a5029', this.t), solid: { x: 104, y: 654, w: 52, h: 32 } },
-      { id: 'home3', name: null, dx: 300, dy: 716, action: null,
-        draw: (g) => drawCottage(g, 300, 696, '#82725c', '#5e5040', '#5a6a8a', '#3f4d66', this.t), solid: { x: 274, y: 664, w: 52, h: 32 } },
+      { id: 'guild', name: "Adventurer's Guild & Tavern", dx: 630, dy: 194, action: 'guild', district: "Adventurer's Guild",
+        draw: (g) => drawTavern(g, 630, 186, this.t), solid: { x: 572, y: 120, w: 116, h: 66 } },
+      { id: 'library', name: 'Library & Archive', dx: 854, dy: 222, action: 'library', district: 'Library District',
+        draw: (g) => drawLibrary(g, 854, 216, this.t), solid: { x: 812, y: 164, w: 84, h: 52 } },
+      { id: 'training', name: 'Training Grounds', dx: 350, dy: 230, action: 'training', district: 'Training Grounds', zone: true,
+        draw: (g) => drawTrainingGround(g, 350, 150, this.t), solid: { x: 344, y: 132, w: 12, h: 12 } },
+      { id: 'potion', name: 'Potion Shop', dx: 440, dy: 510, action: 'potion', district: 'Commercial Street',
+        sortY: 506, draw: (g) => drawPotionShop(g, 440, 506, this.t), solid: null },
+      { id: 'blacksmith', name: 'Weapon Shop & Blacksmith', dx: 560, dy: 510, action: 'weapon', district: 'Commercial Street',
+        draw: (g) => drawBlacksmith(g, 560, 506, this.t), solid: { x: 510, y: 448, w: 100, h: 58 } },
+      { id: 'market', name: 'Market Square', dx: 854, dy: 462, action: 'market', district: 'Market Square', zone: true,
+        draw: (g) => drawMarket(g, 854, 486, this.t), solid: { x: 848, y: 490, w: 12, h: 10 } },
+      { id: 'pets', name: 'Pet Keeper', dx: 952, dy: 392, action: 'pets', district: 'Pet Sanctuary',
+        draw: (g) => drawPetKeeper(g, 952, 388, this.t), solid: { x: 919, y: 348, w: 66, h: 40 } },
+      { id: 'quest', name: 'Quest Board', dx: 676, dy: 604, action: 'quest', district: 'Dungeon Approach',
+        draw: (g) => drawQuestBoard(g, 676, 600, this.t, !!this.hero.activeQuest()), solid: { x: 664, y: 584, w: 24, h: 16 } },
+      { id: 'dungeon', name: 'Dungeon Gate', dx: 630, dy: 734, action: 'dungeon', district: 'Dungeon Approach',
+        draw: (g) => drawDungeonGate(g, 630, 720, this.t), solid: { x: 586, y: 628, w: 88, h: 92 } },
+      { id: 'plaza', name: 'Crystal Plaza', dx: 630, dy: 408, action: 'rest', district: 'Crystal Plaza',
+        draw: (g) => drawFountainSprite(g, 630, 390, this.t), solid: { x: 604, y: 374, w: 52, h: 16 } },
+      { id: 'home', name: 'Your House', dx: 296, dy: 578, action: 'house', district: 'Residential Quarter',
+        draw: (g) => drawPlayerHouse(g, 296, 574, this.t), solid: { x: 256, y: 526, w: 80, h: 48 } },
+      // decorative NPC homes (Residential Quarter, west)
+      { id: 'home1', name: null, dx: 260, dy: 390, action: null,
+        draw: (g) => drawCottage(g, 260, 386, '#7a6a58', '#5c4e40', '#8a4a3c', '#6a3329', this.t), solid: { x: 232, y: 350, w: 56, h: 36 } },
+      { id: 'home2', name: null, dx: 170, dy: 394, action: null,
+        draw: (g) => drawCottage(g, 170, 390, '#6a7a58', '#4e5c40', '#8a6a3c', '#6a5029', this.t), solid: { x: 142, y: 354, w: 56, h: 36 } },
+      { id: 'home3', name: null, dx: 250, dy: 524, action: null,
+        draw: (g) => drawCottage(g, 250, 520, '#82725c', '#5e5040', '#5a6a8a', '#3f4d66', this.t), solid: { x: 222, y: 488, w: 56, h: 32 } },
+      // farm/garden plot, NE of the Library — decorative, fenced off
+      { id: 'farm', name: null, dx: 1002, dy: 172, action: null,
+        draw: (g) => drawFarmPlot(g, 1002, 172, 118, 76), solid: null },
     ];
 
     // collision solids: footprints + pond + stream banks
     this.solids = this.locations.filter((l) => l.solid).map((l) => l.solid);
-    // Potion Shop: two wall blocks with a gap left open at the centre doorway so
-    // the player can walk up to the door (building base spans x≈630..742, y≈288..368).
-    this.solids.push({ x: 632, y: 314, w: 44, h: 50 }); // left wall
-    this.solids.push({ x: 696, y: 314, w: 44, h: 50 }); // right wall
-    this.pond = { cx: 1058, cy: 552, rx: 48, ry: 26 };
+    // Potion Shop: side wall blocks with the centre doorway left open
+    this.solids.push({ x: 383, y: 452, w: 47, h: 50 }); // left wall
+    this.solids.push({ x: 450, y: 452, w: 47, h: 50 }); // right wall
+    this.pond = { cx: 1106, cy: 660, rx: 36, ry: 20 };
     this.solids.push({ x: this.pond.cx - this.pond.rx, y: this.pond.cy - this.pond.ry, w: this.pond.rx * 2, h: this.pond.ry * 2 });
-    // stream runs vertically ~x1120; blocked except at the bridge (road y≈415)
-    this.stream = { x: 1108, w: 24, y0: 300, y1: 760, bridgeY: 402, bridgeH: 40 };
+    // river runs down the east edge; blocked except at the bridge on East Street
+    this.stream = { x: 1092, w: 28, y0: 60, y1: 700, bridgeY: 392, bridgeH: 36 };
     this.solids.push({ x: this.stream.x, y: this.stream.y0, w: this.stream.w, h: this.stream.bridgeY - this.stream.y0 });
     this.solids.push({ x: this.stream.x, y: this.stream.bridgeY + this.stream.bridgeH, w: this.stream.w, h: this.stream.y1 - (this.stream.bridgeY + this.stream.bridgeH) });
 
     // district regions for the transient entry banner
     this.regions = [
-      { name: 'Crystal Plaza', x: 470, y: 350, w: 200, h: 170 },
-      { name: 'Library District', x: 90, y: 130, w: 220, h: 190 },
-      { name: 'Commercial District', x: 380, y: 130, w: 340, h: 300 },
-      { name: 'Training Grounds', x: 700, y: 110, w: 200, h: 200 },
-      { name: 'Pet Sanctuary', x: 860, y: 300, w: 220, h: 200 },
-      { name: 'Residential Quarter', x: 70, y: 500, w: 340, h: 290 },
-      { name: 'Market Square', x: 250, y: 540, w: 200, h: 150 },
-      { name: "Adventurer's Guild", x: 550, y: 580, w: 220, h: 200 },
-      { name: 'Adventure Road', x: 760, y: 380, w: 260, h: 160 },
-      { name: 'Dungeon Approach', x: 980, y: 180, w: 300, h: 420 },
+      { name: 'Crystal Plaza', x: 540, y: 320, w: 180, h: 170 },
+      { name: "Adventurer's Guild", x: 540, y: 60, w: 190, h: 180 },
+      { name: 'Library District', x: 770, y: 120, w: 180, h: 160 },
+      { name: 'Training Grounds', x: 260, y: 90, w: 180, h: 170 },
+      { name: 'Residential Quarter', x: 140, y: 330, w: 300, h: 290 },
+      { name: 'Commercial Street', x: 380, y: 430, w: 260, h: 110 },
+      { name: 'Market Square', x: 740, y: 420, w: 220, h: 140 },
+      { name: 'Pet Sanctuary', x: 900, y: 300, w: 200, h: 110 },
+      { name: 'Riverside Park', x: 1050, y: 430, w: 230, h: 240 },
+      { name: 'Dungeon Approach', x: 540, y: 540, w: 200, h: 250 },
+      { name: 'The Farmstead', x: 960, y: 120, w: 150, h: 110 },
     ];
 
-    // cobblestone road network {x,y,w,h}
+    // cobblestone road network {x,y,w,h}; centrelines sit on the tile grid so
+    // the rasteriser produces clean rows/columns with automatic junctions.
     this.roads = [
-      { x: 60, y: 402, w: 1050, h: 34 },     // main east-west high street
-      { x: 528, y: 150, w: 34, h: 560 },     // main north-south avenue
-      { x: 190, y: 214, w: 22, h: 190 },     // library spur
-      { x: 440, y: 200, w: 22, h: 210 },     // blacksmith spur
-      { x: 686, y: 380, w: 22, h: 40 },      // potion spur
-      { x: 700, y: 250, w: 120, h: 22 },     // training path
-      { x: 300, y: 420, w: 22, h: 200 },     // to market
-      { x: 250, y: 604, w: 180, h: 22 },     // market street
-      { x: 190, y: 420, w: 22, h: 172 },     // residential lane
-      { x: 120, y: 590, w: 200, h: 20 },     // residential street
-      { x: 620, y: 420, w: 22, h: 250 },     // guild avenue
-      { x: 900, y: 402, w: 22, h: 100 },     // to pet keeper / quest
-      { x: 940, y: 360, w: 130, h: 22 },     // pet keeper path
-      { x: 1000, y: 420, w: 22, h: 80 },     // quest board spur
-      { x: 1108, y: 402, w: 120, h: 40 },    // bridge + gate approach
+      { x: 224, y: 398, w: 406, h: 16 },     // West Street (row 14): residential -> plaza
+      { x: 630, y: 398, w: 566, h: 16 },     // East Street (row 14): plaza -> market spur -> bridge -> mines exit
+      { x: 622, y: 200, w: 16, h: 206 },     // North Avenue (col 22): guild -> plaza
+      { x: 622, y: 406, w: 16, h: 210 },     // South Avenue (col 22): plaza -> dungeon gate
+      { x: 342, y: 224, w: 16, h: 350 },     // Residential lane (col 12): training -> W street -> player house
+      { x: 350, y: 512, w: 282, h: 16 },     // Commercial Street (row 18): lane -> shops -> S avenue
+      { x: 846, y: 224, w: 16, h: 190 },     // Library spur (col 30 north)
+      { x: 846, y: 406, w: 16, h: 84 },      // Market spur (col 30 south)
     ];
+
+    // Rasterise the road rects onto the tile grid: walk each rect's long axis and
+    // mark cells along its centreline, so the network becomes 1-tile-wide streets
+    // that autotile into corners and junctions.
+    this.roadCells = new Set();
+    for (const r of this.roads) {
+      const horizontal = r.w >= r.h;
+      const cy = Math.floor((r.y + r.h / 2) / ROAD_TILE);
+      const cx = Math.floor((r.x + r.w / 2) / ROAD_TILE);
+      if (horizontal) {
+        const c0 = Math.floor(r.x / ROAD_TILE), c1 = Math.floor((r.x + r.w) / ROAD_TILE);
+        for (let c = c0; c <= c1; c++) this.roadCells.add(`${c},${cy}`);
+      } else {
+        const r0 = Math.floor(r.y / ROAD_TILE), r1 = Math.floor((r.y + r.h) / ROAD_TILE);
+        for (let rr = r0; rr <= r1; rr++) this.roadCells.add(`${cx},${rr}`);
+      }
+    }
 
     // decorative tree clusters framing districts (dense, grouped)
     this.trees = [];
@@ -183,68 +224,85 @@ export class TownScene {
         this.trees.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.7, kind: (i % 3 === 0) ? 'pine' : kind });
       }
     };
-    cluster(90, 250, 6, 60, 'tree'); cluster(300, 130, 5, 50, 'pine');
-    cluster(560, 140, 5, 50, 'tree'); cluster(900, 150, 6, 70, 'pine');
-    cluster(120, 430, 5, 55, 'tree'); cluster(60, 640, 6, 60, 'pine');
-    cluster(470, 560, 5, 50, 'tree'); cluster(760, 560, 5, 55, 'tree');
-    cluster(1080, 620, 6, 60, 'pine'); cluster(1000, 250, 5, 55, 'pine');
-    cluster(430, 340, 3, 30, 'tree'); cluster(820, 430, 3, 34, 'tree');
+    // fill every empty pocket so the town reads dense, not spread out
+    cluster(150, 150, 7, 70, 'pine'); cluster(120, 260, 5, 55, 'tree');   // NW forest by training
+    cluster(480, 140, 5, 55, 'tree'); cluster(500, 250, 4, 40, 'pine');   // between training & guild
+    cluster(760, 90, 5, 50, 'pine'); cluster(960, 130, 6, 60, 'pine');    // N/NE forest
+    cluster(1000, 230, 4, 40, 'tree'); cluster(1180, 160, 5, 55, 'pine'); // by library / river top
+    cluster(90, 340, 5, 55, 'tree'); cluster(90, 470, 4, 45, 'pine');     // west edge
+    cluster(150, 620, 6, 60, 'pine'); cluster(300, 680, 5, 55, 'tree');   // SW below residential
+    cluster(430, 640, 6, 60, 'pine'); cluster(500, 590, 3, 30, 'tree');   // S of commercial
+    cluster(500, 330, 3, 30, 'tree'); cluster(760, 330, 3, 30, 'tree');   // plaza flanks
+    cluster(760, 250, 3, 28, 'tree'); cluster(720, 480, 3, 26, 'tree');
+    cluster(740, 660, 5, 55, 'tree'); cluster(880, 620, 6, 60, 'pine');   // SE forest by gate
+    cluster(980, 680, 5, 50, 'tree'); cluster(1010, 540, 4, 45, 'tree');
+    cluster(1180, 260, 4, 40, 'pine'); cluster(1220, 600, 5, 50, 'pine'); // east bank
     // edge forest ringing the map
     for (let x = 30; x < MAP_W; x += 46) { this.trees.push({ x, y: 40 + hash(x) * 30, kind: 'pine' }); this.trees.push({ x: x + 20, y: MAP_H - 30 - hash(x) * 24, kind: 'pine' }); }
     for (let y = 90; y < MAP_H - 40; y += 48) { this.trees.push({ x: 24 + hash(y) * 20, y, kind: 'pine' }); this.trees.push({ x: MAP_W - 26 - hash(y) * 18, y, kind: 'pine' }); }
 
     // grouped ground props (barrels/crates/benches/flowers…) rendered flat under entities
     this.propGroups = [
-      // blacksmith yard
-      { fn: (g) => { barrel(g, 402, 236); barrel(g, 392, 246); crate(g, 500, 240); logPile(g, 506, 250); } },
-      // potion shop: just a short cobble path linking the door to the road (the
-      // PNG art already includes barrels, herbs, bottles, planters, etc.)
+      // blacksmith yard (Commercial Street)
+      { fn: (g) => { barrel(g, 516, 500); barrel(g, 526, 508); crate(g, 600, 502); logPile(g, 606, 494); } },
+      // guild terrace (north)
+      { fn: (g) => { outdoorTable(g, 570, 220); outdoorTable(g, 690, 224); barrel(g, 688, 196); barrel(g, 698, 202); } },
+      // residential gardens + fences + mailbox (west)
+      { fn: (g) => { fenceRun(g, 222, 390, 70); flowerbed(g, 230, 386); flowerbed(g, 272, 386); mailbox(g, 296, 384); clothesline(g, 210, 520); } },
+      // home2 + home3 yards
+      { fn: (g) => { fenceRun(g, 132, 394, 66); flowerbed(g, 140, 390); flowerbed(g, 178, 390); } },
+      { fn: (g) => { fenceRun(g, 212, 524, 66); flowerbed(g, 220, 520); planter(g, 262, 518); } },
+      // library steps + planters (NE)
+      { fn: (g) => { planter(g, 812, 222); planter(g, 896, 222); bench(g, 880, 228); } },
+      // market extras (east)
+      { fn: (g) => { cart(g, 900, 480); crate(g, 780, 470); crate(g, 788, 478); } },
+      // plaza benches + flowers + rocks around the fountain rim
       { fn: (g) => {
-        fillEllipse(g, 686, 376, 22, 8, '#8f8570');
-        fillEllipse(g, 686, 375, 20, 7, '#a89c82');
-        for (let a = 0; a < Math.PI * 2; a += 0.5) rect(g, Math.round(686 + Math.cos(a) * 20), Math.round(376 + Math.sin(a) * 7), 1, 1, '#7c7260');
+        bench(g, 582, 452); bench(g, 678, 452);
+        flowerbed(g, 560, 358); flowerbed(g, 696, 358); flowerbed(g, 560, 462); flowerbed(g, 696, 462);
+        drawRock(g, 548, 400, 0.8); drawRock(g, 710, 420, 0.8);
       } },
-      // guild tables + barrels
-      { fn: (g) => { outdoorTable(g, 566, 688); outdoorTable(g, 706, 690); barrel(g, 690, 668); barrel(g, 700, 676); } },
-      // residential gardens + fences + mailbox
-      { fn: (g) => { fenceRun(g, 150, 592, 80); flowerbed(g, 160, 588); flowerbed(g, 210, 588); mailbox(g, 236, 586); clothesline(g, 300, 640); } },
-      // library steps + planters
-      { fn: (g) => { planter(g, 158, 226); planter(g, 222, 226); bench(g, 250, 232); } },
-      // pet sanctuary yard handled in drawPetKeeper
-      // market extras
-      { fn: (g) => { cart(g, 410, 616); crate(g, 268, 614); crate(g, 276, 622); } },
-      // plaza benches
-      { fn: (g) => { bench(g, 486, 470); bench(g, 636, 470); bench(g, 560, 372); } },
+      // riverside park (east bank)
+      { fn: (g) => { bench(g, 1160, 480); flowerbed(g, 1150, 500); drawBush(g, 1180, 510, 0.9); } },
+      // corrupted grounds around the Dungeon Gate: dead trees + jagged rocks,
+      // kept clear of the south-avenue road (x 622-638) so the path stays open
+      { fn: (g) => {
+        deadTree(g, 560, 660, this.t); deadTree(g, 700, 656, this.t); deadTree(g, 540, 720, this.t);
+        deadTree(g, 720, 716, this.t); deadTree(g, 580, 770, this.t); deadTree(g, 680, 772, this.t);
+        corruptedRock(g, 570, 700); corruptedRock(g, 690, 696); corruptedRock(g, 560, 750); corruptedRock(g, 700, 748);
+        flowerbed(g, 592, 640); flowerbed(g, 668, 636);
+      } },
     ];
 
-    // lamps along the roads
+    // lamps: plaza corners + one along each road
     this.lamps = [
-      [500, 402], [620, 402], [528, 360], [528, 470], [690, 360], [300, 470],
-      [820, 402], [940, 402], [1000, 470], [190, 380], [636, 560], [1108, 380],
+      [585, 368], [675, 368], [585, 444], [675, 444],
+      [500, 394], [760, 394], [630, 300], [630, 500],
+      [420, 536], [570, 536], [800, 494], [300, 428], [838, 330], [200, 428],
     ];
-    // braziers on the adventure road (warmer, military feel near the gate)
-    this.braziers = [[1010, 440], [1090, 400], [1150, 360], [1150, 440]];
+    // braziers flanking the South Avenue toward the Dungeon Gate
+    this.braziers = [[600, 650], [660, 650], [600, 580], [660, 580]];
 
     // NPCs
     this.npcs = [
-      { name: 'Captain Mara', sprite: 'sage', x: 1010, y: 506, facing: -1 },
-      { name: 'Blacksmith', sprite: 'villager', x: 492, y: 236, facing: -1 },
-      { name: 'Pet Keeper', sprite: 'villager', x: 906, y: 392, facing: 1 },
-      { name: 'Gate Guard', sprite: 'warrior', x: 1166, y: 352, facing: 1 },
-      { name: 'Gate Guard', sprite: 'warrior', x: 1166, y: 438, facing: 1 },
-      { name: 'Merchant', sprite: 'villager', x: 300, y: 606, facing: 1 },
-      { name: 'Villager', sprite: 'villager', x: 250, y: 660, facing: 1 },
-      { name: 'Adventurer', sprite: 'warrior', x: 600, y: 700, facing: 1 },
-      { name: 'Adventurer', sprite: 'mage', x: 690, y: 706, facing: -1 },
+      { name: 'Captain Mara', sprite: 'sage', x: 700, y: 600, facing: -1 },
+      { name: 'Blacksmith', sprite: 'villager', x: 606, y: 516, facing: -1 },
+      { name: 'Pet Keeper', sprite: 'villager', x: 1000, y: 394, facing: -1 },
+      { name: 'Gate Guard', sprite: 'warrior', x: 596, y: 700, facing: 1 },
+      { name: 'Gate Guard', sprite: 'warrior', x: 664, y: 700, facing: -1 },
+      { name: 'Merchant', sprite: 'villager', x: 812, y: 470, facing: 1 },
+      { name: 'Villager', sprite: 'villager', x: 240, y: 430, facing: 1 },
+      { name: 'Adventurer', sprite: 'warrior', x: 592, y: 226, facing: 1 },
+      { name: 'Adventurer', sprite: 'mage', x: 676, y: 230, facing: -1 },
     ];
 
     // wandering pets inside the fenced sanctuary
     this.sanctuaryPets = [
-      { sprite: 'fox', x: 960, y: 420, tx: 960, ty: 420 },
-      { sprite: 'rabbit', x: 1000, y: 430, tx: 1000, ty: 430 },
-      { sprite: 'turtle', x: 985, y: 400, tx: 985, ty: 400 },
+      { sprite: 'fox', x: 1000, y: 350, tx: 1000, ty: 350 },
+      { sprite: 'rabbit', x: 1040, y: 360, tx: 1040, ty: 360 },
+      { sprite: 'turtle', x: 1020, y: 336, tx: 1020, ty: 336 },
     ];
-    this.sanctuary = { x: 928, y: 386, w: 96, h: 60 };
+    this.sanctuary = { x: 986, y: 322, w: 96, h: 60 };
   }
 
   exit() {}
@@ -264,7 +322,7 @@ export class TownScene {
     if (this.districtBannerT > 0) this.districtBannerT -= dt;
 
     // crystal sparkle glow (separate from any physical shadow)
-    if (Math.random() < dt * 3) this.particles.spawn({ x: 560 + rand2(-7, 7), y: 388, kind: 'star', color: '#b58bff', vx: 0, vy: -8, life: 1, size: 1 });
+    if (Math.random() < dt * 3) this.particles.spawn({ x: 630 + rand2(-7, 7), y: 355, kind: 'star', color: '#b58bff', vx: 0, vy: -8, life: 1, size: 1 });
 
     // wandering sanctuary pets
     for (const p of this.sanctuaryPets) {
@@ -491,14 +549,55 @@ export class TownScene {
       }
     }
 
-    // roads (cobblestone with irregular edges)
-    for (const r of this.roads) roadSeg(g, r.x, r.y, r.w, r.h);
+    // roads: autotiled cobblestone from the authored tileset
+    this._drawRoadTiles(g, visW, visH);
 
-    // plaza cobblestone ring (the fountain itself is a depth-sorted entity)
-    plaza(g, 560, 418, 74);
+    // plaza cobblestone ring (the fountain itself is a depth-sorted entity) —
+    // widened so there's real open space around the fountain, not a narrow
+    // intersection
+    plaza(g, 630, 412, 82);
 
+    this._drawCorruption(g);
     this._stream(g);
     this._pond(g);
+  }
+
+  /** Dark, wilted ground ringing the Dungeon Gate, strongest at the entrance. */
+  _drawCorruption(g) {
+    const gate = { x: 630, y: 720 };
+    for (let i = 0; i < 46; i++) {
+      const seed = i * 7.13;
+      const spread = 130 + hash(seed) * 60;
+      const px = gate.x + (hash(seed * 1.7) - 0.5) * spread * 1.6;
+      const py = gate.y - 40 + (hash(seed * 2.3) - 0.5) * spread;
+      const d = Math.hypot(px - gate.x, (py - gate.y) * 1.3);
+      const k = clamp01(1 - d / 170);
+      if (k <= 0.05) continue;
+      corruptPatch(g, px, py, 8 + hash(seed * 3.1) * 14, k);
+    }
+  }
+
+  /** Draw the visible road cells, picking each tile from its neighbour mask. */
+  _drawRoadTiles(g, visW, visH) {
+    const has = (c, r) => this.roadCells.has(`${c},${r}`);
+    const c0 = Math.floor(this.camX / ROAD_TILE) - 1, c1 = Math.ceil((this.camX + visW) / ROAD_TILE) + 1;
+    const r0 = Math.floor(this.camY / ROAD_TILE) - 1, r1 = Math.ceil((this.camY + visH) / ROAD_TILE) + 1;
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        if (!has(c, r)) continue;
+        const mask = (has(c, r - 1) ? 1 : 0) | (has(c + 1, r) ? 2 : 0) | (has(c, r + 1) ? 4 : 0) | (has(c - 1, r) ? 8 : 0);
+        const [name, flip] = ROAD_MASK[mask] || ROAD_MASK[15];
+        const img = ROAD_IMGS[name];
+        if (!img || !img.complete || !img.naturalWidth) continue;
+        const x = c * ROAD_TILE, y = r * ROAD_TILE;
+        if (flip) {
+          g.save(); g.translate(x + ROAD_TILE, y); g.scale(-1, 1);
+          g.drawImage(img, 0, 0, ROAD_TILE, ROAD_TILE); g.restore();
+        } else {
+          g.drawImage(img, x, y, ROAD_TILE, ROAD_TILE);
+        }
+      }
+    }
   }
 
   _stream(g) {
@@ -912,7 +1011,7 @@ function drawPetKeeper(g, cx, baseY, t) {
   rect(g, cx + 22, baseY - 30, 2, 8, '#2a1e14'); rect(g, cx + 16, baseY - 22, 14, 10, '#5c4230'); rectOutline(g, cx + 16, baseY - 22, 14, 10, '#2a1a10');
   disc(g, cx + 23, baseY - 16, 2, '#e8d36a');
   // fenced sanctuary to the right (the wandering pets live here)
-  const sx = cx + 34, sy = baseY - 6, sw = 96, sh = 60;
+  const sx = cx + 34, sy = baseY - 66, sw = 96, sh = 60; // sanctuary sits beside the cottage, north of the street
   for (let fx = sx - 6; fx <= sx + sw; fx += 8) { rect(g, fx, sy - 2, 1, 6, '#6b4a2e'); rect(g, fx, sy + sh - 2, 1, 6, '#6b4a2e'); }
   for (let fy = sy; fy <= sy + sh; fy += 8) { rect(g, sx - 6, fy, 6, 1, '#6b4a2e'); rect(g, sx + sw - 5, fy, 6, 1, '#6b4a2e'); }
   // pet houses, bowls, eggs, nests
@@ -1004,6 +1103,56 @@ function roadSeg(g, x, y, w, h) {
     if (hash((x + i) * 2.1) > 0.6) { rect(g, x + i, y - 1, 2, 1, '#357338'); rect(g, x + i, y, 1, 1, '#2c6630'); }
     if (hash((x + i) * 1.4 + 9) > 0.6) rect(g, x + i, y + h - 1, 2, 1, '#2c6630');
   }
+}
+
+// Fenced farm plot: tilled crop rows inside a wooden fence, with a scarecrow.
+// Purely decorative ground dressing; collision comes from the caller's solid.
+function drawFarmPlot(g, cx, cy, w, h) {
+  const x = cx - w / 2, y = cy - h / 2;
+  rect(g, x, y, w, h, '#5c4a30');
+  for (let ry = 4; ry < h - 4; ry += 8) {
+    rect(g, x + 4, y + ry, w - 8, 5, '#6b5738');
+    for (let rx = x + 4; rx < x + w - 4; rx += 6) rect(g, rx, y + ry, 1, 5, '#4a3a24');
+    for (let rx = x + 6; rx < x + w - 6; rx += 12) { rect(g, rx, y + ry - 1, 2, 2, '#3d7a3e'); rect(g, rx + 4, y + ry + 1, 2, 2, '#c9924a'); }
+  }
+  fenceRun(g, x - 2, y - 2, w + 4);
+  fenceRun(g, x - 2, y + h + 4, w + 4);
+  for (let fy = y; fy <= y + h; fy += 8) { rect(g, x - 3, fy, 1, 7, '#6b4a2e'); rect(g, x + w + 2, fy, 1, 7, '#6b4a2e'); }
+  // scarecrow
+  const sx = x + w - 12, sy = y + 6;
+  rect(g, sx - 1, sy, 2, 12, '#6b4a2e'); rect(g, sx - 6, sy + 3, 12, 2, '#6b4a2e');
+  rect(g, sx - 3, sy - 4, 6, 5, '#c9a878'); rect(g, sx - 2, sy - 5, 4, 2, '#8a5a3a');
+  rect(g, sx - 4, sy + 1, 3, 6, '#8a5a3a'); rect(g, sx + 1, sy + 1, 3, 6, '#3f7a5c');
+}
+
+// ---------------------------------------------------------------- corruption
+// A dark, wilted biome ringing the Dungeon Gate: cracked purple-black ground,
+// bare dead trees and jagged stone, strongest right at the entrance and
+// fading out as the intensity term drops toward 0.
+
+function corruptPatch(g, x, y, r, k) {
+  const a = Math.min(0.55, 0.18 + k * 0.4);
+  fillEllipse(g, x, y, r, r * 0.5, `rgba(30,14,26,${a})`);
+  fillEllipse(g, x, y, r * 0.55, r * 0.28, `rgba(58,20,52,${a * 0.7})`);
+  if (k > 0.5) { rect(g, x - 1, y - 1, 2, 2, '#1a0a16'); rect(g, x + 3, y + 1, 1, 2, '#1a0a16'); } // cracks
+}
+
+function deadTree(g, x, y, t) {
+  x = Math.round(x); y = Math.round(y);
+  contactShadow(g, x, y, 8, 3, 0.4);
+  rect(g, x - 1, y - 16, 3, 16, '#241a20');
+  rect(g, x - 1, y - 16, 1, 16, '#382830');
+  const branch = (bx, by, dx, dy, len) => { for (let i = 0; i < len; i++) rect(g, Math.round(bx + dx * i), Math.round(by + dy * i), 1, 1, '#241a20'); };
+  branch(x, y - 13, 1, -0.7, 6); branch(x, y - 10, -1, -0.8, 5); branch(x - 1, y - 15, -1, -0.5, 4);
+  if (Math.sin(t * 0.8 + x) > 0.6) rect(g, x + 4, y - 18, 1, 1, '#9d6bff'); // rare corrupted glow spore
+}
+
+function corruptedRock(g, x, y) {
+  x = Math.round(x); y = Math.round(y);
+  contactShadow(g, x, y, 7, 2, 0.4);
+  rect(g, x - 6, y - 3, 12, 4, '#3a3038'); rect(g, x - 5, y - 7, 5, 5, '#3a3038'); rect(g, x - 1, y - 9, 5, 6, '#453a44');
+  rect(g, x - 5, y - 7, 2, 2, '#5c4a5c'); rect(g, x + 1, y - 9, 2, 2, '#5c4a5c');
+  rect(g, x - 2, y - 4, 1, 1, '#8a5cd0'); // faint purple vein
 }
 
 function plaza(g, cx, cy, r) {

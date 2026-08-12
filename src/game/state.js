@@ -3,7 +3,7 @@
 // combat stats from all of that. Persisted via core/save.js.
 
 import {
-  CLASSES, WEAPONS, ABILITIES, PETS, STARTER_ABILITY, CATEGORIES, LEVELS,
+  CLASSES, WEAPONS, ABILITIES, PETS, STARTER_ABILITY, STARTER_WEAPON, CATEGORIES, LEVELS,
   xpForLevel,
 } from './data.js';
 import { Save } from '../core/save.js';
@@ -40,14 +40,14 @@ function freshState(clsId) {
     equippedAbilities: [STARTER_ABILITY[clsId], null, null, null], // slots 1-4
 
     inventory: {
-      weapons: [clsId === 'warrior' ? 'worn_sword' : 'cracked_staff'],
+      weapons: [STARTER_WEAPON[clsId]],
       trinkets: [],
       potions: { health: 2, mana: 2, speed: 0, defense: 0 },
       pets: [],
       eggs: 0,
     },
     equipped: {
-      weapon: clsId === 'warrior' ? 'worn_sword' : 'cracked_staff',
+      weapon: STARTER_WEAPON[clsId],
       trinket: null,
       pet: null,
     },

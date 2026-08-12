@@ -398,10 +398,10 @@ export class ClassSelectScene {
     for (let i = 0; i < 5; i++) rect(g, 0, i * 54, this.W, 1, '#141020');
     heading(g, this.W, 8, 'CHOOSE YOUR CLASS', { scale: 2 });
 
-    const n = this.classes.length;
+    // Carousel: the selected card stays centred and neighbours peek in from the
+    // sides, so any number of classes fits the 480px viewport.
     const cardW = 150, gap = 16;
-    const totalW = n * cardW + (n - 1) * gap;
-    const startX = this.W / 2 - totalW / 2;
+    const startX = this.W / 2 - cardW / 2 - this.sel * (cardW + gap);
     const cy = 36, cardH = 200;
 
     this.classes.forEach((cls, i) => {
