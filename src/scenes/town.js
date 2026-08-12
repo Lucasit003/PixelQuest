@@ -141,7 +141,7 @@ export class TownScene {
     // Player House, Training Grounds NW, and the Dungeon Gate as the south exit.
     this.locations = [
       { id: 'guild', name: "Adventurer's Guild & Tavern", dx: 630, dy: 194, action: 'guild', district: "Adventurer's Guild",
-        draw: (g) => drawTavern(g, 630, 186, this.t), solid: { x: 569, y: 98, w: 122, h: 88 } },
+        draw: (g) => drawTavern(g, 630, 186, this.t), solid: { x: 569, y: 108, w: 122, h: 78 } },
       { id: 'library', name: 'Library & Archive', dx: 854, dy: 222, action: 'library', district: 'Library District',
         draw: (g) => drawLibrary(g, 854, 216, this.t), solid: { x: 812, y: 164, w: 84, h: 52 } },
       { id: 'training', name: 'Training Grounds', dx: 350, dy: 230, action: 'training', district: 'Training Grounds', zone: true,
@@ -149,7 +149,7 @@ export class TownScene {
       { id: 'potion', name: 'Potion Shop', dx: 440, dy: 510, action: 'potion', district: 'Commercial Street',
         sortY: 506, draw: (g) => drawPotionShop(g, 440, 506, this.t), solid: null },
       { id: 'blacksmith', name: 'Weapon Shop & Blacksmith', dx: 560, dy: 510, action: 'weapon', district: 'Commercial Street',
-        draw: (g) => drawBlacksmith(g, 560, 506, this.t), solid: { x: 504, y: 428, w: 112, h: 78 } },
+        draw: (g) => drawBlacksmith(g, 560, 506, this.t), solid: { x: 504, y: 438, w: 112, h: 68 } },
       { id: 'market', name: 'Market Square', dx: 854, dy: 462, action: 'market', district: 'Market Square', zone: true,
         draw: (g) => drawMarket(g, 854, 486, this.t), solid: { x: 848, y: 490, w: 12, h: 10 } },
       { id: 'pets', name: 'Pet Keeper', dx: 952, dy: 392, action: 'pets', district: 'Pet Sanctuary',
@@ -161,7 +161,7 @@ export class TownScene {
       { id: 'plaza', name: 'Crystal Plaza', dx: 630, dy: 408, action: 'rest', district: 'Crystal Plaza',
         draw: (g) => drawFountainSprite(g, 630, 390, this.t), solid: { x: 604, y: 374, w: 52, h: 16 } },
       { id: 'home', name: 'Your House', dx: 296, dy: 578, action: 'house', district: 'Residential Quarter',
-        draw: (g) => drawPlayerHouse(g, 296, 574, this.t), solid: { x: 259, y: 498, w: 75, h: 76 } },
+        draw: (g) => drawPlayerHouse(g, 296, 574, this.t), solid: { x: 259, y: 508, w: 75, h: 66 } },
       // decorative NPC homes (Residential Quarter, west)
       { id: 'home1', name: null, dx: 260, dy: 390, action: null,
         draw: (g) => drawCottage(g, 260, 386, '#7a6a58', '#5c4e40', '#8a4a3c', '#6a3329', this.t), solid: { x: 232, y: 350, w: 56, h: 36 } },
