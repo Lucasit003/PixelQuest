@@ -1020,41 +1020,45 @@ function fxRipples(g, cx, baseY, t) {
   }
 }
 
-// 2. Water flow: continuous cascading sheets down the art's real channels —
-// a scrolling 4-color pixel column (not discrete drips), with a detaching
-// droplet and a churning foam pool where each cascade lands.
-const FALL_COLORS = ['#f2ffff', '#a8ecff', '#5fd0f2', '#a8ecff'];
+// 2. Water flow: the art already paints the cascades and swirl texture, so
+// instead of overlaying foreign pixel trails (which read as drips at this
+// tiny scale), animate the painted water itself — soft brightness wavefronts
+// that well up at the pedestal and travel outward to the rim, exactly how a
+// fountain pool actually moves. Every dot is clipped to the water mask, so
+// the waves wrap around the stone arms on their own.
 function fxStreams(g, cx, baseY, t) {
-  for (let f = 0; f < FX_FALLS.length; f++) {
-    const fall = FX_FALLS[f];
-    const steps = Math.round(fall.yBot - fall.yTop); // ~8 rows, 1px each
-    const scroll = Math.floor(t * 10) + f * 2; // downward scroll, desynced per side
-    for (let i = 0; i <= steps; i++) {
-      const k = i / steps;
-      const x = Math.round(cx + lerp(fall.xTop, fall.xBot, k));
-      const y = Math.round(baseY + fall.yTop + i);
-      const c = FALL_COLORS[(i + scroll) % FALL_COLORS.length];
-      // sheet: 2px wide, slightly translucent at the top so it blends with
-      // the art where the water emerges from under the crystal platform
-      g.globalAlpha = k < 0.25 ? 0.55 : 0.85;
-      rect(g, x, y, 2, 1, c);
+  const WAVES = 3, period = 2.4;
+  for (let w = 0; w < WAVES; w++) {
+    const phase = ((t / period + w / WAVES) % 1); // 0 center -> 1 rim
+    const s = lerp(0.3, 1.0, phase);              // wavefront scale
+    const a = Math.sin(phase * Math.PI) * 0.3;    // swell in, fade at rim
+    if (a <= 0.02) continue;
+    const rx = FX_BASIN.rx * s, ry = FX_BASIN.ry * s;
+    const DOTS = 22;
+    for (let i = 0; i < DOTS; i++) {
+      const ang = (i / DOTS) * Math.PI * 2 + w * 0.3; // slight per-wave twist
+      const px = FX_BASIN.cx + Math.cos(ang) * rx;
+      const py = FX_BASIN.cy + Math.sin(ang) * ry;
+      if (!fountainWaterAt(px, py)) continue;
+      // two-pixel crest: bright leading dot + soft cyan trailing dot
+      g.globalAlpha = a;
+      rect(g, Math.round(cx + px), Math.round(baseY + py), 1, 1, '#e8fbff');
+      g.globalAlpha = a * 0.5;
+      rect(g, Math.round(cx + px - Math.cos(ang)), Math.round(baseY + py - Math.sin(ang) * 0.6), 1, 1, '#9fdcf2');
       g.globalAlpha = 1;
     }
-    // a lone droplet that outruns the sheet and pops at the bottom
-    const dPhase = ((t * 1.4 + f * 0.5) % 1);
-    const dx = Math.round(cx + lerp(fall.xTop, fall.xBot, dPhase) + (f === 0 ? -1 : 2));
-    const dy = Math.round(baseY + lerp(fall.yTop, fall.yBot, dPhase));
-    g.globalAlpha = 0.9 - dPhase * 0.3;
-    rect(g, dx, dy, 1, 1, '#ffffff');
-    g.globalAlpha = 1;
-    // churning foam pool at the landing point: 3 pixels that jitter and blink
+  }
+  // churn where the painted cascades meet the pool (the art shows foam right
+  // at the pedestal's sides) — a gentle blink, clipped to water.
+  for (let f = 0; f < FX_FALLS.length; f++) {
+    const fall = FX_FALLS[f];
     const lx = Math.round(cx + fall.xBot);
     const ly = Math.round(baseY + fall.yBot + 1);
     for (let p = 0; p < 3; p++) {
-      const wob = Math.sin(t * 6 + p * 2.1 + f * 3) ;
-      const a = 0.35 + Math.abs(Math.sin(t * 4 + p * 1.7 + f)) * 0.45;
+      const wob = Math.sin(t * 6 + p * 2.1 + f * 3);
+      const a = 0.25 + Math.abs(Math.sin(t * 4 + p * 1.7 + f)) * 0.35;
       const fx2 = lx - 2 + p * 2 + Math.round(wob), fy2 = ly + (p % 2);
-      if (!fountainWaterAt(fx2 - cx, fy2 - baseY)) continue; // foam stays on water
+      if (!fountainWaterAt(fx2 - cx, fy2 - baseY)) continue;
       g.globalAlpha = a;
       rect(g, fx2, fy2, 1, 1, p === 1 ? '#ffffff' : '#d4f6ff');
       g.globalAlpha = 1;
