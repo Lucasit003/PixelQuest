@@ -335,15 +335,8 @@ export class TownScene {
     if (this.introHintT > 0) this.introHintT -= dt;
     if (this.districtBannerT > 0) this.districtBannerT -= dt;
 
-    // crystal sparkle glow (separate from any physical shadow) — tiny cyan/purple
-    // motes drifting up out of the fountain crystal, with a little sideways sway.
-    if (Math.random() < dt * 3.2) {
-      this.particles.spawn({
-        x: 630 + rand2(-7, 7), y: 355, kind: 'star',
-        color: Math.random() < 0.5 ? '#b58bff' : '#7fe8ff',
-        vx: rand2(-4, 4), vy: -8, life: rand2(0.8, 1.3), size: 1,
-      });
-    }
+    // (crystal motes are drawn in drawFountainFX's fxMotes — no generic
+    // particle spawns needed here anymore)
 
     // wandering sanctuary pets
     for (const p of this.sanctuaryPets) {
@@ -951,8 +944,13 @@ function drawFountainSprite(g, cx, baseY, t) {
 // FOUNTAIN_W x FOUNTAIN_H) and expressed as offsets from (cx, baseY).
 const FX_BASIN = { cx: 0, cy: -24, rx: 26, ry: 12 };   // water ellipse
 const FX_CRYSTAL = { cx: 0, cy: -38, rx: 9, ry: 14 };  // main crystal silhouette
-const FX_ARM_L = { x: -17, yTop: -34, yBot: -21 };     // left water-arm stream path
-const FX_ARM_R = { x: 17, yTop: -34, yBot: -21 };      // right water-arm stream path
+// The art's real water channels: two cascades sheet down from under the
+// crystal platform, hugging the sides of the front pedestal, then spread
+// into the pool. Measured from the source art and scaled to world units.
+const FX_FALLS = [
+  { xTop: -11.5, xBot: -13.5, yTop: -28, yBot: -20.5 }, // left cascade
+  { xTop: 11.5, xBot: 13.5, yTop: -28, yBot: -20.5 },   // right cascade
+];
 const FX_RUNE_ARC = { cx: 0, cy: -14, rx: 13, y: -14, count: 6 }; // pedestal rune row
 
 function drawFountainFX(g, cx, baseY, t) {
@@ -962,6 +960,7 @@ function drawFountainFX(g, cx, baseY, t) {
   fxHighlights(g, cx, baseY, t);
   fxRunes(g, cx, baseY, t);
   fxCrystalPulse(g, cx, baseY, t);
+  fxMotes(g, cx, baseY, t);
   g.restore();
 }
 
@@ -984,23 +983,42 @@ function fxRipples(g, cx, baseY, t) {
   }
 }
 
-// 2. Water flow: 3-4 discrete dots traveling down each stone arm into the basin.
+// 2. Water flow: continuous cascading sheets down the art's real channels —
+// a scrolling 4-color pixel column (not discrete drips), with a detaching
+// droplet and a churning foam pool where each cascade lands.
+const FALL_COLORS = ['#f2ffff', '#a8ecff', '#5fd0f2', '#a8ecff'];
 function fxStreams(g, cx, baseY, t) {
-  for (const arm of [FX_ARM_L, FX_ARM_R]) {
-    const FRAMES = 4;
-    for (let i = 0; i < FRAMES; i++) {
-      const speed = 1.1; // loops/sec
-      const phase = ((t * speed + i / FRAMES) % 1);
-      const y = lerp(arm.yTop, arm.yBot, phase);
-      const alpha = 0.85 * (1 - phase * 0.5);
-      rect(g, Math.round(cx + arm.x), Math.round(baseY + y), 1, 1, `rgba(220,250,255,${alpha.toFixed(2)})`);
-      // splash when a dot lands in the basin
-      if (phase > 0.88) {
-        const splash = (phase - 0.88) / 0.12;
-        g.globalAlpha = 1 - splash;
-        rect(g, Math.round(cx + arm.x - 1), Math.round(baseY + arm.yBot), 3, 1, '#dff6ff');
-        g.globalAlpha = 1;
-      }
+  for (let f = 0; f < FX_FALLS.length; f++) {
+    const fall = FX_FALLS[f];
+    const steps = Math.round(fall.yBot - fall.yTop); // ~8 rows, 1px each
+    const scroll = Math.floor(t * 10) + f * 2; // downward scroll, desynced per side
+    for (let i = 0; i <= steps; i++) {
+      const k = i / steps;
+      const x = Math.round(cx + lerp(fall.xTop, fall.xBot, k));
+      const y = Math.round(baseY + fall.yTop + i);
+      const c = FALL_COLORS[(i + scroll) % FALL_COLORS.length];
+      // sheet: 2px wide, slightly translucent at the top so it blends with
+      // the art where the water emerges from under the crystal platform
+      g.globalAlpha = k < 0.25 ? 0.55 : 0.85;
+      rect(g, x, y, 2, 1, c);
+      g.globalAlpha = 1;
+    }
+    // a lone droplet that outruns the sheet and pops at the bottom
+    const dPhase = ((t * 1.4 + f * 0.5) % 1);
+    const dx = Math.round(cx + lerp(fall.xTop, fall.xBot, dPhase) + (f === 0 ? -1 : 2));
+    const dy = Math.round(baseY + lerp(fall.yTop, fall.yBot, dPhase));
+    g.globalAlpha = 0.9 - dPhase * 0.3;
+    rect(g, dx, dy, 1, 1, '#ffffff');
+    g.globalAlpha = 1;
+    // churning foam pool at the landing point: 3 pixels that jitter and blink
+    const lx = Math.round(cx + fall.xBot);
+    const ly = Math.round(baseY + fall.yBot + 1);
+    for (let p = 0; p < 3; p++) {
+      const wob = Math.sin(t * 6 + p * 2.1 + f * 3) ;
+      const a = 0.35 + Math.abs(Math.sin(t * 4 + p * 1.7 + f)) * 0.45;
+      g.globalAlpha = a;
+      rect(g, lx - 2 + p * 2 + Math.round(wob), ly + (p % 2), 1, 1, p === 1 ? '#ffffff' : '#d4f6ff');
+      g.globalAlpha = 1;
     }
   }
 }
@@ -1049,6 +1067,45 @@ function fxCrystalPulse(g, cx, baseY, t) {
   g.globalAlpha = alpha * 0.7;
   disc(g, cx + FX_CRYSTAL.cx, baseY + FX_CRYSTAL.cy - 4, FX_CRYSTAL.rx * 0.6, '#ffffff');
   g.restore();
+}
+
+// 5. Magic motes: replaces the old plain purple squares. Each mote rises out
+// of the crystal on a gentle sine sway, fades in/out smoothly, and flashes a
+// tiny 4-arm glint at its brightest moment. Colors alternate cyan/violet per
+// loop (hash-picked), and phases are staggered so they never move as a group.
+const MOTE_COLORS = [
+  { core: '#aef4ff', glint: '#e8fdff' },  // cyan
+  { core: '#c9a0ff', glint: '#efe0ff' },  // violet
+  { core: '#8fb8ff', glint: '#dceaff' },  // blue
+];
+function fxMotes(g, cx, baseY, t) {
+  const N = 5;
+  for (let i = 0; i < N; i++) {
+    const period = 2.6 + i * 0.37;
+    const loop = Math.floor((t + i * 2.9) / period);
+    const phase = ((t + i * 2.9) % period) / period; // 0..1 birth -> death
+    const seedX = hash(i * 8.3 + loop * 5.7);
+    const seedC = hash(i * 4.9 + loop * 7.3 + 2);
+    const col = MOTE_COLORS[Math.floor(seedC * MOTE_COLORS.length)];
+    const x0 = (seedX * 2 - 1) * 8;                    // spawn spread across crystal
+    const rise = phase * 16;                            // total climb in px
+    const sway = Math.sin(phase * Math.PI * 3 + i * 1.3) * 2.2;
+    const px = cx + x0 + sway;
+    const py = baseY - 34 - rise;
+    const a = Math.sin(phase * Math.PI);                // smooth in -> peak -> out
+    if (a <= 0.03) continue;
+    g.globalAlpha = a * 0.9;
+    rect(g, Math.round(px), Math.round(py), 1, 1, col.core);
+    // glint: brief 4-arm sparkle near peak brightness
+    if (a > 0.82) {
+      g.globalAlpha = (a - 0.82) / 0.18 * 0.8;
+      rect(g, Math.round(px) - 1, Math.round(py), 1, 1, col.glint);
+      rect(g, Math.round(px) + 1, Math.round(py), 1, 1, col.glint);
+      rect(g, Math.round(px), Math.round(py) - 1, 1, 1, col.glint);
+      rect(g, Math.round(px), Math.round(py) + 1, 1, 1, col.glint);
+    }
+    g.globalAlpha = 1;
+  }
 }
 
 // Crisp scattered-dot "ring" — reads as a ripple crest without a true stroke.
