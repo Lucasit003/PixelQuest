@@ -76,6 +76,8 @@ const HOUSE_W = 75, HOUSE_H = 66;
 // plaza — a landmark pair, sized well above the plaza's own scale.
 const LAMP_CRYSTAL_ART = loadBuildingArt('assets/props/lamp_crystal.png');
 const LAMP_W = 36, LAMP_H = 49;
+const LAMP4_ART = loadBuildingArt('assets/props/lamp_04.png');
+const LAMP4_W = 36, LAMP4_H = 47;
 
 // ------------------------------------------------------------ road tileset
 // Authored cobblestone tiles (96px squares, real alpha) with corners,
@@ -255,6 +257,14 @@ export class TownScene {
       { id: 'lampNorthE', name: null, dx: null, dy: null, action: null, sortY: FC.y - this.plazaRadius - 10,
         draw: (g) => drawPropArt(g, LAMP_CRYSTAL_ART, FC.x + 30, FC.y - this.plazaRadius - 10, LAMP_W, LAMP_H, 6, true),
         solid: { x: FC.x + 30 - 4, y: FC.y - this.plazaRadius - 10 - 4, w: 8, h: 8 } },
+
+      // ---- South approach: same setup, mirrored, using lamp style #4 ----
+      { id: 'lampSouthW', name: null, dx: null, dy: null, action: null, sortY: FC.y + this.plazaRadius + 10,
+        draw: (g) => drawPropArt(g, LAMP4_ART, FC.x - 30, FC.y + this.plazaRadius + 10, LAMP4_W, LAMP4_H, 6),
+        solid: { x: FC.x - 30 - 4, y: FC.y + this.plazaRadius + 10 - 4, w: 8, h: 8 } },
+      { id: 'lampSouthE', name: null, dx: null, dy: null, action: null, sortY: FC.y + this.plazaRadius + 10,
+        draw: (g) => drawPropArt(g, LAMP4_ART, FC.x + 30, FC.y + this.plazaRadius + 10, LAMP4_W, LAMP4_H, 6, true),
+        solid: { x: FC.x + 30 - 4, y: FC.y + this.plazaRadius + 10 - 4, w: 8, h: 8 } },
 
       // ---- Commercial District: two shops around one shared courtyard ----
       { id: 'potion', name: 'Potion Shop', dx: D.commercial.x - 80, dy: D.commercial.y + 62, action: 'potion', district: 'Commercial District',
