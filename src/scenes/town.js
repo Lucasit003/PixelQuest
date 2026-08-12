@@ -223,9 +223,9 @@ export class TownScene {
         draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t, this.plazaRadius), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
 
       // ---- Commercial District: two shops around one shared courtyard ----
-      { id: 'potion', name: 'Potion Shop (reserved)', dx: D.commercial.x - 80, dy: D.commercial.y + 50, action: 'potion', district: 'Commercial District',
-        draw: (g) => drawMarker(g, D.commercial.x - 80, D.commercial.y - 38, 113, 80, 'Potion Shop'),
-        solid: { x: D.commercial.x - 80 - 56, y: D.commercial.y - 38, w: 113, h: 80 } },
+      { id: 'potion', name: 'Potion Shop', dx: D.commercial.x - 80, dy: D.commercial.y + 10, action: 'potion', district: 'Commercial District',
+        draw: (g) => drawPotionShop(g, D.commercial.x - 80, D.commercial.y + 2, this.t),
+        solid: { x: D.commercial.x - 80 - 56, y: D.commercial.y - 78, w: 113, h: 80 } },
       { id: 'weapon', name: 'Ironhearth Forge (reserved)', dx: D.commercial.x + 85, dy: D.commercial.y + 38, action: 'weapon', district: 'Commercial District',
         draw: (g) => drawMarker(g, D.commercial.x + 85, D.commercial.y - 31, 112, 68, 'Ironhearth Forge'),
         solid: { x: D.commercial.x + 85 - 56, y: D.commercial.y - 31, w: 112, h: 68 } },
