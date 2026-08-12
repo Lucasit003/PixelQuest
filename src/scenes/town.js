@@ -223,12 +223,12 @@ export class TownScene {
         draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t, this.plazaRadius), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
 
       // ---- Commercial District: two shops around one shared courtyard ----
-      { id: 'potion', name: 'Potion Shop', dx: D.commercial.x - 80, dy: D.commercial.y + 10, action: 'potion', district: 'Commercial District',
-        draw: (g) => drawPotionShop(g, D.commercial.x - 80, D.commercial.y + 2, this.t),
-        solid: { x: D.commercial.x - 80 - 56, y: D.commercial.y - 78, w: 113, h: 80 } },
-      { id: 'weapon', name: 'Ironhearth Forge (reserved)', dx: D.commercial.x + 85, dy: D.commercial.y + 38, action: 'weapon', district: 'Commercial District',
-        draw: (g) => drawMarker(g, D.commercial.x + 85, D.commercial.y - 31, 112, 68, 'Ironhearth Forge'),
-        solid: { x: D.commercial.x + 85 - 56, y: D.commercial.y - 31, w: 112, h: 68 } },
+      { id: 'potion', name: 'Potion Shop', dx: D.commercial.x - 80, dy: D.commercial.y + 62, action: 'potion', district: 'Commercial District',
+        draw: (g) => drawPotionShop(g, D.commercial.x - 80, D.commercial.y + 62, this.t),
+        solid: { x: D.commercial.x - 80 - 56, y: D.commercial.y - 18, w: 113, h: 80 } },
+      { id: 'weapon', name: 'Ironhearth Forge', dx: D.commercial.x + 85, dy: D.commercial.y + 62, action: 'weapon', district: 'Commercial District',
+        draw: (g) => drawBlacksmith(g, D.commercial.x + 85, D.commercial.y + 62, this.t),
+        solid: { x: D.commercial.x + 85 - 56, y: D.commercial.y - 6, w: 112, h: 68 } },
 
       // ---- Market Square: one shared open square, stalls on its edges ----
       { id: 'market', name: 'Market Square', dx: D.market.x, dy: D.market.y, action: 'market', district: 'Market Square', zone: true,
@@ -245,9 +245,9 @@ export class TownScene {
         draw: (g) => drawMarker(g, D.market.x - 10, D.market.y + 120, 30, 24, 'Traveling Merchant', '#7a9ca0') },
 
       // ---- Residential Quarter: neighborhood loop with 4 lots ----
-      { id: 'home', name: 'Player House (reserved)', dx: D.residential.x + 120, dy: D.residential.y - 60, action: 'house', district: 'Residential Quarter',
-        draw: (g) => drawMarker(g, D.residential.x + 120, D.residential.y - 160, 140, 100, 'Player House'),
-        solid: { x: D.residential.x + 120 - 70, y: D.residential.y - 160, w: 140, h: 100 } },
+      { id: 'home', name: 'Player House', dx: D.residential.x + 120, dy: D.residential.y - 95, action: 'house', district: 'Residential Quarter',
+        draw: (g) => drawPlayerHouse(g, D.residential.x + 120, D.residential.y - 95, this.t),
+        solid: { x: D.residential.x + 120 - 70, y: D.residential.y - 195, w: 140, h: 100 } },
       { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: D.residential.x - 140, dy: D.residential.y - 75, action: null, district: 'Residential Quarter',
         draw: (g) => drawMarker(g, D.residential.x - 140, D.residential.y - 130, 70, 55, 'Hearthwood Cottage'),
         solid: { x: D.residential.x - 140 - 35, y: D.residential.y - 130, w: 70, h: 55 } },
@@ -261,13 +261,13 @@ export class TownScene {
         draw: (g) => drawSignpost(g, D.southRoad.x + 40, D.southRoad.y, 'South Road - Future Expansion') },
 
       // ---- Shield & Stein: building + social courtyard ----
-      { id: 'guild', name: 'Shield & Stein (reserved)', dx: D.guild.x, dy: D.guild.y + 48, action: 'guild', district: 'Shield & Stein',
-        draw: (g) => drawMarker(g, D.guild.x, D.guild.y - 32, 122, 78, 'Shield & Stein'),
+      { id: 'guild', name: 'Shield & Stein', dx: D.guild.x, dy: D.guild.y + 48, action: 'guild', district: 'Shield & Stein',
+        draw: (g) => drawTavern(g, D.guild.x, D.guild.y + 46, this.t),
         solid: { x: D.guild.x - 61, y: D.guild.y - 32, w: 122, h: 78 } },
 
       // ---- Runewood Archive: landscaped property ----
-      { id: 'library', name: 'Runewood Archive (reserved)', dx: D.archive.x, dy: D.archive.y + 42, action: 'library', district: 'Runewood Archive',
-        draw: (g) => drawMarker(g, D.archive.x, D.archive.y - 25, 90, 70, 'Runewood Archive'),
+      { id: 'library', name: 'Runewood Archive', dx: D.archive.x, dy: D.archive.y + 42, action: 'library', district: 'Runewood Archive',
+        draw: (g) => drawLibrary(g, D.archive.x, D.archive.y + 45, this.t),
         solid: { x: D.archive.x - 45, y: D.archive.y - 25, w: 90, h: 70 } },
 
       // ---- Moonpaw Sanctuary: large green fenced property ----
@@ -440,7 +440,7 @@ export class TownScene {
     this.marketGround = { cx: D.market.x, cy: D.market.y, rx: 210, ry: 160 };
     // Commercial + Guild courtyards: small stone aprons in front of the shops
     this.courtyards = [
-      { cx: D.commercial.x, cy: D.commercial.y + 62, rx: 120, ry: 42 },
+      { cx: D.commercial.x, cy: D.commercial.y + 62, rx: 160, ry: 42 },
       { cx: D.guild.x, cy: D.guild.y + 72, rx: 90, ry: 38 },
     ];
 
