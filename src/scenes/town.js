@@ -266,7 +266,7 @@ export class TownScene {
         solid: { x: D.guild.x - 61, y: D.guild.y - 6, w: 122, h: 78 } },
 
       // ---- Runewood Archive: landscaped property ----
-      { id: 'library', name: 'Runewood Archive', dx: D.archive.x, dy: D.archive.y + 42, action: 'library', district: 'Runewood Archive',
+      { id: 'library', name: 'Runewood Archive', dx: D.archive.x, dy: D.archive.y + 45, action: 'library', district: 'Runewood Archive',
         draw: (g) => drawLibrary(g, D.archive.x, D.archive.y + 45, this.t),
         solid: { x: D.archive.x - 45, y: D.archive.y - 25, w: 90, h: 70 } },
 
@@ -438,10 +438,11 @@ export class TownScene {
 
     // Market Square ground: an organic open square south of the plaza
     this.marketGround = { cx: D.market.x, cy: D.market.y, rx: 210, ry: 160 };
-    // Commercial + Guild courtyards: small stone aprons in front of the shops
+    // Commercial + Guild + Archive courtyards: small stone aprons in front of the shops
     this.courtyards = [
       { cx: D.commercial.x, cy: D.commercial.y + 62, rx: 160, ry: 42 },
       { cx: D.guild.x, cy: D.guild.y + 72, rx: 90, ry: 38 },
+      { cx: D.archive.x, cy: D.archive.y + 45, rx: 85, ry: 35 },
     ];
 
     // Vegetation defines the space: dense perimeter forest (town carved out
