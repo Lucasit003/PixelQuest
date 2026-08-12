@@ -22,8 +22,10 @@ import { drawTree, drawPineTree, drawBush, drawRock, drawTorch, drawIcon, drawDu
 import { Particles } from '../gfx/particles.js';
 import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
 
-const MAP_W = 1280;
-const MAP_H = 800;
+// Master Town Layout v1: a larger, organic hub built outward from Crystal
+// Plaza. See _buildTown() for the full district/road geography.
+const MAP_W = 2400;
+const MAP_H = 4200;
 
 // Potion Shop artwork (real transparent PNG). Loaded once; drawn directly with
 // nearest-neighbor rendering. Authored to the game's native footprint so no
@@ -76,6 +78,14 @@ for (const n of ['grass_01', 'grass_02', 'grass_03', 'grass_04']) {
   GRASS_TILES.push(st);
 }
 const GRASS_TILE = 96; // world units per ground tile (keeps blade density near road-tile scale)
+// Taller/wilder meadow tile for outskirts (Sanctuary, Training edges, Gate
+// approach, map perimeter) per the layout's terrain rule: short town grass in
+// the developed core, meadow only where the wild starts.
+const MEADOW_TILE_IMG = new Image();
+const MEADOW_TILE_STATE = { img: MEADOW_TILE_IMG, ready: false };
+MEADOW_TILE_IMG.onload = () => { MEADOW_TILE_STATE.ready = true; };
+MEADOW_TILE_IMG.src = 'assets/ground/meadow_01.png';
+const MEADOW_TILE = 56;
 const ROAD_IMGS = {};
 for (const n of ['straight_v', 'straight_h', 'cross', 't_up', 't_down', 't_left', 't_right',
   'corner_tl', 'corner_tr', 'corner_bl', 'end_s', 'end_s2', 'end_w', 'plaza_wide', 'damaged']) {
@@ -128,8 +138,6 @@ export class TownScene {
     this.dialogue = null;
     this.dialogueReveal = 0;
 
-    // player starts just south of the plaza
-    this.px = 630; this.py = 460;
     this.facing = 1; this.moving = false; this.walkT = 0;
     this.camX = 0; this.camY = 0;
 
@@ -138,97 +146,227 @@ export class TownScene {
     this.introHintT = 4.5; // brief control hint, then it fades for good
 
     this._buildTown();
+    // player starts just south of the plaza (the world origin)
+    this.px = this.plazaCenter.x; this.py = this.plazaCenter.y + 60;
     this.near = null;
   }
 
   // ---- town definition ----------------------------------------------------
 
   _buildTown() {
-    // Compact grid layout: all streets sit on the ROAD_TILE grid, every building
-    // fronts a street with its door on the road, and leftover pockets are filled
-    // with forest so the town reads dense like the concept art.
-    // Concept-map layout: Crystal Plaza at the centre with four roads meeting it;
-    // Guild north, Library (temple spot) NE, Market east, river + Riverside east
-    // edge, Commercial Street SW (Potion + Blacksmith), Residential west with the
-    // Player House, Training Grounds NW, and the Dungeon Gate as the south exit.
+    // ======================================================================
+    // MASTER TOWN LAYOUT v1 — Phase 1: geometry/roads only.
+    //
+    // Crystal Plaza is the conceptual world origin; every district below is
+    // placed as an offset from it (PZ), not from raw screen coordinates, so
+    // the whole layout can be nudged as one unit later. Real buildings are
+    // NOT placed yet (per the brief, this includes ones with approved art) —
+    // every future structure is a temporary dashed-footprint marker sized
+    // from its real asset as a scale reference where one exists. Only the
+    // Crystal Fountain (the plaza's landmark) and the small Quest Board prop
+    // are real. Old decorative dressing (NPCs, cottages, pond, river, prop
+    // clusters, lamps/braziers) is intentionally dropped this pass — it
+    // belonged to the old geometry and districts aren't being decorated yet.
+    const PZ = { x: 1400, y: 3000 };
+    const OFF = (dx, dy) => ({ x: PZ.x + dx, y: PZ.y + dy });
+
+    // Anchors follow the user's PIXEL QUEST TOWN reference image: Runebound
+    // Gate due north with the Adventure Road running straight-ish down to the
+    // plaza, Wayfarer's Watch flanking that road partway up, Guild due west,
+    // Sanctuary outer northwest, Archive northeast with a loop down to the
+    // Commercial District, Market southeast, Residential southwest.
+    const D = {
+      plaza: PZ,
+      commercial: OFF(580, -75),   // east: Potion + Forge courtyard
+      market: OFF(530, 600),       // southeast: open square, 5 stalls
+      residential: OFF(-670, 450), // southwest: Player House + Cottage
+      southRoad: OFF(0, 800),      // south: reserved expansion stub
+      guild: OFF(-700, -260),      // west: Shield & Stein
+      archive: OFF(560, -1300),    // northeast: Runewood Archive
+      sanctuary: OFF(-820, -1350), // outer northwest: Moonpaw Sanctuary
+      training: OFF(-1150, -700),  // west of Guild: Valorhall (large field)
+      watch: OFF(0, -2000),        // north, on the Adventure Road: checkpoint
+      gate: OFF(0, -2850),         // far north: Runebound Gate
+    };
+
+    this.plazaCenter = PZ;
     this.locations = [
-      { id: 'guild', name: "Adventurer's Guild & Tavern", dx: 630, dy: 194, action: 'guild', district: "Adventurer's Guild",
-        draw: (g) => drawTavern(g, 630, 186, this.t), solid: { x: 569, y: 108, w: 122, h: 78 } },
-      { id: 'library', name: 'Library & Archive', dx: 854, dy: 222, action: 'library', district: 'Library District',
-        draw: (g) => drawLibrary(g, 854, 216, this.t), solid: { x: 812, y: 164, w: 84, h: 52 } },
-      { id: 'training', name: 'Training Grounds', dx: 350, dy: 230, action: 'training', district: 'Training Grounds', zone: true,
-        draw: (g) => drawTrainingGround(g, 350, 150, this.t), solid: { x: 344, y: 132, w: 12, h: 12 } },
-      { id: 'potion', name: 'Potion Shop', dx: 440, dy: 510, action: 'potion', district: 'Commercial Street',
-        sortY: 506, draw: (g) => drawPotionShop(g, 440, 506, this.t), solid: null },
-      { id: 'blacksmith', name: 'Weapon Shop & Blacksmith', dx: 560, dy: 510, action: 'weapon', district: 'Commercial Street',
-        draw: (g) => drawBlacksmith(g, 560, 506, this.t), solid: { x: 504, y: 438, w: 112, h: 68 } },
-      { id: 'market', name: 'Market Square', dx: 854, dy: 462, action: 'market', district: 'Market Square', zone: true,
-        draw: (g) => drawMarket(g, 854, 486, this.t), solid: { x: 848, y: 490, w: 12, h: 10 } },
-      { id: 'pets', name: 'Pet Keeper', dx: 952, dy: 392, action: 'pets', district: 'Pet Sanctuary',
-        draw: (g) => drawPetKeeper(g, 952, 388, this.t), solid: { x: 919, y: 348, w: 66, h: 40 } },
-      { id: 'quest', name: 'Quest Board', dx: 676, dy: 604, action: 'quest', district: 'Dungeon Approach',
-        draw: (g) => drawQuestBoard(g, 676, 600, this.t, !!this.hero.activeQuest()), solid: { x: 664, y: 584, w: 24, h: 16 } },
-      { id: 'dungeon', name: 'Dungeon Gate', dx: 630, dy: 734, action: 'dungeon', district: 'Dungeon Approach',
-        draw: (g) => drawDungeonGate(g, 630, 720, this.t), solid: { x: 586, y: 628, w: 88, h: 92 } },
-      { id: 'plaza', name: 'Crystal Plaza', dx: 630, dy: 408, action: 'rest', district: 'Crystal Plaza',
-        draw: (g) => drawFountainSprite(g, 630, 390, this.t), solid: { x: 604, y: 374, w: 52, h: 16 } },
-      { id: 'home', name: 'Your House', dx: 296, dy: 578, action: 'house', district: 'Residential Quarter',
-        draw: (g) => drawPlayerHouse(g, 296, 574, this.t), solid: { x: 259, y: 508, w: 75, h: 66 } },
-      // decorative NPC homes (Residential Quarter, west)
-      { id: 'home1', name: null, dx: 260, dy: 390, action: null,
-        draw: (g) => drawCottage(g, 260, 386, '#7a6a58', '#5c4e40', '#8a4a3c', '#6a3329', this.t), solid: { x: 232, y: 350, w: 56, h: 36 } },
-      { id: 'home2', name: null, dx: 170, dy: 394, action: null,
-        draw: (g) => drawCottage(g, 170, 390, '#6a7a58', '#4e5c40', '#8a6a3c', '#6a5029', this.t), solid: { x: 142, y: 354, w: 56, h: 36 } },
-      { id: 'home3', name: null, dx: 250, dy: 524, action: null,
-        draw: (g) => drawCottage(g, 250, 520, '#82725c', '#5e5040', '#5a6a8a', '#3f4d66', this.t), solid: { x: 222, y: 488, w: 56, h: 32 } },
-      // farm/garden plot, NE of the Library — decorative, fenced off
-      { id: 'farm', name: null, dx: 1002, dy: 172, action: null,
-        draw: (g) => drawFarmPlot(g, 1002, 172, 118, 76), solid: null },
+      { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
+        draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
+
+      // ---- Commercial District (east): Potion Shop + Ironhearth Forge,
+      // reserved as two separate footprints with a shared courtyard gap. ----
+      { id: 'potion', name: 'Potion Shop (reserved)', dx: D.commercial.x - 70, dy: D.commercial.y + 45, action: 'potion', district: 'Commercial District',
+        draw: (g) => drawMarker(g, D.commercial.x - 70, D.commercial.y - 40, 113, 80, 'Potion Shop'),
+        solid: { x: D.commercial.x - 70 - 56, y: D.commercial.y - 40, w: 113, h: 80 } },
+      { id: 'weapon', name: 'Ironhearth Forge (reserved)', dx: D.commercial.x + 80, dy: D.commercial.y + 35, action: 'weapon', district: 'Commercial District',
+        draw: (g) => drawMarker(g, D.commercial.x + 80, D.commercial.y - 33, 112, 68, 'Ironhearth Forge'),
+        solid: { x: D.commercial.x + 80 - 56, y: D.commercial.y - 33, w: 112, h: 68 } },
+      { id: 'commExpand', name: null, dx: null, dy: null, action: null, sortY: D.commercial.y + 60,
+        draw: (g) => drawSignpost(g, D.commercial.x + 260, D.commercial.y + 60, 'Future: Armor Shop') },
+
+      // ---- Market Square (southeast): open square, 5 stalls around a
+      // central gathering space, traveling merchant set slightly apart. ----
+      { id: 'market', name: 'Market Square', dx: D.market.x, dy: D.market.y + 70, action: 'market', district: 'Market Square', zone: true,
+        draw: () => {}, solid: null },
+      { id: 'stallProduce', name: null, dx: null, dy: null, action: null, sortY: D.market.y - 34,
+        draw: (g) => drawMarker(g, D.market.x - 100, D.market.y - 60, 34, 26, 'Produce') },
+      { id: 'stallBakery', name: null, dx: null, dy: null, action: null, sortY: D.market.y - 69,
+        draw: (g) => drawMarker(g, D.market.x + 20, D.market.y - 95, 34, 26, 'Bakery') },
+      { id: 'stallCloth', name: null, dx: null, dy: null, action: null, sortY: D.market.y - 14,
+        draw: (g) => drawMarker(g, D.market.x + 120, D.market.y - 40, 34, 26, 'Cloth & Tailor') },
+      { id: 'stallGoods', name: null, dx: null, dy: null, action: null, sortY: D.market.y + 116,
+        draw: (g) => drawMarker(g, D.market.x + 90, D.market.y + 90, 34, 26, 'General Goods') },
+      { id: 'stallMerchant', name: null, dx: null, dy: null, action: null, sortY: D.market.y + 84,
+        draw: (g) => drawMarker(g, D.market.x - 160, D.market.y + 60, 30, 24, 'Traveling Merchant', '#7a9ca0') },
+
+      // ---- Residential Quarter (southwest): Player House gets a larger
+      // reserved yard than a normal residential lot; room left for future
+      // homes, kept as open unmarked clearing rather than filled now. ----
+      { id: 'home', name: 'Player House (reserved)', dx: D.residential.x - 60, dy: D.residential.y + 60, action: 'house', district: 'Residential Quarter',
+        draw: (g) => drawMarker(g, D.residential.x - 60, D.residential.y - 40, 140, 100, 'Player House'),
+        solid: { x: D.residential.x - 60 - 70, y: D.residential.y - 40, w: 140, h: 100 } },
+      { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: D.residential.x + 110, dy: D.residential.y + 30, action: null, district: 'Residential Quarter',
+        draw: (g) => drawMarker(g, D.residential.x + 110, D.residential.y - 25, 70, 55, 'Hearthwood Cottage'),
+        solid: { x: D.residential.x + 110 - 35, y: D.residential.y - 25, w: 70, h: 55 } },
+      { id: 'homesExpand', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 160,
+        draw: (g) => drawSignpost(g, D.residential.x - 220, D.residential.y + 160, 'Future Homes') },
+
+      // ---- South Road: reserved connection, no district here yet. ----
+      { id: 'southExpand', name: null, dx: null, dy: null, action: null, sortY: D.southRoad.y,
+        draw: (g) => drawSignpost(g, D.southRoad.x, D.southRoad.y, 'Future Expansion') },
+
+      // ---- Shield & Stein Guild (northwest): social/adventurer district,
+      // leads the primary route toward Wayfarer's Watch. ----
+      { id: 'guild', name: 'Shield & Stein (reserved)', dx: D.guild.x, dy: D.guild.y + 45, action: 'guild', district: 'Shield & Stein',
+        draw: (g) => drawMarker(g, D.guild.x, D.guild.y - 34, 122, 78, 'Shield & Stein'),
+        solid: { x: D.guild.x - 61, y: D.guild.y - 34, w: 122, h: 78 } },
+
+      // ---- Runewood Archive (northeast): quiet scholarly district off a
+      // secondary path. ----
+      { id: 'library', name: 'Runewood Archive (reserved)', dx: D.archive.x, dy: D.archive.y + 40, action: 'library', district: 'Runewood Archive',
+        draw: (g) => drawMarker(g, D.archive.x, D.archive.y - 25, 90, 70, 'Runewood Archive'),
+        solid: { x: D.archive.x - 45, y: D.archive.y - 25, w: 90, h: 70 } },
+
+      // ---- Moonpaw Sanctuary (outer west): quiet green buffer district. ----
+      { id: 'pets', name: 'Moonpaw Sanctuary (reserved)', dx: D.sanctuary.x, dy: D.sanctuary.y + 55, action: 'pets', district: 'Moonpaw Sanctuary',
+        draw: (g) => drawMarker(g, D.sanctuary.x, D.sanctuary.y - 35, 130, 90, 'Moonpaw Sanctuary', '#7a9c68'),
+        solid: { x: D.sanctuary.x - 65, y: D.sanctuary.y - 35, w: 130, h: 90 } },
+
+      // ---- Valorhall Training Grounds (west/northwest of Guild): large
+      // reserved field, not squeezed between buildings. ----
+      { id: 'training', name: 'Valorhall Training Grounds (reserved)', dx: D.training.x, dy: D.training.y + 90, action: 'training', district: 'Valorhall Training Grounds', zone: true,
+        draw: (g) => drawMarker(g, D.training.x, D.training.y - 90, 220, 180, 'Valorhall Training Grounds'),
+        solid: { x: D.training.x - 110, y: D.training.y - 90, w: 220, h: 24 } },
+
+      // ---- Wayfarer's Watch: a compound, not a building — two flanking
+      // pillars with the road passing clear through the gap between them. ----
+      { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y + 25,
+        draw: (g) => {
+          drawMarker(g, D.watch.x - 55, D.watch.y - 25, 34, 50, '');
+          drawMarker(g, D.watch.x + 55, D.watch.y - 25, 34, 50, '');
+          drawSignpost(g, D.watch.x - 100, D.watch.y + 20, "Wayfarer's Watch");
+        },
+        solid: null },
+      { id: 'watchPillarW', name: null, dx: null, dy: null, action: null, draw: () => {},
+        solid: { x: D.watch.x - 55 - 17, y: D.watch.y - 25, w: 34, h: 50 } },
+      { id: 'watchPillarE', name: null, dx: null, dy: null, action: null, draw: () => {},
+        solid: { x: D.watch.x + 55 - 17, y: D.watch.y - 25, w: 34, h: 50 } },
+
+      // ---- Runebound Gate: far northern landmark; keeps the working
+      // dungeon-transition interaction, compound layout like the Watch. ----
+      { id: 'dungeon', name: 'Runebound Gate', dx: D.gate.x, dy: D.gate.y + 45, action: 'dungeon', district: 'Runebound Gate',
+        draw: (g) => {
+          drawMarker(g, D.gate.x - 60, D.gate.y - 30, 36, 55, '');
+          drawMarker(g, D.gate.x + 60, D.gate.y - 30, 36, 55, '');
+          drawSignpost(g, D.gate.x - 110, D.gate.y + 25, 'Runebound Gate');
+        },
+        solid: null },
+      { id: 'gatePillarW', name: null, dx: null, dy: null, action: null, draw: () => {},
+        solid: { x: D.gate.x - 60 - 18, y: D.gate.y - 30, w: 36, h: 55 } },
+      { id: 'gatePillarE', name: null, dx: null, dy: null, action: null, draw: () => {},
+        solid: { x: D.gate.x + 60 - 18, y: D.gate.y - 30, w: 36, h: 55 } },
+
+      // ---- small functional prop: kept real (tiny, not a "major structure") ----
+      { id: 'quest', name: 'Quest Board', dx: D.watch.x + 90, dy: D.watch.y + 60, action: 'quest', district: "Wayfarer's Watch",
+        draw: (g) => drawQuestBoard(g, D.watch.x + 90, D.watch.y + 56, this.t, !!this.hero.activeQuest()),
+        solid: { x: D.watch.x + 78, y: D.watch.y + 40, w: 24, h: 16 } },
     ];
 
-    // collision solids: footprints + pond + stream banks
+    this.districts = D; // exposed for the wild-terrain check and camera/debug use
+
     this.solids = this.locations.filter((l) => l.solid).map((l) => l.solid);
-    // Potion Shop: side wall blocks with the centre doorway left open
-    this.solids.push({ x: 383, y: 452, w: 47, h: 50 }); // left wall
-    this.solids.push({ x: 450, y: 452, w: 47, h: 50 }); // right wall
-    this.pond = { cx: 1106, cy: 660, rx: 36, ry: 20 };
-    this.solids.push({ x: this.pond.cx - this.pond.rx, y: this.pond.cy - this.pond.ry, w: this.pond.rx * 2, h: this.pond.ry * 2 });
-    // river runs down the east edge; blocked except at the bridge on East Street
-    this.stream = { x: 1092, w: 28, y0: 60, y1: 700, bridgeY: 392, bridgeH: 36 };
-    this.solids.push({ x: this.stream.x, y: this.stream.y0, w: this.stream.w, h: this.stream.bridgeY - this.stream.y0 });
-    this.solids.push({ x: this.stream.x, y: this.stream.bridgeY + this.stream.bridgeH, w: this.stream.w, h: this.stream.y1 - (this.stream.bridgeY + this.stream.bridgeH) });
 
-    // district regions for the transient entry banner
+    // district regions for the transient entry banner (generous boxes around
+    // each marker/reserved footprint, matching the new positions)
     this.regions = [
-      { name: 'Crystal Plaza', x: 540, y: 320, w: 180, h: 170 },
-      { name: "Adventurer's Guild", x: 540, y: 60, w: 190, h: 180 },
-      { name: 'Library District', x: 770, y: 120, w: 180, h: 160 },
-      { name: 'Training Grounds', x: 260, y: 90, w: 180, h: 170 },
-      { name: 'Residential Quarter', x: 140, y: 330, w: 300, h: 290 },
-      { name: 'Commercial Street', x: 380, y: 430, w: 260, h: 110 },
-      { name: 'Market Square', x: 740, y: 420, w: 220, h: 140 },
-      { name: 'Pet Sanctuary', x: 900, y: 300, w: 200, h: 110 },
-      { name: 'Riverside Park', x: 1050, y: 430, w: 230, h: 240 },
-      { name: 'Dungeon Approach', x: 540, y: 540, w: 200, h: 250 },
-      { name: 'The Farmstead', x: 960, y: 120, w: 150, h: 110 },
+      { name: 'Crystal Plaza', x: PZ.x - 140, y: PZ.y - 140, w: 280, h: 260 },
+      { name: 'Commercial District', x: D.commercial.x - 160, y: D.commercial.y - 130, w: 420, h: 220 },
+      { name: 'Market Square', x: D.market.x - 220, y: D.market.y - 170, w: 440, h: 320 },
+      { name: 'Residential Quarter', x: D.residential.x - 300, y: D.residential.y - 130, w: 500, h: 320 },
+      { name: 'Shield & Stein', x: D.guild.x - 140, y: D.guild.y - 130, w: 280, h: 240 },
+      { name: 'Runewood Archive', x: D.archive.x - 140, y: D.archive.y - 130, w: 280, h: 240 },
+      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 160, y: D.sanctuary.y - 150, w: 320, h: 300 },
+      { name: 'Valorhall Training Grounds', x: D.training.x - 200, y: D.training.y - 180, w: 400, h: 340 },
+      { name: "Wayfarer's Watch", x: D.watch.x - 200, y: D.watch.y - 160, w: 400, h: 280 },
+      { name: 'Runebound Gate', x: D.gate.x - 200, y: D.gate.y - 160, w: 400, h: 300 },
+      { name: 'South Road', x: D.southRoad.x - 150, y: D.southRoad.y - 140, w: 300, h: 280 },
     ];
 
-    // cobblestone road network {x,y,w,h}; centrelines sit on the tile grid so
-    // the rasteriser produces clean rows/columns with automatic junctions.
+    // ------------------------------------------------------------ roads ---
+    // Three road families per the brief: MAIN cobblestone (plaza <-> the
+    // close commercial/market/guild/residential core), NARROW paths
+    // (archive, sanctuary — quieter secondary connections), and ADVENTURE
+    // ROAD (guild -> watch -> gate). All three currently render with the
+    // same authored cobblestone tileset (only the Normal Town Road pieces
+    // are sliced so far) — the adventure stretch gets a dark wash overlay
+    // in _drawRoadTiles so it still reads as a distinct, heavier route.
+    // Gentle waypoint bends replace long straight lines throughout.
+    const mainWidth = 20, narrowWidth = 14, advWidth = 18;
+
+    // Roads meet the plaza at its rim (not the exact center), so no road tiles
+    // run underneath the fountain and the walking ring stays clear.
     this.roads = [
-      { x: 224, y: 398, w: 406, h: 16 },     // West Street (row 14): residential -> plaza
-      { x: 630, y: 398, w: 566, h: 16 },     // East Street (row 14): plaza -> market spur -> bridge -> mines exit
-      { x: 622, y: 200, w: 16, h: 206 },     // North Avenue (col 22): guild -> plaza
-      { x: 622, y: 406, w: 16, h: 210 },     // South Avenue (col 22): plaza -> dungeon gate
-      { x: 342, y: 224, w: 16, h: 350 },     // Residential lane (col 12): training -> W street -> player house
-      { x: 350, y: 512, w: 282, h: 16 },     // Commercial Street (row 18): lane -> shops -> S avenue
-      { x: 846, y: 224, w: 16, h: 190 },     // Library spur (col 30 north)
-      { x: 846, y: 406, w: 16, h: 84 },      // Market spur (col 30 south)
+      // Plaza <-> Commercial (east)
+      ...roadPath([[PZ.x + 60, PZ.y - 10], [PZ.x + 220, PZ.y - 30], [D.commercial.x, D.commercial.y + 45]], mainWidth),
+      // Plaza <-> Market (southeast)
+      ...roadPath([[PZ.x + 40, PZ.y + 45], [PZ.x + 260, PZ.y + 260], [D.market.x, D.market.y + 70]], mainWidth),
+      // Plaza <-> Residential (southwest)
+      ...roadPath([[PZ.x - 40, PZ.y + 45], [PZ.x - 340, PZ.y + 220], [D.residential.x, D.residential.y + 60]], mainWidth),
+      // Plaza <-> South Road stub
+      ...roadPath([[PZ.x, PZ.y + 50], [D.southRoad.x, D.southRoad.y]], mainWidth),
+      // Plaza <-> Guild (west) — main cobblestone
+      ...roadPath([[PZ.x - 60, PZ.y - 10], [PZ.x - 300, PZ.y - 120], [D.guild.x, D.guild.y + 55]], mainWidth),
+
+      // ---- Adventure Road: Plaza -> (through Wayfarer's Watch) -> Gate,
+      // straight-ish north with gentle bends, per the reference image. ----
+      ...roadPath([[PZ.x, PZ.y - 50], [PZ.x + 50, PZ.y - 600], [PZ.x - 40, PZ.y - 1050], [D.watch.x, D.watch.y + 40]], advWidth),
+      ...roadPath([[D.watch.x, D.watch.y - 25], [D.watch.x + 40, D.watch.y - 320], [D.gate.x, D.gate.y + 45]], advWidth),
+      // Guild -> Adventure Road link (the "going on an adventure" route)
+      ...roadPath([[D.guild.x, D.guild.y - 45], [D.guild.x + 240, D.guild.y - 420], [PZ.x, PZ.y - 800]], advWidth),
+
+      // Plaza <-> Archive (northeast) — narrow secondary path
+      ...roadPath([[PZ.x + 45, PZ.y - 40], [PZ.x + 300, PZ.y - 380], [PZ.x + 480, PZ.y - 780], [D.archive.x, D.archive.y + 40]], narrowWidth),
+      // Archive <-> Commercial — narrow east-side loop, per the reference
+      ...roadPath([[D.archive.x, D.archive.y + 40], [D.archive.x + 60, D.commercial.y - 340], [D.commercial.x + 60, D.commercial.y - 40]], narrowWidth),
+      // Guild <-> Sanctuary (northwest) — narrow, quiet
+      ...roadPath([[D.guild.x, D.guild.y - 45], [D.guild.x - 160, D.guild.y - 480], [D.sanctuary.x, D.sanctuary.y + 55]], narrowWidth),
+      // Sanctuary <-> Training — narrow shortcut between the outer-west districts
+      ...roadPath([[D.sanctuary.x, D.sanctuary.y + 55], [D.sanctuary.x - 150, D.sanctuary.y + 330], [D.training.x, D.training.y + 90]], narrowWidth),
+      // Training <-> Guild — narrow, joining south of the Guild footprint
+      // (Player House -> Training -> Guild -> Adventure progression route)
+      ...roadPath([[D.training.x, D.training.y + 90], [D.training.x + 260, D.guild.y + 65], [D.guild.x - 110, D.guild.y + 65]], narrowWidth),
+      // Residential <-> Training — narrow, completes the progression route
+      ...roadPath([[D.residential.x, D.residential.y + 60], [D.residential.x - 120, D.residential.y - 300], [D.training.x, D.training.y + 90]], narrowWidth),
     ];
 
-    // Rasterise the road rects onto the tile grid: walk each rect's long axis and
-    // mark cells along its centreline, so the network becomes 1-tile-wide streets
-    // that autotile into corners and junctions.
+    // North of this line the road tiles get the Adventure Road wash (darker,
+    // heavier) — roughly where the town core ends and the wild route begins.
+    this.adventureRoadY = PZ.y - 850;
+
+    // Rasterise the road rects onto the tile grid: walk each rect's long axis
+    // and mark cells along its centreline, so the network becomes 1-tile-wide
+    // streets that autotile into corners and junctions.
     this.roadCells = new Set();
     for (const r of this.roads) {
       const horizontal = r.w >= r.h;
@@ -243,92 +381,81 @@ export class TownScene {
       }
     }
 
-    // decorative tree clusters framing districts (dense, grouped)
+    // ----------------------------------------------------------- terrain --
+    // Wild zones (taller meadow grass) around Sanctuary, Training's outer
+    // edge, the Gate approach, and a ring at the map perimeter. Everything
+    // else in the developed core stays short town grass.
+    this.wildZones = [
+      { x: D.sanctuary.x, y: D.sanctuary.y, r: 260 },
+      { x: D.training.x - 100, y: D.training.y, r: 220 },
+      { x: D.watch.x, y: D.watch.y, r: 260 },
+      { x: D.gate.x, y: D.gate.y, r: 340 },
+    ];
+
+    // decorative tree clusters: dense at the map edges and around the wild
+    // districts (vegetation buffers per the brief), lighter framing near the
+    // town core, and clearings left open over every district footprint/road.
     this.trees = [];
     const cluster = (cx, cy, n, spread, kind) => {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + hash(cx + i) * 2;
-        const r = spread * (0.4 + hash(cx * i + cy) * 0.6);
-        this.trees.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.7, kind: (i % 3 === 0) ? 'pine' : kind });
+        const r = spread * (0.5 + hash(cx * i + cy) * 0.6);
+        const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.7;
+        if (this._nearAnyDistrict(x, y, 130) || this._nearAnyRoad(x, y, 26)) continue;
+        this.trees.push({ x, y, kind: (i % 3 === 0) ? 'pine' : kind });
       }
     };
-    // fill every empty pocket so the town reads dense, not spread out
-    cluster(150, 150, 7, 70, 'pine'); cluster(120, 260, 5, 55, 'tree');   // NW forest by training
-    cluster(480, 140, 5, 55, 'tree'); cluster(500, 250, 4, 40, 'pine');   // between training & guild
-    cluster(760, 90, 5, 50, 'pine'); cluster(960, 130, 6, 60, 'pine');    // N/NE forest
-    cluster(1000, 230, 4, 40, 'tree'); cluster(1180, 160, 5, 55, 'pine'); // by library / river top
-    cluster(90, 340, 5, 55, 'tree'); cluster(90, 470, 4, 45, 'pine');     // west edge
-    cluster(150, 620, 6, 60, 'pine'); cluster(300, 680, 5, 55, 'tree');   // SW below residential
-    cluster(430, 640, 6, 60, 'pine'); cluster(500, 590, 3, 30, 'tree');   // S of commercial
-    cluster(500, 330, 3, 30, 'tree'); cluster(760, 330, 3, 30, 'tree');   // plaza flanks
-    cluster(760, 250, 3, 28, 'tree'); cluster(720, 480, 3, 26, 'tree');
-    cluster(740, 660, 5, 55, 'tree'); cluster(880, 620, 6, 60, 'pine');   // SE forest by gate
-    cluster(980, 680, 5, 50, 'tree'); cluster(1010, 540, 4, 45, 'tree');
-    cluster(1180, 260, 4, 40, 'pine'); cluster(1220, 600, 5, 50, 'pine'); // east bank
-    // edge forest ringing the map
-    for (let x = 30; x < MAP_W; x += 46) { this.trees.push({ x, y: 40 + hash(x) * 30, kind: 'pine' }); this.trees.push({ x: x + 20, y: MAP_H - 30 - hash(x) * 24, kind: 'pine' }); }
-    for (let y = 90; y < MAP_H - 40; y += 48) { this.trees.push({ x: 24 + hash(y) * 20, y, kind: 'pine' }); this.trees.push({ x: MAP_W - 26 - hash(y) * 18, y, kind: 'pine' }); }
+    // vegetation buffers around the wild/outer districts
+    cluster(D.sanctuary.x, D.sanctuary.y, 14, 240, 'tree');
+    cluster(D.training.x, D.training.y, 12, 220, 'pine');
+    cluster(D.watch.x, D.watch.y, 10, 230, 'pine');
+    cluster(D.gate.x, D.gate.y, 16, 300, 'pine');
+    // lighter clusters framing the town-core connections
+    cluster(PZ.x + 350, PZ.y - 150, 6, 90, 'tree');
+    cluster(PZ.x - 550, PZ.y - 40, 6, 90, 'tree');
+    cluster(D.commercial.x + 200, D.commercial.y + 120, 5, 80, 'tree');
+    cluster(D.market.x + 260, D.market.y + 40, 6, 90, 'tree');
+    cluster(D.residential.x - 60, D.residential.y + 240, 6, 90, 'pine');
+    cluster(D.archive.x + 150, D.archive.y - 60, 5, 80, 'pine');
+    cluster((D.guild.x + D.watch.x) / 2, (D.guild.y + D.watch.y) / 2, 6, 90, 'pine');
+    // edge forest ringing the whole map
+    for (let x = 30; x < MAP_W; x += 60) {
+      const yN = 40 + hash(x) * 30, yS = MAP_H - 30 - hash(x) * 24;
+      if (!this._nearAnyDistrict(x, yN, 40)) this.trees.push({ x, y: yN, kind: 'pine' });
+      if (!this._nearAnyDistrict(x, yS, 40)) this.trees.push({ x: x + 20, y: yS, kind: 'pine' });
+    }
+    for (let y = 90; y < MAP_H - 40; y += 64) {
+      const xW = 24 + hash(y) * 20, xE = MAP_W - 26 - hash(y) * 18;
+      if (!this._nearAnyDistrict(xW, y, 40)) this.trees.push({ x: xW, y, kind: 'pine' });
+      if (!this._nearAnyDistrict(xE, y, 40)) this.trees.push({ x: xE, y, kind: 'pine' });
+    }
 
-    // grouped ground props (barrels/crates/benches/flowers…) rendered flat under entities
-    this.propGroups = [
-      // blacksmith and guild art already include their own barrels/crates/
-      // tables/forge dressing, so no extra propGroup clutter is added here.
-      // residential gardens + fences + mailbox (west)
-      { fn: (g) => { fenceRun(g, 222, 390, 70); flowerbed(g, 230, 386); flowerbed(g, 272, 386); mailbox(g, 296, 384); clothesline(g, 210, 520); } },
-      // home2 + home3 yards
-      { fn: (g) => { fenceRun(g, 132, 394, 66); flowerbed(g, 140, 390); flowerbed(g, 178, 390); } },
-      { fn: (g) => { fenceRun(g, 212, 524, 66); flowerbed(g, 220, 520); planter(g, 262, 518); } },
-      // library steps + planters (NE)
-      { fn: (g) => { planter(g, 812, 222); planter(g, 896, 222); bench(g, 880, 228); } },
-      // market extras (east)
-      { fn: (g) => { cart(g, 900, 480); crate(g, 780, 470); crate(g, 788, 478); } },
-      // plaza benches + flowers + rocks around the fountain rim
-      { fn: (g) => {
-        bench(g, 582, 452); bench(g, 678, 452);
-        flowerbed(g, 560, 358); flowerbed(g, 696, 358); flowerbed(g, 560, 462); flowerbed(g, 696, 462);
-        drawRock(g, 548, 400, 0.8); drawRock(g, 710, 420, 0.8);
-      } },
-      // riverside park (east bank)
-      { fn: (g) => { bench(g, 1160, 480); flowerbed(g, 1150, 500); drawBush(g, 1180, 510, 0.9); } },
-      // corrupted grounds around the Dungeon Gate: dead trees + jagged rocks,
-      // kept clear of the south-avenue road (x 622-638) so the path stays open
-      { fn: (g) => {
-        deadTree(g, 560, 660, this.t); deadTree(g, 700, 656, this.t); deadTree(g, 540, 720, this.t);
-        deadTree(g, 720, 716, this.t); deadTree(g, 580, 770, this.t); deadTree(g, 680, 772, this.t);
-        corruptedRock(g, 570, 700); corruptedRock(g, 690, 696); corruptedRock(g, 560, 750); corruptedRock(g, 700, 748);
-        flowerbed(g, 592, 640); flowerbed(g, 668, 636);
-      } },
-    ];
+    // Districts aren't decorated yet — no prop clusters, lamps, braziers,
+    // NPCs, or wandering pets this pass.
+    this.propGroups = [];
+    this.lamps = [];
+    this.braziers = [];
+    this.npcs = [];
+    this.sanctuaryPets = [];
+    this.sanctuary = { x: D.sanctuary.x - 40, y: D.sanctuary.y - 20, w: 80, h: 40 };
+  }
 
-    // lamps: plaza corners + one along each road
-    this.lamps = [
-      [585, 368], [675, 368], [585, 444], [675, 444],
-      [500, 394], [760, 394], [630, 300], [630, 500],
-      [420, 536], [570, 536], [800, 494], [300, 428], [838, 330], [200, 428],
-    ];
-    // braziers flanking the South Avenue toward the Dungeon Gate
-    this.braziers = [[600, 650], [660, 650], [600, 580], [660, 580]];
+  /** True if (x,y) sits inside (or near) any location's solid footprint. */
+  _nearAnyDistrict(x, y, pad) {
+    for (const l of this.locations) {
+      if (!l.solid) continue;
+      const s = l.solid;
+      if (x > s.x - pad && x < s.x + s.w + pad && y > s.y - pad && y < s.y + s.h + pad) return true;
+    }
+    return false;
+  }
 
-    // NPCs
-    this.npcs = [
-      { name: 'Captain Mara', sprite: 'sage', x: 700, y: 600, facing: -1 },
-      { name: 'Blacksmith', sprite: 'villager', x: 606, y: 516, facing: -1 },
-      { name: 'Pet Keeper', sprite: 'villager', x: 1000, y: 394, facing: -1 },
-      { name: 'Gate Guard', sprite: 'warrior', x: 596, y: 700, facing: 1 },
-      { name: 'Gate Guard', sprite: 'warrior', x: 664, y: 700, facing: -1 },
-      { name: 'Merchant', sprite: 'villager', x: 812, y: 470, facing: 1 },
-      { name: 'Villager', sprite: 'villager', x: 240, y: 430, facing: 1 },
-      { name: 'Adventurer', sprite: 'warrior', x: 592, y: 226, facing: 1 },
-      { name: 'Adventurer', sprite: 'mage', x: 676, y: 230, facing: -1 },
-    ];
-
-    // wandering pets inside the fenced sanctuary
-    this.sanctuaryPets = [
-      { sprite: 'fox', x: 1000, y: 350, tx: 1000, ty: 350 },
-      { sprite: 'rabbit', x: 1040, y: 360, tx: 1040, ty: 360 },
-      { sprite: 'turtle', x: 1020, y: 336, tx: 1020, ty: 336 },
-    ];
-    this.sanctuary = { x: 986, y: 322, w: 96, h: 60 };
+  /** True if (x,y) sits within `pad` of any road rect (keeps trees off roads). */
+  _nearAnyRoad(x, y, pad) {
+    for (const r of this.roads) {
+      if (x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad) return true;
+    }
+    return false;
   }
 
   exit() {}
@@ -569,22 +696,42 @@ export class TownScene {
       }
     }
 
+    // wild zones: taller meadow tiles washed over the base grass around the
+    // outer districts (Sanctuary, Training edge, Watch, Gate) and nowhere in
+    // the developed core.
+    if (MEADOW_TILE_STATE.ready) {
+      const mc0 = Math.floor(camX / MEADOW_TILE), mc1 = Math.ceil((camX + visW) / MEADOW_TILE);
+      const mr0 = Math.floor(camY / MEADOW_TILE), mr1 = Math.ceil((camY + visH) / MEADOW_TILE);
+      for (let rr = mr0; rr <= mr1; rr++) {
+        for (let cc = mc0; cc <= mc1; cc++) {
+          const x = cc * MEADOW_TILE + MEADOW_TILE / 2, y = rr * MEADOW_TILE + MEADOW_TILE / 2;
+          let inWild = false;
+          for (const z of this.wildZones) {
+            if (Math.hypot(x - z.x, y - z.y) < z.r) { inWild = true; break; }
+          }
+          // perimeter ring of wild grass all around the map edge
+          if (!inWild && (x < 140 || x > MAP_W - 140 || y < 140 || y > MAP_H - 140)) inWild = true;
+          if (!inWild) continue;
+          if (this._nearAnyRoad(x, y, 30)) continue; // keep roads clear
+          g.drawImage(MEADOW_TILE_IMG, cc * MEADOW_TILE, rr * MEADOW_TILE, MEADOW_TILE, MEADOW_TILE);
+        }
+      }
+    }
+
     // roads: autotiled cobblestone from the authored tileset
     this._drawRoadTiles(g, visW, visH);
 
     // plaza cobblestone ring (the fountain itself is a depth-sorted entity) —
-    // widened so there's real open space around the fountain, not a narrow
-    // intersection
-    plaza(g, 630, 412, 82);
+    // a compact circular decorative plaza with real walking space around the
+    // fountain, centred on the world origin.
+    plaza(g, this.plazaCenter.x, this.plazaCenter.y + 2, 92);
 
     this._drawCorruption(g);
-    this._stream(g);
-    this._pond(g);
   }
 
-  /** Dark, wilted ground ringing the Dungeon Gate, strongest at the entrance. */
+  /** Dark, wilted ground ringing the Runebound Gate, strongest at the entrance. */
   _drawCorruption(g) {
-    const gate = { x: 630, y: 720 };
+    const gate = { x: this.districts.gate.x, y: this.districts.gate.y + 30 };
     for (let i = 0; i < 46; i++) {
       const seed = i * 7.13;
       const spread = 130 + hash(seed) * 60;
@@ -616,116 +763,17 @@ export class TownScene {
         } else {
           g.drawImage(img, x, y, ROAD_TILE, ROAD_TILE);
         }
+        // Adventure Road wash: everything north of the Guild reads darker and
+        // heavier until the dedicated adventure-road tiles are sliced.
+        if (y < this.adventureRoadY) {
+          g.globalAlpha = 0.22;
+          rect(g, x, y, ROAD_TILE, ROAD_TILE, '#2c3038');
+          g.globalAlpha = 1;
+        }
       }
     }
   }
 
-  _stream(g) {
-    const s = this.stream;
-    const inBridge = (y) => y > s.bridgeY && y < s.bridgeY + s.bridgeH;
-
-    // base water: a soft cross-width gradient (darker deep-water edges, a
-    // lighter turquoise vein down the middle) plus the existing gentle wobble,
-    // so the river reads as more than a flat two-tone band.
-    for (let y = s.y0; y < s.y1; y += 1) {
-      if (inBridge(y)) continue;
-      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
-      const rowShade = y % 6 < 3 ? 0 : 1;
-      for (let cx = 0; cx < s.w; cx++) {
-        const k = Math.abs(cx - s.w / 2) / (s.w / 2); // 0 center -> 1 edges
-        const base = rowShade === 0 ? '#2f5c7a' : '#356588';
-        const mid = '#3f7fa0';
-        rect(g, s.x + wob + cx, y, 1, 1, k < 0.45 ? mid : base);
-      }
-    }
-
-    // banks: grass edge, then a thin sand/silt lip right at the waterline
-    for (let y = s.y0; y < s.y1; y += 1) {
-      if (inBridge(y)) continue;
-      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
-      if (y % 3 === 0) {
-        rect(g, s.x + wob - 3, y, 3, 1, '#4a6b3a');
-        rect(g, s.x + wob + s.w, y, 3, 1, '#4a6b3a');
-      }
-      rect(g, s.x + wob - 1, y, 1, 1, '#8a7a52');
-      rect(g, s.x + wob + s.w, y, 1, 1, '#8a7a52');
-    }
-
-    // riverbank decor: rocks + reed clusters at fixed, hash-picked spots so
-    // they read as planted detail rather than noise, redrawn cheaply each frame.
-    for (let y = s.y0 + 10; y < s.y1 - 10; y += 34) {
-      if (inBridge(y)) continue;
-      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
-      const hL = hash(y * 0.37);
-      const hR = hash(y * 0.53 + 9);
-      if (hL < 0.4) drawRock(g, s.x + wob - 6, y, 0.7);
-      else if (hL < 0.75) drawReeds(g, s.x + wob - 5, y, y, this.t);
-      if (hR < 0.35) drawRock(g, s.x + wob + s.w + 6, y, 0.6);
-      else if (hR < 0.7) drawReeds(g, s.x + wob + s.w + 5, y, y + 500, this.t);
-    }
-
-    // small in-water rocks near the banks, with a tiny foam ring where the
-    // current breaks against them (upstream = north/top edge of each rock).
-    for (let y = s.y0 + 26; y < s.y1 - 10; y += 90) {
-      if (inBridge(y)) continue;
-      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
-      const side = hash(y * 0.19) < 0.5 ? -1 : 1;
-      const rx = s.x + wob + s.w / 2 + side * (s.w / 2 - 4);
-      disc(g, rx, y, 2, '#6b6f7c');
-      disc(g, rx - 1, y - 1, 1, '#868b99');
-      const foamA = 0.35 + Math.sin(this.t * 3 + y) * 0.15;
-      g.globalAlpha = clamp01(foamA);
-      rect(g, rx - 2, y - 3, 4, 1, '#dff3ff');
-      g.globalAlpha = 1;
-    }
-
-    // flow lines: short white/cyan streaks travelling downstream, staggered
-    // so they never move as one solid block.
-    for (let i = 0; i < 8; i++) {
-      const speed = 34 + (i % 3) * 6;
-      const span = s.y1 - s.y0;
-      const yy = s.y0 + ((this.t * speed + i * (span / 8)) % span);
-      if (inBridge(yy)) continue;
-      const wob = Math.sin(yy * 0.3 + this.t * 2) * 2;
-      const lx = s.x + wob + 5 + hash(i * 3.1) * (s.w - 10);
-      const fade = 0.5 + Math.sin(this.t * 2 + i * 1.7) * 0.5;
-      g.globalAlpha = clamp01(0.5 + fade * 0.5);
-      rect(g, Math.round(lx), Math.round(yy), 1, 4, '#f2ffff');
-      g.globalAlpha = 1;
-    }
-
-    // occasional expanding ripple, same crisp scattered-dot technique as the
-    // fountain, kept small so it doesn't compete with the flow lines.
-    for (let i = 0; i < 2; i++) {
-      const period = 3.2 + i * 0.6;
-      const loop = Math.floor((this.t + i * 4.4) / period);
-      const phase = ((this.t + i * 4.4) % period) / period;
-      const yy = s.y0 + hash(i * 6.6 + loop * 2.2) * (s.y1 - s.y0);
-      if (inBridge(yy)) continue;
-      const wob = Math.sin(yy * 0.3 + this.t * 2) * 2;
-      const grow = clamp01(phase / 0.3);
-      const fade = 1 - clamp01((phase - 0.5) / 0.5);
-      if (fade <= 0.02) continue;
-      const r = lerp(1, 3.4, grow);
-      pixelRingDots(g, s.x + wob + s.w / 2, yy, r, r * 0.6, `rgba(220,245,255,${(fade * 0.5).toFixed(2)})`);
-    }
-
-    // wooden bridge
-    bridge(g, s.x - 6, s.bridgeY, s.w + 12, s.bridgeH);
-  }
-
-  _pond(g) {
-    const { cx, cy, rx, ry } = this.pond;
-    for (let yy = -ry; yy <= ry; yy++) {
-      const w = Math.floor(rx * Math.sqrt(Math.max(0, 1 - (yy * yy) / (ry * ry))));
-      if (w <= 0) continue;
-      rect(g, cx - w, cy + yy, w * 2, 1, yy < -ry * 0.4 ? '#3a6b8a' : '#2f5c7a');
-    }
-    for (let a = 0; a < Math.PI * 2; a += 0.22) rect(g, Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), 1, 1, '#6b7a5a');
-    for (let i = 0; i < 3; i++) rect(g, Math.round(cx + Math.sin(this.t + i) * rx * 0.5), Math.round(cy + Math.cos(this.t * 1.2 + i) * ry * 0.4), 3, 1, '#7fb0d8');
-    // lily pads
-    disc(g, cx - rx * 0.4, cy, 3, '#3a7a3e'); disc(g, cx + rx * 0.3, cy + ry * 0.3, 2, '#3a7a3e');
-  }
 
   // ---- HUD + banners ------------------------------------------------------
 
@@ -1456,6 +1504,44 @@ function plaza(g, cx, cy, r) {
   for (let a = 0; a < Math.PI * 2; a += 0.12) rect(g, Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), 2, 2, '#847a64');
 }
 
+// ---- Master Town Layout v1: temporary development markers -----------------
+// Phase 1 is geometry/roads only — real buildings aren't placed yet (per the
+// brief, not even the ones with approved art). Each future structure gets a
+// dashed reserved-footprint outline (sized from the real asset as a scale
+// reference where one exists) plus a small signpost naming it, so districts
+// read as placeholders rather than finished buildings.
+function drawMarker(g, cx, topY, w, h, label, color = '#a08858') {
+  const x = Math.round(cx - w / 2), y = Math.round(topY);
+  g.globalAlpha = 0.14;
+  rect(g, x, y, w, h, color);
+  g.globalAlpha = 0.5;
+  for (let i = 0; i < w; i += 8) { rect(g, x + i, y, 4, 1, color); rect(g, x + i, y + h - 1, 4, 1, color); }
+  for (let i = 0; i < h; i += 8) { rect(g, x, y + i, 1, 4, color); rect(g, x + w - 1, y + i, 1, 4, color); }
+  g.globalAlpha = 1;
+  if (!label) return;
+  const px = Math.round(cx), py = Math.round(y + h);
+  rect(g, px - 1, py - 16, 2, 16, '#5c4a30');
+  rect(g, px - 1, py - 17, 2, 2, '#7a6440');
+  const words = label.toUpperCase();
+  const bw = textWidth(words) + 8;
+  rect(g, px - bw / 2, py - 27, bw, 12, 'rgba(28,22,15,0.85)');
+  rectOutline(g, px - bw / 2, py - 27, bw, 12, '#c9a15a');
+  drawText(g, words, px, py - 25, { color: '#f0d9a0', align: 'center' });
+}
+
+// Small unobtrusive signpost only — no reserved footprint/collision. Used for
+// reserved-but-unplanned expansion space (south road, future homes/stalls).
+function drawSignpost(g, x, y, label) {
+  x = Math.round(x); y = Math.round(y);
+  shadow(g, x, y, 5, 2, 0.2);
+  rect(g, x - 1, y - 20, 2, 20, '#4a3a26');
+  const words = label.toUpperCase();
+  const bw = textWidth(words) + 8;
+  rect(g, x - bw / 2, y - 32, bw, 12, 'rgba(20,26,18,0.75)');
+  rectOutline(g, x - bw / 2, y - 32, bw, 12, '#6a8a5c');
+  drawText(g, words, x, y - 30, { color: '#bcd9a8', align: 'center' });
+}
+
 // A raised, tiered fountain with visible stone height (front faces), an animated
 // water basin and a floating faceted crystal. Drawn from the base upward so it
 // reads as a solid volume; as a depth-sorted entity the player passes behind it
@@ -1607,3 +1693,24 @@ function pineTier(g, cx, baseY, halfW, hgt) {
 // stable pseudo-random for ground tiles / placement
 function hash(x) { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); }
 function rand2(a, b) { return a + Math.random() * (b - a); }
+
+// Turns a waypoint polyline into the axis-aligned rects the road rasteriser
+// expects. Each consecutive pair becomes a straight segment if already
+// aligned, or an L-shaped horizontal+vertical pair (bending at the corner)
+// otherwise — that's how "gentle curves" happen without diagonal tiles: a
+// handful of short offset waypoints reads as a bend once autotiled.
+function roadPath(points, width = 16) {
+  const rects = [];
+  const seg = (x0, y0, x1, y1) => {
+    if (y0 === y1) rects.push({ x: Math.min(x0, x1) - width / 2, y: y0 - width / 2, w: Math.abs(x1 - x0) + width, h: width });
+    else rects.push({ x: x0 - width / 2, y: Math.min(y0, y1) - width / 2, w: width, h: Math.abs(y1 - y0) + width });
+  };
+  for (let i = 0; i < points.length - 1; i++) {
+    const [x0, y0] = points[i], [x1, y1] = points[i + 1];
+    if (x0 === x1 || y0 === y1) { seg(x0, y0, x1, y1); continue; }
+    // bend at the corner — go horizontal first, then vertical
+    seg(x0, y0, x1, y0);
+    seg(x1, y0, x1, y1);
+  }
+  return rects;
+}
