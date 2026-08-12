@@ -28,13 +28,14 @@ let TITLE_READY = false;
 TITLE_IMG.onload = () => { TITLE_READY = true; };
 TITLE_IMG.src = 'assets/title_screen.png';
 
-// Position of the baked-in "PRESS ENTER" text and the two torches/mage-orb in
-// the artwork, converted from source-image pixels to canvas units, so the
-// pulse glow and ambient particles land in the right spots.
-const PRESS_TEXT = { cx: 240, cy: 106, w: 90, h: 18 };
-const LEFT_TORCH = { x: 190, y: 180 };
-const RIGHT_TORCH = { x: 285, y: 176 };
-const MAGE_ORB = { x: 349, y: 177 };
+// Position of the two torches/mage-orb in the artwork, converted from
+// source-image pixels to canvas units, so ambient particles land right.
+// This artwork has no "PRESS ENTER" baked in, so we draw our own below the
+// tagline, in the gap before the gate.
+const PRESS_Y = 112;
+const LEFT_TORCH = { x: 188, y: 179 };
+const RIGHT_TORCH = { x: 293, y: 179 };
+const MAGE_ORB = { x: 391, y: 177 };
 
 export class TitleScene {
   constructor(onStart) { this.onStart = onStart; }
@@ -274,23 +275,8 @@ export class TitleScene {
 
   _drawPress(g) {
     if (this.pressAlpha <= 0.01) return;
-    if (TITLE_READY) {
-      // The artwork already has "PRESS ENTER" baked in — pulse a soft gold
-      // glow over it (same breathing rhythm as the old procedural text) so
-      // it still reads as the prompt fading in and out.
-      const { cx, cy, w, h } = PRESS_TEXT;
-      g.globalAlpha = clamp01(this.pressAlpha) * 0.5;
-      for (let r = h; r > 0; r -= 2) {
-        g.globalAlpha = clamp01(this.pressAlpha) * 0.06;
-        disc(g, cx, cy, w / 2 + r * 0.4, '#ffe9a8');
-      }
-      g.globalAlpha = clamp01(this.pressAlpha) * 0.35;
-      rect(g, cx - w / 2, cy - h / 2, w, h, '#ffe9a8');
-      g.globalAlpha = 1;
-      return;
-    }
     g.globalAlpha = clamp01(this.pressAlpha);
-    drawText(g, 'PRESS ENTER', this.W / 2, 118, { color: '#f2c94f', align: 'center', scale: 2, shadow: '#0a0812' });
+    drawText(g, 'PRESS ENTER', this.W / 2, PRESS_Y, { color: '#f2c94f', align: 'center', scale: 2, shadow: '#0a0812' });
     g.globalAlpha = 1;
   }
 
