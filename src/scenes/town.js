@@ -419,8 +419,11 @@ export class TownScene {
       // Guild branch off the north trunk (west-northwest)
       ...roadPath([guildBranch, [PZ.x - 260, PZ.y - 300], [D.guild.x, D.guild.y + 55]], mainWidth),
 
-      // Commercial <-> Archive (northeast landscaped path)
-      ...roadPath([[D.commercial.x + 5, D.commercial.y - 45], [D.commercial.x + 120, D.commercial.y - 250], [D.archive.x, D.archive.y + 48]], narrowWidth),
+      // Commercial <-> Archive (northeast landscaped path) — branches off the
+      // main Plaza->Commercial road well before the courtyard (same pattern
+      // as guildBranch off the north trunk), so only one road visibly meets
+      // the courtyard instead of two separate slabs merging there.
+      ...roadPath([[PZ.x + 250, PZ.y + 10], [D.commercial.x + 120, D.commercial.y - 250], [D.archive.x, D.archive.y + 48]], narrowWidth),
       // Archive <-> adventure road (west link across the north)
       ...roadPath([[D.archive.x - 48, D.archive.y + 20], [PZ.x + 120, D.watch.y + 100], [D.watch.x + 40, D.watch.y + 60]], narrowWidth),
       // Guild <-> Sanctuary (northwest, vegetation-buffered)
@@ -476,6 +479,17 @@ export class TownScene {
       { cx: D.guild.x, cy: D.guild.y + 72, rx: 90, ry: 38 },
       { cx: D.archive.x, cy: D.archive.y + 45, rx: 85, ry: 35 },
     ];
+    // Keep road-tile texture out from under each courtyard oval — same reason
+    // the plaza subtracts its own circle: without it, the approaching road's
+    // full-width tiles show through/against the oval's edge as a hard seam.
+    for (const key of [...this.roadCells]) {
+      const [c, r] = key.split(',').map(Number);
+      const cx2 = c * ROAD_TILE + ROAD_TILE / 2, cy2 = r * ROAD_TILE + ROAD_TILE / 2;
+      for (const ct of this.courtyards) {
+        const nx = (cx2 - ct.cx) / (ct.rx - 4), ny = (cy2 - ct.cy) / (ct.ry - 4);
+        if (nx * nx + ny * ny < 1) { this.roadCells.delete(key); break; }
+      }
+    }
 
     // Vegetation defines the space: dense perimeter forest (town carved out
     // of the woods), thick clusters between districts, all auto-avoiding
