@@ -375,7 +375,7 @@ export class TownScene {
     // Broad organic streets: main roads and the Adventure Road rasterise two
     // tiles (~2.7 player-widths) wide; quiet district lanes stay one tile.
     // Bends every couple hundred units keep streets curving, never maze-like.
-    const mainWidth = 34, narrowWidth = 14, advWidth = 34;
+    const mainWidth = 27, narrowWidth = 11, advWidth = 27;
 
     // Crystal Plaza is a true 4-way intersection: exactly one road meets it
     // per cardinal direction (N/E/S/W), all the same width, all starting at
@@ -391,15 +391,16 @@ export class TownScene {
     const exitW = [FC.x - this.plazaRadius, FC.y];
     const R = this.plazaRadius;
     // Flare trapezoids: short (~1-2 player lengths) transition at each exit,
-    // tapering from a widened mouth (~+28%, matching the road width at its
-    // far edge exactly) down to the plaza's own jittered circle boundary —
-    // see buildFlare(). Same shape logic on all four sides, just rotated.
-    const flareNearW = Math.round(mainWidth * 1.28), flareDepth = 32;
+    // tapering from a widened mouth down to the plaza's own jittered circle
+    // boundary — see buildFlare(). Locked to explicit values (not derived
+    // from mainWidth) so plaza-connection geometry never drifts if the
+    // regular road width elsewhere changes.
+    const flareNearW = 44, flareFarW = 34, flareDepth = 32;
     this.plazaFlares = [
-      buildFlare(FC, R, -90, flareNearW, mainWidth, flareDepth), // N
-      buildFlare(FC, R, 90, flareNearW, mainWidth, flareDepth),  // S
-      buildFlare(FC, R, 0, flareNearW, mainWidth, flareDepth),   // E
-      buildFlare(FC, R, 180, flareNearW, mainWidth, flareDepth), // W
+      buildFlare(FC, R, -90, flareNearW, flareFarW, flareDepth), // N
+      buildFlare(FC, R, 90, flareNearW, flareFarW, flareDepth),  // S
+      buildFlare(FC, R, 0, flareNearW, flareFarW, flareDepth),   // E
+      buildFlare(FC, R, 180, flareNearW, flareFarW, flareDepth), // W
     ];
 
     this.roads = [
