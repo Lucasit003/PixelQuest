@@ -179,7 +179,14 @@ export class TownScene {
     };
 
     this.plazaCenter = PZ;
-    this.plazaRadius = 130; // fountain (79 wide) ~= 30% of the plaza diameter
+    // The fountain sprite is anchored at its base (PZ.y) and drawn upward, so
+    // its true VISUAL center sits FOUNTAIN_H/2 above PZ.y — the plaza disc and
+    // the four road exits are built around that point, not PZ.y itself, so
+    // the fountain is actually centered on both axes rather than just close.
+    const FC = { x: PZ.x, y: PZ.y - FOUNTAIN_H / 2 };
+    this.plazaFocus = FC;
+    // diameter ~2.35x the fountain's width -> fountain occupies ~43% of it
+    this.plazaRadius = Math.round(FOUNTAIN_W * 2.35 / 2);
 
     this.locations = [
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
@@ -301,15 +308,31 @@ export class TownScene {
     // Bends every couple hundred units keep streets curving, never maze-like.
     const mainWidth = 34, narrowWidth = 14, advWidth = 34;
 
+    // Crystal Plaza is a true 4-way intersection: exactly one road meets it
+    // per cardinal direction (N/E/S/W), all the same width, all starting at
+    // the same distance (the plaza radius) from the fountain's visual center
+    // FC — never from the center itself, so nothing ever overlaps the
+    // fountain's collision box. Guild has no direct spoke into the plaza —
+    // it branches off the north (adventure) trunk a short way out, which
+    // also matches "Guild leads toward Wayfarer's Watch" from the brief.
+    const guildBranch = [PZ.x + 15, PZ.y - 250];
+    const exitN = [FC.x, FC.y - this.plazaRadius];
+    const exitS = [FC.x, FC.y + this.plazaRadius];
+    const exitE = [FC.x + this.plazaRadius, FC.y];
+    const exitW = [FC.x - this.plazaRadius, FC.y];
+
     this.roads = [
-      // Plaza <-> Commercial courtyard (east) — short and direct
-      ...roadPath([[PZ.x, PZ.y - 10], [PZ.x + 250, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
-      // Plaza <-> Market (south-southeast)
-      ...roadPath([[PZ.x + 10, PZ.y], [PZ.x + 110, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
+      // N: Plaza -> Watch -> Gate (the adventure trunk)
+      ...roadPath([exitN, guildBranch, [D.watch.x, D.watch.y + 45]], mainWidth),
+      ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 40, D.watch.y - 200], [D.gate.x, D.gate.y + 50]], advWidth),
+      // E: Plaza -> Commercial courtyard
+      ...roadPath([exitE, [PZ.x + 250, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
+      // S: Plaza -> Market
+      ...roadPath([exitS, [PZ.x + 110, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
       // Market <-> South Road
       ...roadPath([[D.market.x - 20, D.market.y + 150], [D.southRoad.x, D.southRoad.y]], mainWidth),
-      // Plaza <-> Residential entry (southwest)
-      ...roadPath([[PZ.x, PZ.y + 10], [PZ.x - 280, PZ.y + 150], [D.residential.x + 200, D.residential.y - 40]], mainWidth),
+      // W: Plaza -> Residential entry
+      ...roadPath([exitW, [PZ.x - 280, PZ.y + 150], [D.residential.x + 200, D.residential.y - 40]], mainWidth),
       // Residential neighborhood loop (organic ring with lot frontage)
       ...roadPath([
         [D.residential.x + 200, D.residential.y - 40],
@@ -320,14 +343,9 @@ export class TownScene {
         [D.residential.x + 170, D.residential.y + 90],
         [D.residential.x + 200, D.residential.y - 40],
       ], mainWidth),
-      // Plaza <-> Guild courtyard (west-northwest)
-      ...roadPath([[PZ.x, PZ.y - 20], [PZ.x - 270, PZ.y - 90], [D.guild.x, D.guild.y + 55]], mainWidth),
 
-      // ---- Adventure route: plaza north -> Watch -> Gate, wide + direct ----
-      ...roadPath([[PZ.x, PZ.y], [PZ.x + 30, PZ.y - 340], [D.watch.x, D.watch.y + 45]], advWidth),
-      ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 40, D.watch.y - 200], [D.gate.x, D.gate.y + 50]], advWidth),
-      // Guild -> adventure road (the adventurer route past the tavern)
-      ...roadPath([[D.guild.x + 70, D.guild.y - 35], [D.guild.x + 260, D.guild.y - 200], [PZ.x + 10, PZ.y - 400]], mainWidth),
+      // Guild branch off the north trunk (west-northwest)
+      ...roadPath([guildBranch, [PZ.x - 260, PZ.y - 300], [D.guild.x, D.guild.y + 55]], mainWidth),
 
       // Commercial <-> Archive (northeast landscaped path)
       ...roadPath([[D.commercial.x + 5, D.commercial.y - 45], [D.commercial.x + 120, D.commercial.y - 250], [D.archive.x, D.archive.y + 48]], narrowWidth),
@@ -359,6 +377,13 @@ export class TownScene {
         for (let rr = r0; rr <= r1; rr++) for (let k = 0; k < across; k++) this.roadCells.add(`${cx + k},${rr}`);
       }
     }
+    // keep the plaza interior free of road-tile texture — the plaza floor
+    // owns that area, roads only exist from the radius outward
+    for (const key of [...this.roadCells]) {
+      const [c, r] = key.split(',').map(Number);
+      const cx2 = c * ROAD_TILE + ROAD_TILE / 2, cy2 = r * ROAD_TILE + ROAD_TILE / 2;
+      if (Math.hypot(cx2 - FC.x, cy2 - FC.y) < this.plazaRadius - 6) this.roadCells.delete(key);
+    }
 
     // ----------------------------------------------------------- terrain --
     // wild/meadow zones: outer districts + gate approach only
@@ -386,7 +411,7 @@ export class TownScene {
         const r = spread * (0.4 + hash(cx * i + cy) * 0.6);
         const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.7;
         if (this._nearAnyDistrict(x, y, 70) || this._nearAnyRoad(x, y, 26)) continue;
-        if (Math.hypot(x - PZ.x, y - PZ.y) < this.plazaRadius + 40) continue;
+        if (Math.hypot(x - FC.x, y - FC.y) < this.plazaRadius + 40) continue;
         if (Math.hypot((x - this.marketGround.cx) / 1.15, y - this.marketGround.cy) < this.marketGround.rx + 30) continue;
         this.trees.push({ x, y, kind: (i % 3 === 0) ? 'pine' : kind });
       }
@@ -717,6 +742,11 @@ export class TownScene {
 
     // roads: autotiled cobblestone from the authored tileset
     this._drawRoadTiles(g, visW, visH);
+
+    // Crystal Plaza: a real round stone floor, centered exactly on the
+    // fountain's visual center, with genuine tile variation (base/worn/
+    // moss/cracked/crystal-accent) instead of a flat wash.
+    plaza(g, this.plazaFocus.x, this.plazaFocus.y, this.plazaRadius);
 
     // Market Square ground: one big organic open square (packed dirt with a
     // stone edge), stalls live on its rim, center stays open.
@@ -1490,16 +1520,47 @@ function corruptedRock(g, x, y) {
   rect(g, x - 2, y - 4, 1, 1, '#8a5cd0'); // faint purple vein
 }
 
+// Crystal Plaza floor: a round stone disc with real per-row tile variation
+// (base/worn/moss/cracked, plus a crystal accent concentrated near the
+// fountain) instead of a flat two-tone wash, plus a proper decorative border
+// ring. Cheap: one rect per scanline for the base, then scattered dabs.
 function plaza(g, cx, cy, r) {
+  const PLAZA_BASE = ['#b4aa90', '#a89e84'];       // ~60%: lit/shadow base stone
+  const PLAZA_WORN = '#9c9278';                     // ~15%: worn stone
+  const PLAZA_MOSS = '#7c8a68';                      // ~10%: moss/grass creep
+  const PLAZA_CRACK = '#847860';                     // ~10%: cracked/weathered
+  const PLAZA_CRYSTAL = ['#6a7ec9', '#8f9de0'];      // ~5%: magical accent (near fountain only)
+
   for (let yy = -r; yy <= r; yy++) {
     const w = Math.floor(Math.sqrt(Math.max(0, r * r - yy * yy)));
     if (w <= 0) continue;
-    rect(g, cx - w, cy + yy, w * 2, 1, yy < 0 ? '#b4aa90' : '#a89e84');
+    const rowHash = hash(yy * 3.1 + cx * 0.01);
+    const base = rowHash < 0.5 ? PLAZA_BASE[0] : PLAZA_BASE[1];
+    rect(g, cx - w, cy + yy, w * 2, 1, base);
   }
-  // concentric cobble rings
-  for (let rr = 16; rr < r; rr += 14) for (let a = 0; a < Math.PI * 2; a += 0.32) rect(g, Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr), 2, 2, '#9a8f78');
-  // outer stone edge
-  for (let a = 0; a < Math.PI * 2; a += 0.12) rect(g, Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), 2, 2, '#847a64');
+
+  // scattered texture dabs: non-repeating, weighted so worn/moss/cracked
+  // read as ~15/10/10% of the floor and crystal accents only show up close
+  // to the fountain (the innermost ~35% of the radius).
+  const DABS = Math.round(r * r * 0.024); // scales with area, stays cheap
+  for (let i = 0; i < DABS; i++) {
+    const a = hash(i * 7.13) * Math.PI * 2;
+    const rr = Math.sqrt(hash(i * 3.71 + 1)) * (r - 3); // uniform over the disc
+    const px = Math.round(cx + Math.cos(a) * rr), py = Math.round(cy + Math.sin(a) * rr * 0.98);
+    const h = hash(i * 11.9 + 2);
+    const distF = rr / r;
+    let color, size;
+    if (h < 0.15) { color = PLAZA_WORN; size = 2; }
+    else if (h < 0.25) { color = PLAZA_MOSS; size = 2; }
+    else if (h < 0.35) { color = PLAZA_CRACK; size = 1; }
+    else if (h < 0.40 && distF < 0.4) { color = PLAZA_CRYSTAL[i % 2]; size = 1; }
+    else continue;
+    rect(g, px, py, size, size, color);
+  }
+
+  // decorative concentric rings + outer stone border
+  for (let rr = 18; rr < r - 8; rr += 16) for (let a = 0; a < Math.PI * 2; a += 0.34) rect(g, Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr * 0.98), 2, 2, '#9a8f78');
+  for (let a = 0; a < Math.PI * 2; a += 0.1) rect(g, Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * 0.98), 2, 2, '#847a64');
 }
 
 // ---- Master Town Layout v1: temporary development markers -----------------
