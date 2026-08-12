@@ -623,15 +623,94 @@ export class TownScene {
 
   _stream(g) {
     const s = this.stream;
+    const inBridge = (y) => y > s.bridgeY && y < s.bridgeY + s.bridgeH;
+
+    // base water: a soft cross-width gradient (darker deep-water edges, a
+    // lighter turquoise vein down the middle) plus the existing gentle wobble,
+    // so the river reads as more than a flat two-tone band.
     for (let y = s.y0; y < s.y1; y += 1) {
-      if (y > s.bridgeY && y < s.bridgeY + s.bridgeH) continue; // gap under the bridge
+      if (inBridge(y)) continue;
       const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
-      rect(g, s.x + wob, y, s.w, 1, y % 6 < 3 ? '#2f5c7a' : '#356588');
+      const rowShade = y % 6 < 3 ? 0 : 1;
+      for (let cx = 0; cx < s.w; cx++) {
+        const k = Math.abs(cx - s.w / 2) / (s.w / 2); // 0 center -> 1 edges
+        const base = rowShade === 0 ? '#2f5c7a' : '#356588';
+        const mid = '#3f7fa0';
+        rect(g, s.x + wob + cx, y, 1, 1, k < 0.45 ? mid : base);
+      }
     }
-    // banks
-    for (let y = s.y0; y < s.y1; y += 3) { rect(g, s.x - 2, y, 2, 2, '#4a6b3a'); rect(g, s.x + s.w, y, 2, 2, '#4a6b3a'); }
-    // shimmer
-    for (let i = 0; i < 5; i++) { const yy = s.y0 + ((this.t * 20 + i * 90) % (s.y1 - s.y0)); if (yy > s.bridgeY && yy < s.bridgeY + s.bridgeH) continue; rect(g, s.x + 6 + Math.sin(yy) * 4, Math.round(yy), 4, 1, '#7fb0d8'); }
+
+    // banks: grass edge, then a thin sand/silt lip right at the waterline
+    for (let y = s.y0; y < s.y1; y += 1) {
+      if (inBridge(y)) continue;
+      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
+      if (y % 3 === 0) {
+        rect(g, s.x + wob - 3, y, 3, 1, '#4a6b3a');
+        rect(g, s.x + wob + s.w, y, 3, 1, '#4a6b3a');
+      }
+      rect(g, s.x + wob - 1, y, 1, 1, '#8a7a52');
+      rect(g, s.x + wob + s.w, y, 1, 1, '#8a7a52');
+    }
+
+    // riverbank decor: rocks + reed clusters at fixed, hash-picked spots so
+    // they read as planted detail rather than noise, redrawn cheaply each frame.
+    for (let y = s.y0 + 10; y < s.y1 - 10; y += 34) {
+      if (inBridge(y)) continue;
+      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
+      const hL = hash(y * 0.37);
+      const hR = hash(y * 0.53 + 9);
+      if (hL < 0.4) drawRock(g, s.x + wob - 6, y, 0.7);
+      else if (hL < 0.75) drawReeds(g, s.x + wob - 5, y, y, this.t);
+      if (hR < 0.35) drawRock(g, s.x + wob + s.w + 6, y, 0.6);
+      else if (hR < 0.7) drawReeds(g, s.x + wob + s.w + 5, y, y + 500, this.t);
+    }
+
+    // small in-water rocks near the banks, with a tiny foam ring where the
+    // current breaks against them (upstream = north/top edge of each rock).
+    for (let y = s.y0 + 26; y < s.y1 - 10; y += 90) {
+      if (inBridge(y)) continue;
+      const wob = Math.sin(y * 0.3 + this.t * 2) * 2;
+      const side = hash(y * 0.19) < 0.5 ? -1 : 1;
+      const rx = s.x + wob + s.w / 2 + side * (s.w / 2 - 4);
+      disc(g, rx, y, 2, '#6b6f7c');
+      disc(g, rx - 1, y - 1, 1, '#868b99');
+      const foamA = 0.35 + Math.sin(this.t * 3 + y) * 0.15;
+      g.globalAlpha = clamp01(foamA);
+      rect(g, rx - 2, y - 3, 4, 1, '#dff3ff');
+      g.globalAlpha = 1;
+    }
+
+    // flow lines: short white/cyan streaks travelling downstream, staggered
+    // so they never move as one solid block.
+    for (let i = 0; i < 8; i++) {
+      const speed = 34 + (i % 3) * 6;
+      const span = s.y1 - s.y0;
+      const yy = s.y0 + ((this.t * speed + i * (span / 8)) % span);
+      if (inBridge(yy)) continue;
+      const wob = Math.sin(yy * 0.3 + this.t * 2) * 2;
+      const lx = s.x + wob + 5 + hash(i * 3.1) * (s.w - 10);
+      const fade = 0.5 + Math.sin(this.t * 2 + i * 1.7) * 0.5;
+      g.globalAlpha = clamp01(0.5 + fade * 0.5);
+      rect(g, Math.round(lx), Math.round(yy), 1, 4, '#f2ffff');
+      g.globalAlpha = 1;
+    }
+
+    // occasional expanding ripple, same crisp scattered-dot technique as the
+    // fountain, kept small so it doesn't compete with the flow lines.
+    for (let i = 0; i < 2; i++) {
+      const period = 3.2 + i * 0.6;
+      const loop = Math.floor((this.t + i * 4.4) / period);
+      const phase = ((this.t + i * 4.4) % period) / period;
+      const yy = s.y0 + hash(i * 6.6 + loop * 2.2) * (s.y1 - s.y0);
+      if (inBridge(yy)) continue;
+      const wob = Math.sin(yy * 0.3 + this.t * 2) * 2;
+      const grow = clamp01(phase / 0.3);
+      const fade = 1 - clamp01((phase - 0.5) / 0.5);
+      if (fade <= 0.02) continue;
+      const r = lerp(1, 3.4, grow);
+      pixelRingDots(g, s.x + wob + s.w / 2, yy, r, r * 0.6, `rgba(220,245,255,${(fade * 0.5).toFixed(2)})`);
+    }
+
     // wooden bridge
     bridge(g, s.x - 6, s.bridgeY, s.w + 12, s.bridgeH);
   }
@@ -1336,6 +1415,24 @@ function petHouse(g, x, y, color) { shadow(g, x, y, 5, 1, 0.22); rect(g, x - 5, 
 function bowl(g, x, y) { rect(g, x - 3, y - 2, 6, 2, '#8a8ea0'); rect(g, x - 2, y - 1, 4, 1, '#5c6a8a'); }
 function egg(g, x, y, color) { rect(g, x - 1, y - 3, 3, 4, color); rect(g, x - 1, y - 3, 1, 1, '#ffffff'); }
 function bridge(g, x, y, w, h) { rect(g, x, y, w, h, '#7a5530'); for (let by = 0; by < h; by += 4) rect(g, x, y + by, w, 1, '#5a3a24'); rect(g, x, y, w, 1, '#8a6a44'); rect(g, x, y + h - 1, w, 1, '#8a6a44'); rect(g, x - 1, y, 1, h, '#4a3220'); rect(g, x + w, y, 1, h, '#4a3220'); }
+
+// A small reed/cattail cluster for riverbanks — a few thin blades and one
+// cattail head, with a barely-there sway so the bank doesn't feel static.
+function drawReeds(g, x, y, seed, t) {
+  x = Math.round(x); y = Math.round(y);
+  const sway = Math.sin(t * 0.6 + seed) * 0.6;
+  shadow(g, x, y, 5, 2, 0.2);
+  for (let i = 0; i < 3; i++) {
+    const bx = x + (i - 1) * 3;
+    const h = 9 + (i % 2) * 2;
+    const tip = bx + sway * (i - 1 === 0 ? 0.4 : 1);
+    rect(g, bx, y - h, 1, h, '#3a7a3e');
+    rect(g, Math.round(tip), y - h, 1, 3, '#5cad5e');
+  }
+  rect(g, x + 1, y - 12 + sway * 0.5, 1, 5, '#4a7a3a'); // cattail stem
+  rect(g, x, y - 16 + sway * 0.5, 3, 4, '#7a5a34'); // cattail head
+  rect(g, x, y - 16 + sway * 0.5, 3, 1, '#9a7a4a'); // head highlight
+}
 
 function fillEllipse(g, cx, cy, rx, ry, color) {
   cx = Math.round(cx); cy = Math.round(cy); rx = Math.max(1, rx); ry = Math.max(1, ry);
