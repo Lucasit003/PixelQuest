@@ -20,6 +20,22 @@ import { Save } from '../core/save.js';
 
 const HORIZON = 150;
 
+// Real title-screen artwork (warrior + mage flanking the gate, logo baked in).
+// Same 16:9 ratio as the internal canvas, so it draws edge-to-edge with no
+// letterboxing or crop math needed.
+const TITLE_IMG = new Image();
+let TITLE_READY = false;
+TITLE_IMG.onload = () => { TITLE_READY = true; };
+TITLE_IMG.src = 'assets/title_screen.png';
+
+// Position of the baked-in "PRESS ENTER" text and the two torches/mage-orb in
+// the artwork, converted from source-image pixels to canvas units, so the
+// pulse glow and ambient particles land in the right spots.
+const PRESS_TEXT = { cx: 240, cy: 106, w: 90, h: 18 };
+const LEFT_TORCH = { x: 190, y: 180 };
+const RIGHT_TORCH = { x: 285, y: 176 };
+const MAGE_ORB = { x: 349, y: 177 };
+
 export class TitleScene {
   constructor(onStart) { this.onStart = onStart; }
 
@@ -54,13 +70,13 @@ export class TitleScene {
     this.t += dt;
     this.particles.update(dt);
 
-    // ambient: torch embers + occasional mage spark
-    if (Math.random() < dt * 4) this.particles.ember(170 + Math.random() * 4, 202, '#f2942b');
-    if (Math.random() < dt * 4) this.particles.ember(310 + Math.random() * 4, 202, '#f2942b');
+    // ambient: torch embers + occasional mage spark, positioned over the artwork
+    if (Math.random() < dt * 4) this.particles.ember(LEFT_TORCH.x + Math.random() * 4, LEFT_TORCH.y, '#f2942b');
+    if (Math.random() < dt * 4) this.particles.ember(RIGHT_TORCH.x + Math.random() * 4, RIGHT_TORCH.y, '#f2942b');
     this.mageSparkTimer -= dt;
     if (this.mageSparkTimer <= 0) {
       this.mageSparkTimer = 1.6 + Math.random() * 1.5;
-      this.particles.magicBurst(322, 214, '#9d8bff', 4);
+      this.particles.magicBurst(MAGE_ORB.x, MAGE_ORB.y, '#9d8bff', 4);
     }
 
     if (this.mode === 'press') return this._updatePress(dt);
@@ -122,11 +138,8 @@ export class TitleScene {
   // ================================================================ draw
 
   draw(g) {
-    this._drawBackdrop(g);
-    this._drawMidground(g);
-    this._drawForeground(g);
+    this._drawBackground(g);
     this.particles.draw(g);
-    this._drawLogo(g);
 
     if (this.mode === 'press' || (this.mode === 'menu' && this.pressAlpha > 0.01)) this._drawPress(g);
     if (this.mode !== 'press') this._drawMenu(g);
@@ -138,7 +151,19 @@ export class TitleScene {
     if (hint) drawText(g, hint, this.W / 2, this.H - 9, { color: 'rgba(140,136,171,0.8)', align: 'center' });
   }
 
-  // ---- background layers --------------------------------------------------
+  // ---- background -----------------------------------------------------
+
+  _drawBackground(g) {
+    if (TITLE_READY) {
+      g.drawImage(TITLE_IMG, 0, 0, this.W, this.H);
+      return;
+    }
+    // brief fallback while the artwork loads, so the scene isn't blank
+    this._drawBackdrop(g);
+    this._drawMidground(g);
+    this._drawForeground(g);
+    this._drawLogo(g);
+  }
 
   _drawBackdrop(g) {
     // sky gradient, darkest at top -> faint warmth at horizon
@@ -249,6 +274,21 @@ export class TitleScene {
 
   _drawPress(g) {
     if (this.pressAlpha <= 0.01) return;
+    if (TITLE_READY) {
+      // The artwork already has "PRESS ENTER" baked in — pulse a soft gold
+      // glow over it (same breathing rhythm as the old procedural text) so
+      // it still reads as the prompt fading in and out.
+      const { cx, cy, w, h } = PRESS_TEXT;
+      g.globalAlpha = clamp01(this.pressAlpha) * 0.5;
+      for (let r = h; r > 0; r -= 2) {
+        g.globalAlpha = clamp01(this.pressAlpha) * 0.06;
+        disc(g, cx, cy, w / 2 + r * 0.4, '#ffe9a8');
+      }
+      g.globalAlpha = clamp01(this.pressAlpha) * 0.35;
+      rect(g, cx - w / 2, cy - h / 2, w, h, '#ffe9a8');
+      g.globalAlpha = 1;
+      return;
+    }
     g.globalAlpha = clamp01(this.pressAlpha);
     drawText(g, 'PRESS ENTER', this.W / 2, 118, { color: '#f2c94f', align: 'center', scale: 2, shadow: '#0a0812' });
     g.globalAlpha = 1;
