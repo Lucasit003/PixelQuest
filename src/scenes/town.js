@@ -276,9 +276,9 @@ export class TownScene {
         solid: { x: D.sanctuary.x - 65, y: D.sanctuary.y - 35, w: 130, h: 90 } },
 
       // ---- Valorhall: large dedicated compound ----
-      { id: 'training', name: 'Valorhall Training Grounds (reserved)', dx: D.training.x, dy: D.training.y + 92, action: 'training', district: 'Valorhall Training Grounds', zone: true,
-        draw: (g) => drawMarker(g, D.training.x, D.training.y - 90, 220, 180, 'Valorhall Training Grounds'),
-        solid: { x: D.training.x - 110, y: D.training.y - 90, w: 220, h: 24 } },
+      { id: 'training', name: 'Valorhall Training Grounds', dx: D.training.x, dy: D.training.y, action: 'training', district: 'Valorhall Training Grounds', zone: true,
+        draw: (g) => drawTrainingGround(g, D.training.x, D.training.y, this.t),
+        solid: { x: D.training.x - 75, y: D.training.y - 60, w: 150, h: 24 } },
 
       // ---- Wayfarer's Watch: fortified checkpoint straddling the road ----
       { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y + 25,
