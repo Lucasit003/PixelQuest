@@ -42,7 +42,19 @@ const FOUNTAIN_IMG = new Image();
 let FOUNTAIN_READY = false;
 FOUNTAIN_IMG.onload = () => { FOUNTAIN_READY = true; };
 FOUNTAIN_IMG.src = 'assets/fountain.png';
-const FOUNTAIN_W = 79, FOUNTAIN_H = 54; // world units (127x86 authored @ zoom 1.6)
+const FOUNTAIN_W = 103, FOUNTAIN_H = 70; // world units (enlarged ~1.3x to fill the ring)
+
+// Stone ring/roundabout that surrounds the fountain, cropped square from the
+// authored roundabout art (source arms trimmed off — the game's own roads
+// meet the plaza edge instead). Drawn beneath the fountain, centered on the
+// plaza focus point.
+const RING_IMG = new Image();
+let RING_READY = false;
+RING_IMG.onload = () => { RING_READY = true; };
+RING_IMG.src = 'assets/fountain_ring.png';
+// Measured from the source crop (540x540): the opaque ring band runs from
+// pixel-radius 175 (inner hole) to 261 (outer edge).
+const RING_SRC_HALF = 270, RING_SRC_OUTER = 261;
 
 // Building artwork (real transparent PNGs), same load/draw pattern as the
 // Potion Shop above. Each authored to the game's native footprint.
@@ -208,7 +220,7 @@ export class TownScene {
 
     this.locations = [
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
-        draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
+        draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t, this.plazaRadius), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
 
       // ---- Commercial District: two shops around one shared courtyard ----
       { id: 'potion', name: 'Potion Shop (reserved)', dx: D.commercial.x - 80, dy: D.commercial.y + 50, action: 'potion', district: 'Commercial District',
@@ -1043,7 +1055,12 @@ function drawPotionShop(g, cx, baseY, t) {
 // The Crystal Plaza fountain — rendered from the authored transparent PNG.
 // Anchored bottom-centre on the plaza with only a very subtle contact shadow
 // beneath the stone base (the crystal glow/sparkles are separate particles).
-function drawFountainSprite(g, cx, baseY, t) {
+function drawFountainSprite(g, cx, baseY, t, ringRadius) {
+  if (RING_READY && ringRadius) {
+    const ringSize = Math.round(ringRadius * 2 * (RING_SRC_HALF / RING_SRC_OUTER));
+    const ringCy = baseY - FOUNTAIN_H / 2; // true visual center of the plaza (see FC below)
+    g.drawImage(RING_IMG, Math.round(cx - ringSize / 2), Math.round(ringCy - ringSize / 2), ringSize, ringSize);
+  }
   contactShadow(g, cx, baseY, FOUNTAIN_W * 0.30, 3, 0.22); // tiny, base-only
   if (!FOUNTAIN_READY) return;
   g.drawImage(FOUNTAIN_IMG, Math.round(cx - FOUNTAIN_W / 2), Math.round(baseY - FOUNTAIN_H), FOUNTAIN_W, FOUNTAIN_H);
