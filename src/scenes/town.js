@@ -64,6 +64,18 @@ const HOUSE_W = 75, HOUSE_H = 66;
 // onto a grid and each cell picks its tile from a 4-bit neighbour mask
 // (N=1, E=2, S=4, W=8), so junctions form automatically.
 const ROAD_TILE = 28;               // world units per road cell
+
+// Town grass ground tiles (sliced from the user's Town Grass sheet). Variants:
+// 01 base, 02 base variation, 03 light flowers, 04 patchy dirt.
+const GRASS_TILES = [];
+for (const n of ['grass_01', 'grass_02', 'grass_03', 'grass_04']) {
+  const img = new Image();
+  const st = { img, ready: false };
+  img.onload = () => { st.ready = true; };
+  img.src = `assets/ground/${n}.png`;
+  GRASS_TILES.push(st);
+}
+const GRASS_TILE = 96; // world units per ground tile (keeps blade density near road-tile scale)
 const ROAD_IMGS = {};
 for (const n of ['straight_v', 'straight_h', 'cross', 't_up', 't_down', 't_left', 't_right',
   'corner_tl', 'corner_tr', 'corner_bl', 'end_s', 'end_s2', 'end_w', 'plaza_wide', 'damaged']) {
@@ -541,25 +553,19 @@ export class TownScene {
 
   _drawGround(g, visW, visH) {
     const camX = this.camX, camY = this.camY;
-    const x0 = Math.floor(camX / 8) * 8 - 8, x1 = camX + visW + 8;
-    const y0 = Math.floor(camY / 8) * 8 - 8, y1 = camY + visH + 8;
-
-    // Organic grass: a soft value-noise base (8px cells, no hard 16px grid) with
-    // scattered tufts, tiny flowers, dirt flecks and pebbles. Two base greens are
-    // interleaved so no rectangular tile boundaries show.
+    // Ground: tiled Town Grass artwork (variant picked per cell by hash, so the
+    // layout is deterministic). Mostly base tiles, occasional flowers/patchy.
+    // Flat green underneath as a fallback while the images load.
     rect(g, camX, camY, visW, visH, '#3c7a40');
-    for (let y = y0; y < y1; y += 8) {
-      for (let x = x0; x < x1; x += 8) {
-        const h = hash(x * 1.7 + y * 0.9);
-        const h2 = hash(x * 0.3 + y * 2.1);
-        // blend value noise as small irregular dabs rather than full cells
-        if (h < 0.22) { rect(g, x + (h2 * 4 | 0), y + (h * 5 | 0), 5, 4, '#357338'); }
-        if (h2 < 0.20) { rect(g, x + (h * 5 | 0), y + (h2 * 4 | 0), 4, 3, '#45884a'); }
-        const r = hash(x * 2.3 + y * 3.1);
-        if (r > 0.965) { rect(g, x + 3, y + 4, 1, 3, '#2c6630'); rect(g, x + 5, y + 3, 1, 4, '#2c6630'); }        // tuft
-        else if (r > 0.955) { rect(g, x + 4, y + 4, 1, 1, '#e6d24a'); rect(g, x + 3, y + 5, 3, 1, '#e6d24a'); }   // flower
-        else if (r > 0.945) { rect(g, x + 4, y + 4, 2, 1, '#5c5040'); }                                            // dirt fleck
-        else if (r > 0.938) { rect(g, x + 4, y + 4, 2, 2, '#8a8ea0'); rect(g, x + 4, y + 4, 1, 1, '#a0a4b4'); }    // pebble (lit upper-left)
+    const gc0 = Math.floor(camX / GRASS_TILE), gc1 = Math.ceil((camX + visW) / GRASS_TILE);
+    const gr0 = Math.floor(camY / GRASS_TILE), gr1 = Math.ceil((camY + visH) / GRASS_TILE);
+    for (let rr = gr0; rr <= gr1; rr++) {
+      for (let cc = gc0; cc <= gc1; cc++) {
+        const hv = hash(cc * 12.7 + rr * 7.3);
+        const idx = hv < 0.42 ? 0 : hv < 0.84 ? 1 : hv < 0.94 ? 2 : 3;
+        const tile = GRASS_TILES[idx];
+        if (!tile.ready) continue;
+        g.drawImage(tile.img, cc * GRASS_TILE, rr * GRASS_TILE, GRASS_TILE, GRASS_TILE);
       }
     }
 
