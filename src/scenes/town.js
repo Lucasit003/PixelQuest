@@ -335,8 +335,15 @@ export class TownScene {
     if (this.introHintT > 0) this.introHintT -= dt;
     if (this.districtBannerT > 0) this.districtBannerT -= dt;
 
-    // crystal sparkle glow (separate from any physical shadow)
-    if (Math.random() < dt * 3) this.particles.spawn({ x: 630 + rand2(-7, 7), y: 355, kind: 'star', color: '#b58bff', vx: 0, vy: -8, life: 1, size: 1 });
+    // crystal sparkle glow (separate from any physical shadow) — tiny cyan/purple
+    // motes drifting up out of the fountain crystal, with a little sideways sway.
+    if (Math.random() < dt * 3.2) {
+      this.particles.spawn({
+        x: 630 + rand2(-7, 7), y: 355, kind: 'star',
+        color: Math.random() < 0.5 ? '#b58bff' : '#7fe8ff',
+        vx: rand2(-4, 4), vy: -8, life: rand2(0.8, 1.3), size: 1,
+      });
+    }
 
     // wandering sanctuary pets
     for (const p of this.sanctuaryPets) {
@@ -855,6 +862,125 @@ function drawFountainSprite(g, cx, baseY, t) {
   contactShadow(g, cx, baseY, FOUNTAIN_W * 0.30, 3, 0.22); // tiny, base-only
   if (!FOUNTAIN_READY) return;
   g.drawImage(FOUNTAIN_IMG, Math.round(cx - FOUNTAIN_W / 2), Math.round(baseY - FOUNTAIN_H), FOUNTAIN_W, FOUNTAIN_H);
+  drawFountainFX(g, cx, baseY, t);
+}
+
+// ---- Crystal Fountain animation overlay ------------------------------
+// Pure-t procedural FX layered on top of the static fountain PNG — never
+// touches the artwork, collision, Y-sort, or interaction. Basin/crystal
+// geometry below is measured from the source art (127x86 px, drawn at
+// FOUNTAIN_W x FOUNTAIN_H) and expressed as offsets from (cx, baseY).
+const FX_BASIN = { cx: 0, cy: -24, rx: 26, ry: 12 };   // water ellipse
+const FX_CRYSTAL = { cx: 0, cy: -38, rx: 9, ry: 14 };  // main crystal silhouette
+const FX_ARM_L = { x: -17, yTop: -34, yBot: -21 };     // left water-arm stream path
+const FX_ARM_R = { x: 17, yTop: -34, yBot: -21 };      // right water-arm stream path
+const FX_RUNE_ARC = { cx: 0, cy: -14, rx: 13, y: -14, count: 6 }; // pedestal rune row
+
+function drawFountainFX(g, cx, baseY, t) {
+  g.save();
+  fxRipples(g, cx, baseY, t);
+  fxStreams(g, cx, baseY, t);
+  fxHighlights(g, cx, baseY, t);
+  fxRunes(g, cx, baseY, t);
+  fxCrystalPulse(g, cx, baseY, t);
+  g.restore();
+}
+
+// 1. Water ripples: small -> expand -> fade, staggered, looping.
+function fxRipples(g, cx, baseY, t) {
+  const N = 4;
+  for (let i = 0; i < N; i++) {
+    const period = 2.4 + i * 0.31;
+    const loop = Math.floor((t + i * 5.1) / period);
+    const phase = ((t + i * 5.1) % period) / period; // 0..1
+    const seedA = hash(i * 11.7 + loop * 3.3);
+    const seedB = hash(i * 7.1 + loop * 9.9 + 1);
+    const px = FX_BASIN.cx + (seedA * 2 - 1) * (FX_BASIN.rx - 4);
+    const py = FX_BASIN.cy + (seedB * 2 - 1) * (FX_BASIN.ry - 2);
+    const grow = clamp01(phase / 0.35);           // small -> expand
+    const fade = 1 - clamp01((phase - 0.5) / 0.5); // hold -> fade
+    if (fade <= 0.02) continue;
+    const r = lerp(1, 4.2, grow);
+    pixelRingDots(g, cx + px, baseY + py, r, r * 0.55, 'rgba(200,240,255,' + (fade * 0.55).toFixed(2) + ')');
+  }
+}
+
+// 2. Water flow: 3-4 discrete dots traveling down each stone arm into the basin.
+function fxStreams(g, cx, baseY, t) {
+  for (const arm of [FX_ARM_L, FX_ARM_R]) {
+    const FRAMES = 4;
+    for (let i = 0; i < FRAMES; i++) {
+      const speed = 1.1; // loops/sec
+      const phase = ((t * speed + i / FRAMES) % 1);
+      const y = lerp(arm.yTop, arm.yBot, phase);
+      const alpha = 0.85 * (1 - phase * 0.5);
+      rect(g, Math.round(cx + arm.x), Math.round(baseY + y), 1, 1, `rgba(220,250,255,${alpha.toFixed(2)})`);
+      // splash when a dot lands in the basin
+      if (phase > 0.88) {
+        const splash = (phase - 0.88) / 0.12;
+        g.globalAlpha = 1 - splash;
+        rect(g, Math.round(cx + arm.x - 1), Math.round(baseY + arm.yBot), 3, 1, '#dff6ff');
+        g.globalAlpha = 1;
+      }
+    }
+  }
+}
+
+// 3. Water highlights: tiny shimmer points that appear, drift 1-3px, fade.
+function fxHighlights(g, cx, baseY, t) {
+  const N = 5;
+  for (let i = 0; i < N; i++) {
+    const period = 1.8 + i * 0.23;
+    const loop = Math.floor((t + i * 3.7) / period);
+    const phase = ((t + i * 3.7) % period) / period;
+    if (phase > 0.6) continue; // shimmer, don't sparkle constantly
+    const seedA = hash(i * 5.3 + loop * 4.1 + 2);
+    const seedB = hash(i * 9.7 + loop * 2.7 + 3);
+    const px = FX_BASIN.cx + (seedA * 2 - 1) * (FX_BASIN.rx - 5);
+    const py = FX_BASIN.cy + (seedB * 2 - 1) * (FX_BASIN.ry - 3);
+    const k = phase / 0.6;
+    const alpha = Math.sin(k * Math.PI) * 0.8;
+    const drift = k * 2;
+    rect(g, Math.round(cx + px + drift), Math.round(baseY + py), 1, 1, `rgba(255,255,255,${alpha.toFixed(2)})`);
+  }
+}
+
+// 6. Runes: individual pedestal glyphs brighten/dim slightly out of phase.
+function fxRunes(g, cx, baseY, t) {
+  const { cx: rcx, y, rx, count } = FX_RUNE_ARC;
+  for (let i = 0; i < count; i++) {
+    const k = i / (count - 1);
+    const px = rcx + (k - 0.5) * 2 * rx;
+    const py = y - Math.sin(k * Math.PI) * 2; // follow the curved ledge
+    const glow = 0.5 + Math.sin(t * 1.3 + i * 1.9) * 0.5; // 0..1, desynced
+    g.globalAlpha = 0.12 + glow * 0.22;
+    rect(g, Math.round(cx + px), Math.round(baseY + py), 1, 1, '#8fe8ff');
+    g.globalAlpha = 1;
+  }
+}
+
+// 4. Crystal pulse: additive glow only — no scale, no move, no blur.
+function fxCrystalPulse(g, cx, baseY, t) {
+  const pulse = (Math.sin(t * (2 * Math.PI / 2.6)) * 0.5 + 0.5); // 0..1, ~2.6s loop
+  const alpha = 0.06 + pulse * 0.09; // subtle: reads as ~100%->115% brightness
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = alpha;
+  disc(g, cx + FX_CRYSTAL.cx, baseY + FX_CRYSTAL.cy, FX_CRYSTAL.rx, '#bfeaff');
+  g.globalAlpha = alpha * 0.7;
+  disc(g, cx + FX_CRYSTAL.cx, baseY + FX_CRYSTAL.cy - 4, FX_CRYSTAL.rx * 0.6, '#ffffff');
+  g.restore();
+}
+
+// Crisp scattered-dot "ring" — reads as a ripple crest without a true stroke.
+function pixelRingDots(g, cx, cy, rx, ry, color) {
+  const DOTS = 8;
+  for (let i = 0; i < DOTS; i++) {
+    const a = (i / DOTS) * Math.PI * 2;
+    const x = cx + Math.cos(a) * rx;
+    const y = cy + Math.sin(a) * ry;
+    rect(g, Math.round(x), Math.round(y), 1, 1, color);
+  }
 }
 
 function potionWindow(g, x, y) {
