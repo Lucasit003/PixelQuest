@@ -42,7 +42,7 @@ const FOUNTAIN_IMG = new Image();
 let FOUNTAIN_READY = false;
 FOUNTAIN_IMG.onload = () => { FOUNTAIN_READY = true; };
 FOUNTAIN_IMG.src = 'assets/fountain.png';
-const FOUNTAIN_W = 103, FOUNTAIN_H = 93; // world units (new rounder art, cropped to its content bbox)
+const FOUNTAIN_W = 111, FOUNTAIN_H = 100; // world units (new rounder art, cropped to its content bbox; +8%)
 
 // Stone ring/roundabout that surrounds the fountain, cropped square from the
 // authored roundabout art (source arms trimmed off — the game's own roads
