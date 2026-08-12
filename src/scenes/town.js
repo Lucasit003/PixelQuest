@@ -72,6 +72,11 @@ const BLACKSMITH_W = 112, BLACKSMITH_H = 68;
 const HOUSE_ART = loadBuildingArt('assets/house.png');
 const HOUSE_W = 75, HOUSE_H = 66;
 
+// Crystal lamp posts flanking the north (Adventure Road) approach to the
+// plaza — a landmark pair, sized well above the plaza's own scale.
+const LAMP_CRYSTAL_ART = loadBuildingArt('assets/props/lamp_crystal.png');
+const LAMP_W = 36, LAMP_H = 49;
+
 // ------------------------------------------------------------ road tileset
 // Authored cobblestone tiles (96px squares, real alpha) with corners,
 // T-junctions, intersections and end caps. The town's road network is rasterised
@@ -152,6 +157,24 @@ function contactShadow(g, cx, by, rx, ry, alpha = 0.32) {
   }
 }
 
+// Generic bottom-anchored prop sprite (lamp posts etc): same load/draw
+// pattern as the buildings, just smaller. `flip` mirrors the art
+// horizontally so a prop on the right of a path reads as facing inward
+// (toward the centerline) the same way its left-side twin naturally does.
+function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false) {
+  contactShadow(g, x, y, shadowRx, Math.max(2, shadowRx * 0.4), 0.22);
+  if (!art.ready) return;
+  if (flip) {
+    g.save();
+    g.translate(Math.round(x), 0);
+    g.scale(-1, 1);
+    g.drawImage(art.img, Math.round(-w / 2), Math.round(y - h), w, h);
+    g.restore();
+  } else {
+    g.drawImage(art.img, Math.round(x - w / 2), Math.round(y - h), w, h);
+  }
+}
+
 export class TownScene {
   constructor(hero, hooks) {
     this.hero = hero;
@@ -221,6 +244,17 @@ export class TownScene {
     this.locations = [
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
         draw: (g) => drawFountainSprite(g, PZ.x, PZ.y, this.t, this.plazaRadius), solid: { x: PZ.x - 26, y: PZ.y - 27, w: 52, h: 16 } },
+
+      // ---- North approach: a large crystal lamp on each side of the road,
+      // right where the plaza's circular edge ends and the straight path
+      // starts, just outside the road surface. The east lamp is mirrored so
+      // its lantern arm reaches inward toward the path, matching the west one.
+      { id: 'lampNorthW', name: null, dx: null, dy: null, action: null, sortY: FC.y - this.plazaRadius - 10,
+        draw: (g) => drawPropArt(g, LAMP_CRYSTAL_ART, FC.x - 30, FC.y - this.plazaRadius - 10, LAMP_W, LAMP_H, 6),
+        solid: { x: FC.x - 30 - 4, y: FC.y - this.plazaRadius - 10 - 4, w: 8, h: 8 } },
+      { id: 'lampNorthE', name: null, dx: null, dy: null, action: null, sortY: FC.y - this.plazaRadius - 10,
+        draw: (g) => drawPropArt(g, LAMP_CRYSTAL_ART, FC.x + 30, FC.y - this.plazaRadius - 10, LAMP_W, LAMP_H, 6, true),
+        solid: { x: FC.x + 30 - 4, y: FC.y - this.plazaRadius - 10 - 4, w: 8, h: 8 } },
 
       // ---- Commercial District: two shops around one shared courtyard ----
       { id: 'potion', name: 'Potion Shop', dx: D.commercial.x - 80, dy: D.commercial.y + 62, action: 'potion', district: 'Commercial District',
