@@ -390,14 +390,16 @@ export class TownScene {
     const exitE = [FC.x + this.plazaRadius, FC.y];
     const exitW = [FC.x - this.plazaRadius, FC.y];
     const R = this.plazaRadius;
-    // flare zones: wider than the road, straddling the plaza boundary at each
-    // exit, so the road visibly widens into the plaza instead of butting a
-    // hard rectangular seam against the round paving.
+    // Flare trapezoids: short (~1-2 player lengths) transition at each exit,
+    // tapering from a widened mouth (~+28%, matching the road width at its
+    // far edge exactly) down to the plaza's own jittered circle boundary —
+    // see buildFlare(). Same shape logic on all four sides, just rotated.
+    const flareNearW = Math.round(mainWidth * 1.28), flareDepth = 32;
     this.plazaFlares = [
-      { x: FC.x - 24, y: FC.y - R - 24, w: 48, h: 30 },  // N
-      { x: FC.x - 24, y: FC.y + R - 6, w: 48, h: 30 },   // S
-      { x: FC.x + R - 6, y: FC.y - 24, w: 30, h: 48 },   // E
-      { x: FC.x - R - 24, y: FC.y - 24, w: 30, h: 48 },  // W
+      buildFlare(FC, R, -90, flareNearW, mainWidth, flareDepth), // N
+      buildFlare(FC, R, 90, flareNearW, mainWidth, flareDepth),  // S
+      buildFlare(FC, R, 0, flareNearW, mainWidth, flareDepth),   // E
+      buildFlare(FC, R, 180, flareNearW, mainWidth, flareDepth), // W
     ];
 
     this.roads = [
@@ -463,7 +465,7 @@ export class TownScene {
       const cx2 = c * ROAD_TILE + ROAD_TILE / 2, cy2 = r * ROAD_TILE + ROAD_TILE / 2;
       if (Math.hypot(cx2 - FC.x, cy2 - FC.y) < this.plazaRadius - 6) { this.roadCells.delete(key); continue; }
       for (const fl of this.plazaFlares) {
-        if (cx2 > fl.x && cx2 < fl.x + fl.w && cy2 > fl.y && cy2 < fl.y + fl.h) { this.roadCells.delete(key); break; }
+        if (flareContains(fl, FC, this.plazaRadius, cx2, cy2, 2)) { this.roadCells.delete(key); break; }
       }
     }
 
@@ -1605,6 +1607,50 @@ function corruptedRock(g, x, y) {
   rect(g, x - 2, y - 4, 1, 1, '#8a5cd0'); // faint purple vein
 }
 
+// ---- Road -> plaza flare geometry ---------------------------------------
+// Each of the four cardinal exits gets a short trapezoid transition instead
+// of a flat rectangle: its near edge is sampled straight off the plaza's own
+// jittered circle boundary (same formula the plaza silhouette uses), so the
+// join is pixel-exact with no seam, and it tapers down to the constant road
+// width over a short run so the widen reads as a flare, not a step.
+function plazaEdgeJitter(a) {
+  return 1 + (hash(Math.floor(a * 6.37) * 3.1 + 0.5) - 0.5) * 0.1;
+}
+function buildFlare(FC, R, angleDeg, nearW, farW, depth) {
+  const a0 = angleDeg * Math.PI / 180;
+  const cosA = Math.cos(a0), sinA = Math.sin(a0);
+  const perpA = a0 + Math.PI / 2;
+  const cosP = Math.cos(perpA), sinP = Math.sin(perpA);
+  const dtheta = Math.asin(Math.min(0.98, (nearW / 2) / R));
+  const NSAMP = 4;
+  const points = [];
+  for (let i = 0; i <= NSAMP; i++) {
+    const a = a0 - dtheta + (2 * dtheta) * (i / NSAMP);
+    const j = plazaEdgeJitter(a);
+    points.push({ x: FC.x + Math.cos(a) * R * j, y: FC.y + Math.sin(a) * R * j });
+  }
+  const farCx = FC.x + cosA * (R + depth), farCy = FC.y + sinA * (R + depth);
+  points.push({ x: farCx + cosP * farW / 2, y: farCy + sinP * farW / 2 });
+  points.push({ x: farCx - cosP * farW / 2, y: farCy - sinP * farW / 2 });
+  return { cosA, sinA, cosP, sinP, nearW, farW, depth, points };
+}
+// `pad` softens the edge for proximity checks (blend radius) rather than a
+// hard cutoff. Returns 0..1 progress too (0 = plaza edge, 1 = road edge).
+function flareContains(fl, FC, R, px, py, pad = 0) {
+  const dx = px - FC.x, dy = py - FC.y;
+  const along = dx * fl.cosA + dy * fl.sinA;
+  if (along < R - 2 - pad || along > R + fl.depth + pad) return false;
+  const t = clamp01((along - R) / fl.depth);
+  const halfW = lerp(fl.nearW, fl.farW, t) / 2 + pad;
+  const perp = dx * fl.cosP + dy * fl.sinP;
+  return Math.abs(perp) <= halfW;
+}
+function flareProgress(fl, FC, R, px, py) {
+  const dx = px - FC.x, dy = py - FC.y;
+  const along = dx * fl.cosA + dy * fl.sinA;
+  return clamp01((along - R) / fl.depth);
+}
+
 // Crystal Plaza floor: real modular stone tiles (sliced from the same sheet
 // as the roads — same masonry family), laid on the ROAD_TILE grid so the
 // paving lines up with the streets. Deterministic per-cell weighted pick:
@@ -1628,30 +1674,49 @@ function plazaWeathered(cc, rr) { return hash(cc * 4.1 + rr * 1.7 + 50) < 0.5 ? 
 // Crystal Plaza floor: three concentric zones (inner fountain area, main
 // walking area, outer weathered edge) built from the real modular stone
 // pack, not a single random distribution — see the brief's zone breakdown.
+function flareTile(cc, rr, t) {
+  // t: 0 at the plaza edge (clean, matches the inner paving) -> 1 at the
+  // road-facing edge (progressively more worn, so the material reads as
+  // easing toward the road's rougher cobble without a hard tileset swap).
+  const h = hash(cc * 5.17 + rr * 8.31 + 90);
+  const hh = h - t * 0.55;
+  if (hh < 0.55) return plazaBase(cc, rr);
+  if (hh < 0.78) return plazaWorn(cc, rr);
+  if (hh < 0.93) return plazaWeathered(cc, rr);
+  return PLAZA_TILES.lightmoss;
+}
+
 function plaza(g, cx, cy, r, flares) {
   const innerR = Math.min(r * 0.5, FOUNTAIN_W * 0.5 + 12); // fountain radius + ~1 player width
   const outerStart = r * 0.82; // outer 18% becomes the weathered/edge band
+  const FC = { x: cx, y: cy };
 
   // Round silhouette with a SUBTLE break (per-angle radius jitter, ~±5%) so
   // it doesn't read as a mathematically perfect circle, unioned with the 4
-  // road-widen flares so paving still reaches the street edges cleanly.
+  // road flares — each flare's own near edge is sampled off this exact same
+  // jittered boundary (see buildFlare), so the two paths meet with no seam.
   g.save();
   g.beginPath();
   const STEPS = 48;
   for (let i = 0; i <= STEPS; i++) {
     const a = (i / STEPS) * Math.PI * 2;
-    const jitter = 1 + (hash(Math.floor(a * 6.37) * 3.1 + 0.5) - 0.5) * 0.1;
+    const jitter = plazaEdgeJitter(a);
     const px = cx + Math.cos(a) * r * jitter, py = cy + Math.sin(a) * r * jitter;
     if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
   }
   g.closePath();
-  for (const f of flares) g.rect(f.x, f.y, f.w, f.h);
+  for (const f of flares) {
+    f.points.forEach((p, i) => { if (i === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y); });
+    g.closePath();
+  }
   g.clip();
 
-  const nearFlare = (px, py, pad) => flares.some((f) => px > f.x - pad && px < f.x + f.w + pad && py > f.y - pad && py < f.y + f.h + pad);
+  const nearFlare = (px, py, pad) => flares.some((f) => flareContains(f, FC, r, px, py, pad));
+  const flareAt = (px, py) => flares.find((f) => flareContains(f, FC, r, px, py, 0));
 
-  const c0 = Math.floor((cx - r - 30) / ROAD_TILE), c1 = Math.ceil((cx + r + 30) / ROAD_TILE);
-  const r0 = Math.floor((cy - r - 30) / ROAD_TILE), r1 = Math.ceil((cy + r + 30) / ROAD_TILE);
+  const maxDepth = Math.max(...flares.map((f) => f.depth));
+  const c0 = Math.floor((cx - r - maxDepth) / ROAD_TILE), c1 = Math.ceil((cx + r + maxDepth) / ROAD_TILE);
+  const r0 = Math.floor((cy - r - maxDepth) / ROAD_TILE), r1 = Math.ceil((cy + r + maxDepth) / ROAD_TILE);
 
   for (let rr = r0; rr <= r1; rr++) {
     for (let cc = c0; cc <= c1; cc++) {
@@ -1659,10 +1724,21 @@ function plaza(g, cx, cy, r, flares) {
       const tcx = px + ROAD_TILE / 2, tcy = py + ROAD_TILE / 2;
       const dx = tcx - cx, dy = tcy - cy;
       const dist = Math.hypot(dx, dy);
-      if (dist > r * 1.15 + ROAD_TILE && !nearFlare(tcx, tcy, 0)) continue;
+      const flareHit = flareAt(tcx, tcy);
+      if (dist > r * 1.15 + ROAD_TILE && !flareHit) continue;
+
+      let tile;
+
+      if (flareHit && dist >= r - 3) {
+        // ---- FLARE: the transition trapezoid beyond the plaza's own edge —
+        // material eases from clean paving to a more worn, road-adjacent mix.
+        tile = flareTile(cc, rr, flareProgress(flareHit, FC, r, tcx, tcy));
+        if (tile && tile.ready) g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE);
+        else rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84');
+        continue;
+      }
 
       const h = hash(cc * 5.17 + rr * 8.31);
-      let tile;
 
       if (dist < innerR) {
         // ---- ZONE A: inner fountain area — 85% clean base, 15% worn.
