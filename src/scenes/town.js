@@ -42,7 +42,7 @@ const FOUNTAIN_IMG = new Image();
 let FOUNTAIN_READY = false;
 FOUNTAIN_IMG.onload = () => { FOUNTAIN_READY = true; };
 FOUNTAIN_IMG.src = 'assets/fountain.png';
-const FOUNTAIN_W = 103, FOUNTAIN_H = 70; // world units (enlarged ~1.3x to fill the ring)
+const FOUNTAIN_W = 103, FOUNTAIN_H = 93; // world units (new rounder art, cropped to its content bbox)
 
 // Stone ring/roundabout that surrounds the fountain, cropped square from the
 // authored roundabout art (source arms trimmed off — the game's own roads
@@ -1070,9 +1070,9 @@ function drawFountainSprite(g, cx, baseY, t, ringRadius) {
 // ---- Crystal Fountain animation overlay ------------------------------
 // Pure-t procedural FX layered on top of the static fountain PNG — never
 // touches the artwork, collision, Y-sort, or interaction. Basin/crystal
-// geometry below is measured from the source art (127x86 px, drawn at
+// geometry below is measured from the source art (494x445 px, drawn at
 // FOUNTAIN_W x FOUNTAIN_H) and expressed as offsets from (cx, baseY).
-const FX_BASIN = { cx: 0, cy: -24, rx: 26, ry: 12 };   // water ellipse
+const FX_BASIN = { cx: 0, cy: -46, rx: 28, ry: 22 };   // water ellipse
 
 // Pixel-exact water mask sampled from the fountain art itself, so ripple and
 // shimmer dots can only ever land on real water pixels — never on the stone
@@ -1090,7 +1090,7 @@ function buildFountainMask() {
   FOUNTAIN_MASK = new Uint8Array(FOUNTAIN_MASK_W * FOUNTAIN_MASK_H);
   for (let i = 0; i < FOUNTAIN_MASK.length; i++) {
     const r = d[i * 4], gr = d[i * 4 + 1], b = d[i * 4 + 2], a = d[i * 4 + 3];
-    if (a > 120 && b > 170 && gr > 140 && b > r && r < 170) FOUNTAIN_MASK[i] = 1;
+    if (a > 150 && b > r + 15 && b > 70 && gr < 200 && gr < b + 15) FOUNTAIN_MASK[i] = 1;
   }
 }
 // dx/dy are world-unit offsets from the fountain anchor (cx, baseY).
@@ -1101,15 +1101,12 @@ function fountainWaterAt(dx, dy) {
   if (sx < 0 || sy < 0 || sx >= FOUNTAIN_MASK_W || sy >= FOUNTAIN_MASK_H) return false;
   return FOUNTAIN_MASK[sy * FOUNTAIN_MASK_W + sx] === 1;
 }
-const FX_CRYSTAL = { cx: 0, cy: -38, rx: 9, ry: 14 };  // main crystal silhouette
-// The art's real water channels: two cascades sheet down from under the
-// crystal platform, hugging the sides of the front pedestal, then spread
-// into the pool. Measured from the source art and scaled to world units.
-const FX_FALLS = [
-  { xTop: -11.5, xBot: -13.5, yTop: -28, yBot: -20.5 }, // left cascade
-  { xTop: 11.5, xBot: 13.5, yTop: -28, yBot: -20.5 },   // right cascade
-];
-const FX_RUNE_ARC = { cx: 0, cy: -14, rx: 13, y: -14, count: 6 }; // pedestal rune row
+const FX_CRYSTAL = { cx: 0, cy: -66, rx: 12, ry: 14 };  // main crystal silhouette
+// The new art is a still round pool with no visible cascades (unlike the old
+// wide-oval fountain), so there's nothing for the stream-churn overlay to
+// anchor to — left empty rather than drawing dots at stale coordinates.
+const FX_FALLS = [];
+const FX_RUNE_ARC = { cx: 0, cy: -30, rx: 20, y: -30, count: 6 }; // pedestal rune row
 
 function drawFountainFX(g, cx, baseY, t) {
   buildFountainMask();
@@ -1275,7 +1272,7 @@ function fxMotes(g, cx, baseY, t) {
     const rise = phase * 16;                            // total climb in px
     const sway = Math.sin(phase * Math.PI * 3 + i * 1.3) * 2.2;
     const px = cx + x0 + sway;
-    const py = baseY - 34 - rise;
+    const py = baseY - 60 - rise;
     const a = Math.sin(phase * Math.PI);                // smooth in -> peak -> out
     if (a <= 0.03) continue;
     g.globalAlpha = a * 0.9;
