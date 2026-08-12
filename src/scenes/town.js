@@ -1000,9 +1000,13 @@ function fxRipples(g, cx, baseY, t) {
   const N = 4;
   const mask = (x, y) => fountainWaterAt(x - cx, y - baseY);
   for (let i = 0; i < N; i++) {
-    const period = 2.4 + i * 0.31;
+    const period = 1.5 + i * 0.13; // ~1.5s loop per spec, slight desync
     const loop = Math.floor((t + i * 5.1) / period);
     const phase = ((t + i * 5.1) % period) / period; // 0..1
+    // quantize to 6 discrete frames so the ripple steps like authored
+    // pixel animation instead of sliding continuously
+    const frame = Math.floor(phase * 6);
+    const fq = frame / 6;
     let px = 0, py = 0, found = false;
     for (let tries = 0; tries < 4 && !found; tries++) {
       const seedA = hash(i * 11.7 + loop * 3.3 + tries * 17.9);
@@ -1012,11 +1016,11 @@ function fxRipples(g, cx, baseY, t) {
       found = fountainWaterAt(px, py);
     }
     if (!found) continue;
-    const grow = clamp01(phase / 0.35);           // small -> expand
-    const fade = 1 - clamp01((phase - 0.5) / 0.5); // hold -> fade
+    // frames 0-2: expand (r = 1,2,3), frames 3-5: hold and fade out
+    const r = Math.min(frame + 1, 4);
+    const fade = frame < 3 ? 0.55 : 0.55 * (1 - (fq - 0.5) / 0.5);
     if (fade <= 0.02) continue;
-    const r = lerp(1, 4.2, grow);
-    pixelRingDots(g, cx + px, baseY + py, r, r * 0.55, 'rgba(200,240,255,' + (fade * 0.55).toFixed(2) + ')', mask);
+    pixelRingDots(g, cx + px, baseY + py, r, Math.max(1, Math.round(r * 0.55)), 'rgba(200,240,255,' + fade.toFixed(2) + ')', mask);
   }
 }
 
@@ -1048,19 +1052,25 @@ function fxStreams(g, cx, baseY, t) {
       g.globalAlpha = 1;
     }
   }
-  // churn where the painted cascades meet the pool (the art shows foam right
-  // at the pedestal's sides) — a gentle blink, clipped to water.
+  // stream churn where the painted cascades meet the pool: an explicit
+  // 4-frame, ~0.7s loop (authored offsets per frame, not continuous drift),
+  // desynced per side and clipped to water.
+  const CHURN_FRAMES = [
+    [[-2, 0, '#d4f6ff'], [0, 1, '#ffffff'], [2, 0, '#d4f6ff']],
+    [[-1, 1, '#ffffff'], [1, 0, '#d4f6ff'], [2, 1, '#d4f6ff']],
+    [[-2, 1, '#d4f6ff'], [0, 0, '#d4f6ff'], [1, 1, '#ffffff']],
+    [[-1, 0, '#d4f6ff'], [0, 1, '#ffffff'], [2, 1, '#d4f6ff']],
+  ];
   for (let f = 0; f < FX_FALLS.length; f++) {
     const fall = FX_FALLS[f];
     const lx = Math.round(cx + fall.xBot);
     const ly = Math.round(baseY + fall.yBot + 1);
-    for (let p = 0; p < 3; p++) {
-      const wob = Math.sin(t * 6 + p * 2.1 + f * 3);
-      const a = 0.25 + Math.abs(Math.sin(t * 4 + p * 1.7 + f)) * 0.35;
-      const fx2 = lx - 2 + p * 2 + Math.round(wob), fy2 = ly + (p % 2);
+    const frame = Math.floor((t / 0.175) + f * 2) % 4; // 4 frames x 0.175s = 0.7s loop
+    for (const [ox, oy, col] of CHURN_FRAMES[frame]) {
+      const fx2 = lx + ox, fy2 = ly + oy;
       if (!fountainWaterAt(fx2 - cx, fy2 - baseY)) continue;
-      g.globalAlpha = a;
-      rect(g, fx2, fy2, 1, 1, p === 1 ? '#ffffff' : '#d4f6ff');
+      g.globalAlpha = col === '#ffffff' ? 0.6 : 0.4;
+      rect(g, fx2, fy2, 1, 1, col);
       g.globalAlpha = 1;
     }
   }
@@ -1102,7 +1112,7 @@ function fxRunes(g, cx, baseY, t) {
 
 // 4. Crystal pulse: additive glow only — no scale, no move, no blur.
 function fxCrystalPulse(g, cx, baseY, t) {
-  const pulse = (Math.sin(t * (2 * Math.PI / 2.6)) * 0.5 + 0.5); // 0..1, ~2.6s loop
+  const pulse = (Math.sin(t * (2 * Math.PI / 2.5)) * 0.5 + 0.5); // 0..1, 2.5s loop
   const alpha = 0.06 + pulse * 0.09; // subtle: reads as ~100%->115% brightness
   g.save();
   g.globalCompositeOperation = 'lighter';
@@ -1123,7 +1133,7 @@ const MOTE_COLORS = [
   { core: '#8fb8ff', glint: '#dceaff' },  // blue
 ];
 function fxMotes(g, cx, baseY, t) {
-  const N = 5;
+  const N = 4; // max 4 visible per spec
   for (let i = 0; i < N; i++) {
     const period = 2.6 + i * 0.37;
     const loop = Math.floor((t + i * 2.9) / period);
