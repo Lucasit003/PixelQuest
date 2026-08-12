@@ -86,6 +86,17 @@ const MEADOW_TILE_STATE = { img: MEADOW_TILE_IMG, ready: false };
 MEADOW_TILE_IMG.onload = () => { MEADOW_TILE_STATE.ready = true; };
 MEADOW_TILE_IMG.src = 'assets/ground/meadow_01.png';
 const MEADOW_TILE = 56;
+
+// Crystal Plaza floor: real modular stone tiles (sliced from the same sheet
+// as the roads, so it's the same masonry family), not a procedural wash.
+const PLAZA_TILES = {};
+for (const n of ['plaza_base1', 'plaza_base2', 'plaza_worn', 'plaza_moss']) {
+  const img = new Image();
+  const st = { img, ready: false };
+  img.onload = () => { st.ready = true; };
+  img.src = `assets/plaza/${n}.png`;
+  PLAZA_TILES[n] = st;
+}
 const ROAD_IMGS = {};
 for (const n of ['straight_v', 'straight_h', 'cross', 't_up', 't_down', 't_left', 't_right',
   'corner_tl', 'corner_tr', 'corner_bl', 'end_s', 'end_s2', 'end_w', 'plaza_wide', 'damaged']) {
@@ -186,7 +197,7 @@ export class TownScene {
     const FC = { x: PZ.x, y: PZ.y - FOUNTAIN_H / 2 };
     this.plazaFocus = FC;
     // diameter ~2.35x the fountain's width -> fountain occupies ~43% of it
-    this.plazaRadius = Math.round(FOUNTAIN_W * 2.35 / 2);
+    this.plazaRadius = Math.round(FOUNTAIN_W * 2.2 / 2); // ~2.2x fountain diameter
 
     this.locations = [
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
@@ -320,6 +331,16 @@ export class TownScene {
     const exitS = [FC.x, FC.y + this.plazaRadius];
     const exitE = [FC.x + this.plazaRadius, FC.y];
     const exitW = [FC.x - this.plazaRadius, FC.y];
+    const R = this.plazaRadius;
+    // flare zones: wider than the road, straddling the plaza boundary at each
+    // exit, so the road visibly widens into the plaza instead of butting a
+    // hard rectangular seam against the round paving.
+    this.plazaFlares = [
+      { x: FC.x - 24, y: FC.y - R - 24, w: 48, h: 30 },  // N
+      { x: FC.x - 24, y: FC.y + R - 6, w: 48, h: 30 },   // S
+      { x: FC.x + R - 6, y: FC.y - 24, w: 30, h: 48 },   // E
+      { x: FC.x - R - 24, y: FC.y - 24, w: 30, h: 48 },  // W
+    ];
 
     this.roads = [
       // N: Plaza -> Watch -> Gate (the adventure trunk)
@@ -377,12 +398,15 @@ export class TownScene {
         for (let rr = r0; rr <= r1; rr++) for (let k = 0; k < across; k++) this.roadCells.add(`${cx + k},${rr}`);
       }
     }
-    // keep the plaza interior free of road-tile texture — the plaza floor
-    // owns that area, roads only exist from the radius outward
+    // keep the plaza interior AND its flare zones free of road-tile texture
+    // — the plaza floor owns that area, roads only exist beyond it
     for (const key of [...this.roadCells]) {
       const [c, r] = key.split(',').map(Number);
       const cx2 = c * ROAD_TILE + ROAD_TILE / 2, cy2 = r * ROAD_TILE + ROAD_TILE / 2;
-      if (Math.hypot(cx2 - FC.x, cy2 - FC.y) < this.plazaRadius - 6) this.roadCells.delete(key);
+      if (Math.hypot(cx2 - FC.x, cy2 - FC.y) < this.plazaRadius - 6) { this.roadCells.delete(key); continue; }
+      for (const fl of this.plazaFlares) {
+        if (cx2 > fl.x && cx2 < fl.x + fl.w && cy2 > fl.y && cy2 < fl.y + fl.h) { this.roadCells.delete(key); break; }
+      }
     }
 
     // ----------------------------------------------------------- terrain --
@@ -680,7 +704,7 @@ export class TownScene {
   _drawLocation(g, loc) {
     loc.draw(g);
     if (this.near === loc) {
-      const label = { training: 'Enter Training Grounds', weapon: 'Enter Weapon Shop', potion: 'Enter Potion Shop', market: 'Browse Market', pets: 'Visit Pet Keeper', library: 'Enter Library', quest: 'Read Quest Board', guild: 'Enter Guild', dungeon: 'Enter Dungeon', rest: 'Rest at Crystal', house: 'Enter Your House' }[loc.action] || 'Enter';
+      const label = { training: 'Enter Training Grounds', weapon: 'Enter Weapon Shop', potion: 'Enter Potion Shop', market: 'Browse Market', pets: 'Visit Pet Keeper', library: 'Enter Library', quest: 'Read Quest Board', guild: 'Enter Guild', dungeon: 'Enter Dungeon', rest: 'Rest', house: 'Enter Your House' }[loc.action] || 'Enter';
       const w = textWidth('[E] ' + label) + 12;
       panel(g, loc.dx - w / 2, loc.dy + 2, w, 13, { bg: 'rgba(12,10,22,0.9)' });
       const blink = Math.floor(this.t * 3) % 2 === 0;
@@ -746,7 +770,7 @@ export class TownScene {
     // Crystal Plaza: a real round stone floor, centered exactly on the
     // fountain's visual center, with genuine tile variation (base/worn/
     // moss/cracked/crystal-accent) instead of a flat wash.
-    plaza(g, this.plazaFocus.x, this.plazaFocus.y, this.plazaRadius);
+    plaza(g, this.plazaFocus.x, this.plazaFocus.y, this.plazaRadius, this.plazaFlares);
 
     // Market Square ground: one big organic open square (packed dirt with a
     // stone edge), stalls live on its rim, center stays open.
@@ -1520,47 +1544,70 @@ function corruptedRock(g, x, y) {
   rect(g, x - 2, y - 4, 1, 1, '#8a5cd0'); // faint purple vein
 }
 
-// Crystal Plaza floor: a round stone disc with real per-row tile variation
-// (base/worn/moss/cracked, plus a crystal accent concentrated near the
-// fountain) instead of a flat two-tone wash, plus a proper decorative border
-// ring. Cheap: one rect per scanline for the base, then scattered dabs.
-function plaza(g, cx, cy, r) {
-  const PLAZA_BASE = ['#b4aa90', '#a89e84'];       // ~60%: lit/shadow base stone
-  const PLAZA_WORN = '#9c9278';                     // ~15%: worn stone
-  const PLAZA_MOSS = '#7c8a68';                      // ~10%: moss/grass creep
-  const PLAZA_CRACK = '#847860';                     // ~10%: cracked/weathered
-  const PLAZA_CRYSTAL = ['#6a7ec9', '#8f9de0'];      // ~5%: magical accent (near fountain only)
+// Crystal Plaza floor: real modular stone tiles (sliced from the same sheet
+// as the roads — same masonry family), laid on the ROAD_TILE grid so the
+// paving lines up with the streets. Deterministic per-cell weighted pick:
+// ~65% base (split base1/base2), ~15% worn, ~8% moss, ~8% cracked (a tinted
+// worn tile), ~4% crystal accent (a base tile + a tiny cyan sparkle drawn on
+// top, only within the inner ring around the fountain). Falls back to a
+// plain stone-colored square per cell while the images are still loading,
+// never a flat wash circle. `flares` are the road-widen zones at each exit —
+// included so the paving flows into the roads with no hard seam.
+function plaza(g, cx, cy, r, flares) {
+  // Clip to a true circle (unioned with the flare rects) so the boundary is
+  // pixel-smooth and round instead of the blocky/cross shape a per-tile
+  // inclusion test gives at this radius — the tile art itself is unaffected,
+  // only what's visible through the clip changes.
+  g.save();
+  g.beginPath();
+  g.arc(cx, cy, r, 0, Math.PI * 2);
+  for (const f of flares) g.rect(f.x, f.y, f.w, f.h);
+  g.clip();
 
-  for (let yy = -r; yy <= r; yy++) {
-    const w = Math.floor(Math.sqrt(Math.max(0, r * r - yy * yy)));
-    if (w <= 0) continue;
-    const rowHash = hash(yy * 3.1 + cx * 0.01);
-    const base = rowHash < 0.5 ? PLAZA_BASE[0] : PLAZA_BASE[1];
-    rect(g, cx - w, cy + yy, w * 2, 1, base);
+  const c0 = Math.floor((cx - r - 30) / ROAD_TILE), c1 = Math.ceil((cx + r + 30) / ROAD_TILE);
+  const r0 = Math.floor((cy - r - 30) / ROAD_TILE), r1 = Math.ceil((cy + r + 30) / ROAD_TILE);
+
+  for (let rr = r0; rr <= r1; rr++) {
+    for (let cc = c0; cc <= c1; cc++) {
+      const px = cc * ROAD_TILE, py = rr * ROAD_TILE;
+      const tcx = px + ROAD_TILE / 2, tcy = py + ROAD_TILE / 2;
+      const dist = Math.hypot(tcx - cx, tcy - cy);
+      if (dist > r + ROAD_TILE) continue; // fully outside even the clip's bounding area -> skip drawing
+
+      const h = hash(cc * 5.17 + rr * 8.31);
+      let tile, tint = null;
+      if (h < 0.35) tile = PLAZA_TILES.plaza_base1;
+      else if (h < 0.65) tile = PLAZA_TILES.plaza_base2;
+      else if (h < 0.80) tile = PLAZA_TILES.plaza_worn;
+      else if (h < 0.88) tile = PLAZA_TILES.plaza_moss;
+      else if (h < 0.96) { tile = PLAZA_TILES.plaza_worn; tint = 'rgba(60,48,36,0.28)'; } // cracked/weathered
+      else { tile = (hash(cc * 3.3 + rr * 1.7 + 9) < 0.5) ? PLAZA_TILES.plaza_base1 : PLAZA_TILES.plaza_base2; }
+      const crystalAccent = h >= 0.96 && dist < r * 0.55;
+
+      if (tile.ready) {
+        g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE);
+        if (tint) { g.fillStyle = tint; g.fillRect(px, py, ROAD_TILE, ROAD_TILE); }
+      } else {
+        rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback, same stone family
+      }
+      if (crystalAccent) {
+        const sx = px + 8 + Math.round(hash(cc * 9.1 + rr) * 12), sy = py + 8 + Math.round(hash(cc + rr * 9.1) * 12);
+        rect(g, sx, sy, 2, 2, '#8fb8f0');
+        rect(g, sx + 1, sy - 1, 1, 1, '#cfe4ff');
+      }
+    }
   }
+  g.restore(); // drop the circle+flare clip
 
-  // scattered texture dabs: non-repeating, weighted so worn/moss/cracked
-  // read as ~15/10/10% of the floor and crystal accents only show up close
-  // to the fountain (the innermost ~35% of the radius).
-  const DABS = Math.round(r * r * 0.024); // scales with area, stays cheap
-  for (let i = 0; i < DABS; i++) {
-    const a = hash(i * 7.13) * Math.PI * 2;
-    const rr = Math.sqrt(hash(i * 3.71 + 1)) * (r - 3); // uniform over the disc
-    const px = Math.round(cx + Math.cos(a) * rr), py = Math.round(cy + Math.sin(a) * rr * 0.98);
-    const h = hash(i * 11.9 + 2);
-    const distF = rr / r;
-    let color, size;
-    if (h < 0.15) { color = PLAZA_WORN; size = 2; }
-    else if (h < 0.25) { color = PLAZA_MOSS; size = 2; }
-    else if (h < 0.35) { color = PLAZA_CRACK; size = 1; }
-    else if (h < 0.40 && distF < 0.4) { color = PLAZA_CRYSTAL[i % 2]; size = 1; }
-    else continue;
-    rect(g, px, py, size, size, color);
+  // subtle inner ring around the fountain footprint: cleaner stone (base
+  // tiles only, no worn/moss/crack) with occasional cyan accents and a thin
+  // geometric border line — restrained, not a glowing magic circle.
+  const ringR = Math.min(r - 14, FOUNTAIN_W * 0.62);
+  for (let a = 0; a < Math.PI * 2; a += 0.09) {
+    const px = Math.round(cx + Math.cos(a) * ringR), py = Math.round(cy + Math.sin(a) * ringR * 0.98);
+    const on = hash(a * 37.1) < 0.12;
+    rect(g, px, py, 1, 1, on ? '#9fd4e8' : '#c8bea0');
   }
-
-  // decorative concentric rings + outer stone border
-  for (let rr = 18; rr < r - 8; rr += 16) for (let a = 0; a < Math.PI * 2; a += 0.34) rect(g, Math.round(cx + Math.cos(a) * rr), Math.round(cy + Math.sin(a) * rr * 0.98), 2, 2, '#9a8f78');
-  for (let a = 0; a < Math.PI * 2; a += 0.1) rect(g, Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * 0.98), 2, 2, '#847a64');
 }
 
 // ---- Master Town Layout v1: temporary development markers -----------------
