@@ -271,17 +271,7 @@ export class TownScene {
 
       // ---- Market Square: one shared open square, stalls on its edges ----
       { id: 'market', name: 'Market Square', dx: D.market.x, dy: D.market.y, action: 'market', district: 'Market Square', zone: true,
-        draw: () => {}, solid: null },
-      { id: 'stallProduce', name: null, dx: null, dy: null, action: null, sortY: D.market.y - 60,
-        draw: (g) => drawMarker(g, D.market.x - 120, D.market.y - 86, 34, 26, 'Produce') },
-      { id: 'stallBakery', name: null, dx: null, dy: null, action: null, sortY: D.market.y - 72,
-        draw: (g) => drawMarker(g, D.market.x + 110, D.market.y - 98, 34, 26, 'Bakery') },
-      { id: 'stallCloth', name: null, dx: null, dy: null, action: null, sortY: D.market.y + 66,
-        draw: (g) => drawMarker(g, D.market.x - 150, D.market.y + 40, 34, 26, 'Cloth & Tailor') },
-      { id: 'stallGoods', name: null, dx: null, dy: null, action: null, sortY: D.market.y + 78,
-        draw: (g) => drawMarker(g, D.market.x + 145, D.market.y + 52, 34, 26, 'General Goods') },
-      { id: 'stallMerchant', name: null, dx: null, dy: null, action: null, sortY: D.market.y + 146,
-        draw: (g) => drawMarker(g, D.market.x - 10, D.market.y + 120, 30, 24, 'Traveling Merchant', '#7a9ca0') },
+        draw: (g) => drawMarket(g, D.market.x, D.market.y, this.t), solid: null },
 
       // ---- Residential Quarter: neighborhood loop with 4 lots ----
       { id: 'home', name: 'Player House', dx: D.residential.x + 120, dy: D.residential.y - 95, action: 'house', district: 'Residential Quarter',
