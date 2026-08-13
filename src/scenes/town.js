@@ -399,8 +399,11 @@ export class TownScene {
       ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 40, D.watch.y - 200], [D.gate.x, D.gate.y + 50]], advWidth),
       // E: Plaza -> Commercial courtyard
       ...roadPath([exitE, [PZ.x + 250, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
-      // S: Plaza -> Market
-      ...roadPath([exitS, [PZ.x + 110, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
+      // S: Plaza -> Market — straight south out of the plaza's own exit for
+      // a good stretch before bending toward market, instead of bending
+      // immediately at the plaza mouth (which read as a second road
+      // branching sideways right next to the exit).
+      ...roadPath([exitS, [PZ.x, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
       // Market <-> South Road
       ...roadPath([[D.market.x - 20, D.market.y + 150], [D.southRoad.x, D.southRoad.y]], mainWidth),
       // W: Plaza -> Residential entry
