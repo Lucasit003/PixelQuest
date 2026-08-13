@@ -70,7 +70,7 @@ const GUILD_W = 122, GUILD_H = 78;
 const BLACKSMITH_ART = loadBuildingArt('assets/blacksmith.png');
 const BLACKSMITH_W = 112, BLACKSMITH_H = 68;
 const HOUSE_ART = loadBuildingArt('assets/house.png');
-const HOUSE_W = 188, HOUSE_H = 165; // +150%
+const HOUSE_W = 75, HOUSE_H = 66;
 
 // Real building art swapped in for districts that were still using
 // procedural placeholders (drawMarker or hand-drawn rects).
@@ -81,21 +81,21 @@ const COTTAGE_W = 140, COTTAGE_H = 88;
 const WATCH_ART = loadBuildingArt('assets/buildings/wayferers_watch.png');
 const WATCH_W = 220, WATCH_H = 111;
 const SANCTUARY_ART = loadBuildingArt('assets/buildings/pet_sanctuary.png');
-const SANCTUARY_W = 375, SANCTUARY_H = 235; // +150%
+const SANCTUARY_W = 150, SANCTUARY_H = 94;
 const TRAINING_ART = loadBuildingArt('assets/buildings/training_grounds.png');
 const TRAINING_W = 260, TRAINING_H = 141;
 const DUNGEON_ART = loadBuildingArt('assets/buildings/duengon_gate.png');
-const DUNGEON_W = 550, DUNGEON_H = 289; // +175%
+const DUNGEON_W = 200, DUNGEON_H = 105;
 const STALL_PRODUCE_ART = loadBuildingArt('assets/buildings/stall_produce.png');
-const STALL_PRODUCE_W = 125, STALL_PRODUCE_H = 83; // +150%
+const STALL_PRODUCE_W = 50, STALL_PRODUCE_H = 33;
 const STALL_BAKERY_ART = loadBuildingArt('assets/buildings/stall_bakery.png');
-const STALL_BAKERY_W = 105, STALL_BAKERY_H = 90; // +150%
+const STALL_BAKERY_W = 42, STALL_BAKERY_H = 36;
 const STALL_CLOTH_ART = loadBuildingArt('assets/buildings/stall_cloth.png');
-const STALL_CLOTH_W = 105, STALL_CLOTH_H = 93; // +150%
+const STALL_CLOTH_W = 42, STALL_CLOTH_H = 37;
 const STALL_GOODS_ART = loadBuildingArt('assets/buildings/stall_goods.png');
-const STALL_GOODS_W = 130, STALL_GOODS_H = 80; // +150%
+const STALL_GOODS_W = 52, STALL_GOODS_H = 32;
 const STALL_MERCHANT_ART = loadBuildingArt('assets/buildings/stall_merchant.png');
-const STALL_MERCHANT_W = 125, STALL_MERCHANT_H = 83; // +150%
+const STALL_MERCHANT_W = 50, STALL_MERCHANT_H = 33;
 
 // Crystal lamp posts flanking the north (Adventure Road) approach to the
 // plaza — a landmark pair, sized well above the plaza's own scale.
@@ -1422,17 +1422,16 @@ function drawMarket(g, cx, cy, t) {
     { art: STALL_GOODS_ART, w: STALL_GOODS_W, h: STALL_GOODS_H },
     { art: STALL_MERCHANT_ART, w: STALL_MERCHANT_W, h: STALL_MERCHANT_H },
   ];
-  const spacing = 105; // scaled up with the +150% stall size so they don't overlap
-  const startX = cx - spacing * 2;
+  const startX = cx - 84;
   for (let i = 0; i < 5; i++) {
-    const sx = startX + i * spacing;
-    const sy = cy + (i % 2) * 20;
+    const sx = startX + i * 42;
+    const sy = cy + (i % 2) * 8;
     const s = stalls[i];
     contactShadow(g, sx, sy + s.h * 0.32, s.w * 0.4, 4, 0.25);
     if (s.art.ready) g.drawImage(s.art.img, Math.round(sx - s.w / 2), Math.round(sy - s.h / 2), s.w, s.h);
   }
   // well centrepiece
-  const wx = cx, wy = cy + 65;
+  const wx = cx, wy = cy + 26;
   shadow(g, wx, wy, 9, 3, 0.3);
   rect(g, wx - 9, wy - 8, 18, 8, '#8a8ea0'); rectOutline(g, wx - 9, wy - 8, 18, 8, '#3a3e4a');
   rect(g, wx - 10, wy - 20, 2, 12, '#5a3a24'); rect(g, wx + 8, wy - 20, 2, 12, '#5a3a24');
