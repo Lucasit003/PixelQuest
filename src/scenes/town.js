@@ -856,9 +856,8 @@ export class TownScene {
       }
     }
 
-    // roads: reconnected after the reorganization pass, same modular stone
-    // material as the plaza floor.
-    this._drawRoadTiles(g, visW, visH);
+    // Roads removed again (per direction) — plaza and buildings untouched,
+    // this just stops drawing the road-tile network.
 
     // Crystal Plaza: a real round stone floor, centered exactly on the
     // fountain's visual center, with genuine tile variation (base/worn/
