@@ -72,6 +72,31 @@ const BLACKSMITH_W = 112, BLACKSMITH_H = 68;
 const HOUSE_ART = loadBuildingArt('assets/house.png');
 const HOUSE_W = 75, HOUSE_H = 66;
 
+// Real building art swapped in for districts that were still using
+// procedural placeholders (drawMarker or hand-drawn rects).
+const LIBRARY_ART = loadBuildingArt('assets/buildings/libary.png');
+const LIBRARY_W = 100, LIBRARY_H = 78;
+const COTTAGE_ART = loadBuildingArt('assets/buildings/wayferers_cottage.png');
+const COTTAGE_W = 140, COTTAGE_H = 88;
+const WATCH_ART = loadBuildingArt('assets/buildings/wayferers_watch.png');
+const WATCH_W = 220, WATCH_H = 111;
+const SANCTUARY_ART = loadBuildingArt('assets/buildings/pet_sanctuary.png');
+const SANCTUARY_W = 150, SANCTUARY_H = 94;
+const TRAINING_ART = loadBuildingArt('assets/buildings/training_grounds.png');
+const TRAINING_W = 260, TRAINING_H = 141;
+const DUNGEON_ART = loadBuildingArt('assets/buildings/duengon_gate.png');
+const DUNGEON_W = 200, DUNGEON_H = 105;
+const STALL_PRODUCE_ART = loadBuildingArt('assets/buildings/stall_produce.png');
+const STALL_PRODUCE_W = 50, STALL_PRODUCE_H = 33;
+const STALL_BAKERY_ART = loadBuildingArt('assets/buildings/stall_bakery.png');
+const STALL_BAKERY_W = 42, STALL_BAKERY_H = 36;
+const STALL_CLOTH_ART = loadBuildingArt('assets/buildings/stall_cloth.png');
+const STALL_CLOTH_W = 42, STALL_CLOTH_H = 37;
+const STALL_GOODS_ART = loadBuildingArt('assets/buildings/stall_goods.png');
+const STALL_GOODS_W = 52, STALL_GOODS_H = 32;
+const STALL_MERCHANT_ART = loadBuildingArt('assets/buildings/stall_merchant.png');
+const STALL_MERCHANT_W = 50, STALL_MERCHANT_H = 33;
+
 // Crystal lamp posts flanking the north (Adventure Road) approach to the
 // plaza — a landmark pair, sized well above the plaza's own scale.
 const LAMP_CRYSTAL_ART = loadBuildingArt('assets/props/lamp_crystal.png');
@@ -116,7 +141,9 @@ const MEADOW_TILE = 56;
 const PLAZA_TILES = {};
 for (const n of ['base1', 'base2', 'base3', 'base4', 'worn1', 'worn2', 'lightmoss',
   'grasscracks', 'cracked', 'weathered', 'crystal1', 'crystal2', 'crystal3', 'crystal4',
-  'edge_grass1', 'edge_grass2', 'edge_broken', 'edge_moss']) {
+  'edge_grass1', 'edge_grass2', 'edge_broken', 'edge_moss',
+  'mix_base01', 'mix_base02', 'mix_base03', 'mix_base04', 'mix_base05',
+  'mix_weathered06', 'mix_weathered07', 'mix_weathered08', 'mix_weathered09']) {
   const img = new Image();
   const st = { img, ready: false };
   img.onload = () => { st.ready = true; };
@@ -278,8 +305,8 @@ export class TownScene {
         draw: (g) => drawPlayerHouse(g, D.residential.x + 120, D.residential.y - 95, this.t),
         solid: { x: D.residential.x + 120 - 70, y: D.residential.y - 195, w: 140, h: 100 } },
       { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: D.residential.x - 140, dy: D.residential.y - 75, action: null, district: 'Residential Quarter',
-        draw: (g) => drawMarker(g, D.residential.x - 140, D.residential.y - 130, 70, 55, 'Hearthwood Cottage'),
-        solid: { x: D.residential.x - 140 - 35, y: D.residential.y - 130, w: 70, h: 55 } },
+        draw: (g) => drawPropArt(g, COTTAGE_ART, D.residential.x - 140, D.residential.y - 75, COTTAGE_W, COTTAGE_H, COTTAGE_W * 0.28),
+        solid: { x: D.residential.x - 140 - COTTAGE_W / 2, y: D.residential.y - 75 - COTTAGE_H, w: COTTAGE_W, h: COTTAGE_H } },
       { id: 'lotA', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 175,
         draw: (g) => drawMarker(g, D.residential.x - 150, D.residential.y + 130, 60, 45, 'Future Home') },
       { id: 'lotB', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 185,
@@ -301,8 +328,8 @@ export class TownScene {
 
       // ---- Moonpaw Sanctuary: large green fenced property ----
       { id: 'pets', name: 'Moonpaw Sanctuary (reserved)', dx: D.sanctuary.x, dy: D.sanctuary.y + 55, action: 'pets', district: 'Moonpaw Sanctuary',
-        draw: (g) => drawMarker(g, D.sanctuary.x, D.sanctuary.y - 35, 130, 90, 'Moonpaw Sanctuary', '#7a9c68'),
-        solid: { x: D.sanctuary.x - 65, y: D.sanctuary.y - 35, w: 130, h: 90 } },
+        draw: (g) => drawPropArt(g, SANCTUARY_ART, D.sanctuary.x, D.sanctuary.y + 55, SANCTUARY_W, SANCTUARY_H, SANCTUARY_W * 0.28),
+        solid: { x: D.sanctuary.x - SANCTUARY_W / 2, y: D.sanctuary.y + 55 - SANCTUARY_H, w: SANCTUARY_W, h: SANCTUARY_H } },
 
       // ---- Valorhall: large dedicated compound ----
       { id: 'training', name: 'Valorhall Training Grounds', dx: D.training.x, dy: D.training.y, action: 'training', district: 'Valorhall Training Grounds', zone: true,
@@ -310,32 +337,14 @@ export class TownScene {
         solid: { x: D.training.x - 75, y: D.training.y - 60, w: 150, h: 24 } },
 
       // ---- Wayfarer's Watch: fortified checkpoint straddling the road ----
-      { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y + 25,
-        draw: (g) => {
-          drawMarker(g, D.watch.x - 55, D.watch.y - 25, 34, 50, '');
-          drawMarker(g, D.watch.x + 55, D.watch.y - 25, 34, 50, '');
-          drawMarker(g, D.watch.x + 120, D.watch.y - 18, 60, 45, "Wayfarer's Watch");
-        },
-        solid: null },
-      { id: 'watchPillarW', name: null, dx: null, dy: null, action: null, draw: () => {}, sortY: D.watch.y + 25,
-        solid: { x: D.watch.x - 55 - 17, y: D.watch.y - 25, w: 34, h: 50 } },
-      { id: 'watchPillarE', name: null, dx: null, dy: null, action: null, draw: () => {}, sortY: D.watch.y + 25,
-        solid: { x: D.watch.x + 55 - 17, y: D.watch.y - 25, w: 34, h: 50 } },
-      { id: 'watchHouse', name: null, dx: null, dy: null, action: null, draw: () => {}, sortY: D.watch.y + 27,
-        solid: { x: D.watch.x + 120 - 30, y: D.watch.y - 18, w: 60, h: 45 } },
+      { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y + 30,
+        draw: (g) => drawPropArt(g, WATCH_ART, D.watch.x + 35, D.watch.y + 30, WATCH_W, WATCH_H, WATCH_W * 0.22),
+        solid: { x: D.watch.x + 35 - WATCH_W / 2, y: D.watch.y + 30 - WATCH_H, w: WATCH_W, h: WATCH_H * 0.55 } },
 
       // ---- Runebound Gate: large northern landmark approach ----
       { id: 'dungeon', name: 'Runebound Gate', dx: D.gate.x, dy: D.gate.y + 48, action: 'dungeon', district: 'Runebound Gate',
-        draw: (g) => {
-          drawMarker(g, D.gate.x - 65, D.gate.y - 30, 40, 58, '');
-          drawMarker(g, D.gate.x + 65, D.gate.y - 30, 40, 58, '');
-          drawSignpost(g, D.gate.x - 120, D.gate.y + 28, 'Runebound Gate');
-        },
-        solid: null },
-      { id: 'gatePillarW', name: null, dx: null, dy: null, action: null, draw: () => {}, sortY: D.gate.y + 28,
-        solid: { x: D.gate.x - 65 - 20, y: D.gate.y - 30, w: 40, h: 58 } },
-      { id: 'gatePillarE', name: null, dx: null, dy: null, action: null, draw: () => {}, sortY: D.gate.y + 28,
-        solid: { x: D.gate.x + 65 - 20, y: D.gate.y - 30, w: 40, h: 58 } },
+        draw: (g) => drawPropArt(g, DUNGEON_ART, D.gate.x, D.gate.y + 28, DUNGEON_W, DUNGEON_H, DUNGEON_W * 0.22),
+        solid: { x: D.gate.x - DUNGEON_W / 2, y: D.gate.y + 28 - DUNGEON_H, w: DUNGEON_W, h: DUNGEON_H * 0.65 } },
 
       // ---- Quest Board: small functional prop by the Watch ----
       { id: 'quest', name: 'Quest Board', dx: D.watch.x - 110, dy: D.watch.y + 55, action: 'quest', district: "Wayfarer's Watch",
@@ -1061,30 +1070,9 @@ function drawPlayerHouse(g, cx, baseY, t) {
 }
 
 function drawLibrary(g, cx, baseY, t) {
-  const w = 80, h = 50;
-  shadow(g, cx, baseY, w * 0.55, 6, 0.32);
-  const x = Math.round(cx - w / 2), y = Math.round(baseY - h);
-  rect(g, x, y, w, h, '#8a8ea0');
-  for (let ry = 0; ry < h; ry += 6) rect(g, x, y + ry, w, 1, '#767a8c');
-  for (let rx = 0; rx < w; rx += 10) rect(g, x + ((rx / 10) % 2) * 5, y, 1, h, '#767a8c');
-  rect(g, x - 1, baseY - 6, w + 2, 6, '#6b6f80');
-  rectOutline(g, x, y, w, h, '#3a3e4a');
-  pitchedRoof(g, cx, y - 18, w, 20, '#5a6178', '#42485a', '#2a2e38', 7);
-  // grand arched windows
-  for (const wx of [cx - 24, cx, cx + 24]) {
-    rect(g, wx - 5, baseY - 30, 10, 24, '#2e2350');
-    disc(g, wx, baseY - 30, 5, '#2e2350');
-    rect(g, wx - 4, baseY - 28, 8, 22, '#6b4fb0');
-    rect(g, wx - 1, baseY - 28, 2, 22, '#b8a8ff');
-    rectOutline(g, wx - 5, baseY - 30, 10, 30, '#2a1e14');
-  }
-  // steps + columns + door
-  rect(g, cx - 20, baseY, 40, 3, '#9a9eb0'); rect(g, cx - 24, baseY + 3, 48, 3, '#8a8ea0');
-  door(g, cx, baseY, 15, 22, '#3a2b1a');
-  // purple magical emblem above the door
-  disc(g, cx, y - 4, 5, '#4a37a0'); disc(g, cx, y - 4, 3, '#9d8bff'); rect(g, cx - 1, y - 7, 2, 6, '#c9bcff');
-  // banner
-  rect(g, cx - w / 2 + 3, y + 4, 5, 20, '#4a37a0'); drawIcon(g, 'book', cx - w / 2 + 1, y + 8);
+  contactShadow(g, cx, baseY, LIBRARY_W * 0.42, 6, 0.32);
+  if (!LIBRARY_ART.ready) return;
+  g.drawImage(LIBRARY_ART.img, Math.round(cx - LIBRARY_W / 2), Math.round(baseY - LIBRARY_H), LIBRARY_W, LIBRARY_H);
 }
 
 // The Weapon Shop & Blacksmith — rendered from the authored transparent PNG
@@ -1411,48 +1399,27 @@ function drawTavern(g, cx, baseY, t) {
 }
 
 function drawTrainingGround(g, cx, cy, t) {
-  // a big fenced district: sparring ring, dummies, targets, racks, banners, crystal
-  const w = 150, h = 120;
-  const x = cx - w / 2, y = cy - h / 2;
-  rect(g, x, y, w, h, '#8a6f4a');
-  for (let rx = 4; rx < w; rx += 12) for (let ry = 6; ry < h; ry += 12) rect(g, x + rx, y + ry, 2, 1, '#7a6040');
-  // fence
-  for (let fx = x; fx <= x + w; fx += 9) { rect(g, fx, y - 3, 1, 7, '#6b4a2e'); rect(g, fx, y + h - 3, 1, 7, '#6b4a2e'); }
-  for (let fy = y; fy <= y + h; fy += 9) { rect(g, x, fy, 7, 1, '#6b4a2e'); rect(g, x + w - 6, fy, 7, 1, '#6b4a2e'); }
-  rect(g, x, y - 1, w, 1, '#7a5530'); rect(g, x, y + h, w, 1, '#7a5530');
-  // sparring ring (sand circle)
-  for (let yy = -18; yy <= 18; yy++) { const rw = Math.floor(20 * Math.sqrt(Math.max(0, 1 - (yy * yy) / 324))); rect(g, cx - rw, cy + 4 + yy, rw * 2, 1, '#a8905c'); }
-  disc(g, cx, cy + 4, 18, '#9a835040'.slice(0, 7)); rectOutline(g, cx - 18, cy - 14, 36, 36, '#7a6040');
-  // archery targets along the top
-  for (const tx of [x + 20, x + 40, x + 60]) { disc(g, tx, y + 14, 6, '#e8e2c8'); disc(g, tx, y + 14, 4, '#e05a5a'); disc(g, tx, y + 14, 2, '#e8e2c8'); }
-  // dummies
-  drawDummy(g, x + 108, y + 26, t); drawDummy(g, x + 128, y + 30, t + 1.1);
-  drawDummy(g, x + 30, cy + 30, t + 0.6);
-  // weapon racks
-  weaponRack(g, x + 14, y + h - 12); weaponRack(g, x + w - 22, y + h - 12);
-  // magical training crystal
-  const crx = x + w - 26, cry = y + 30;
-  g.globalAlpha = 0.3 + Math.sin(t * 3) * 0.1; disc(g, crx, cry, 7, '#9fd6ff'); g.globalAlpha = 1;
-  rect(g, crx - 1, cry - 7, 2, 14, '#bfe6ff'); rect(g, crx - 3, cry - 2, 6, 5, '#8fc6ef');
-  // banners on the fence
-  banner(g, x + 6, y + 6, '#3a5cc0'); banner(g, x + w - 8, y + 6, '#c0463c');
-  // benches
-  bench(g, cx - 30, cy + 40); bench(g, cx + 20, cy + 40);
+  contactShadow(g, cx, cy + TRAINING_H / 2 - 6, TRAINING_W * 0.3, 6, 0.25);
+  if (!TRAINING_ART.ready) return;
+  g.drawImage(TRAINING_ART.img, Math.round(cx - TRAINING_W / 2), Math.round(cy - TRAINING_H / 2), TRAINING_W, TRAINING_H);
 }
 
 function drawMarket(g, cx, cy, t) {
-  // compact lively market: 5 stalls with colourful awnings, well, cart, produce
-  const colors = ['#c0463c', '#3f7a5c', '#c99a2f', '#5c6a8a', '#8a4a8a'];
+  // compact lively market: 5 real stall sprites, well centrepiece
+  const stalls = [
+    { art: STALL_PRODUCE_ART, w: STALL_PRODUCE_W, h: STALL_PRODUCE_H },
+    { art: STALL_BAKERY_ART, w: STALL_BAKERY_W, h: STALL_BAKERY_H },
+    { art: STALL_CLOTH_ART, w: STALL_CLOTH_W, h: STALL_CLOTH_H },
+    { art: STALL_GOODS_ART, w: STALL_GOODS_W, h: STALL_GOODS_H },
+    { art: STALL_MERCHANT_ART, w: STALL_MERCHANT_W, h: STALL_MERCHANT_H },
+  ];
   const startX = cx - 84;
   for (let i = 0; i < 5; i++) {
     const sx = startX + i * 42;
     const sy = cy + (i % 2) * 8;
-    rect(g, sx - 16, sy - 6, 32, 6, '#6b4a2e');            // counter
-    awning(g, sx, sy - 26, 36, colors[i]);
-    rect(g, sx - 18, sy - 26, 2, 24, '#5a3a24'); rect(g, sx + 16, sy - 26, 2, 24, '#5a3a24');
-    // goods
-    drawIcon(g, ['potionRed', 'coin', 'book', 'potionRed', 'coin'][i], sx - 12, sy - 12);
-    drawIcon(g, ['coin', 'potionRed', 'coin', 'book', 'potionRed'][i], sx + 2, sy - 12);
+    const s = stalls[i];
+    contactShadow(g, sx, sy + s.h * 0.32, s.w * 0.4, 4, 0.25);
+    if (s.art.ready) g.drawImage(s.art.img, Math.round(sx - s.w / 2), Math.round(sy - s.h / 2), s.w, s.h);
   }
   // well centrepiece
   const wx = cx, wy = cy + 26;
@@ -1685,15 +1652,27 @@ function plazaWeathered(cc, rr) { return hash(cc * 4.1 + rr * 1.7 + 50) < 0.5 ? 
 // Crystal Plaza floor: three concentric zones (inner fountain area, main
 // walking area, outer weathered edge) built from the real modular stone
 // pack, not a single random distribution — see the brief's zone breakdown.
+// A wider mixture of stone variants (from the Crystal Plaza Modular Stone
+// Pack) used only for the road->plaza connection itself, so that stretch
+// reads as richer/more varied than the plaza's own interior paving.
+const MIX_BASE = ['mix_base01', 'mix_base02', 'mix_base03', 'mix_base04', 'mix_base05'];
+const MIX_WEATHERED = ['mix_weathered06', 'mix_weathered07', 'mix_weathered08', 'mix_weathered09'];
+function mixBaseTile(cc, rr) {
+  const h = hash(cc * 6.3 + rr * 2.9 + 150);
+  return PLAZA_TILES[MIX_BASE[Math.floor(h * MIX_BASE.length) % MIX_BASE.length]];
+}
+function mixWeatheredTile(cc, rr) {
+  const h = hash(cc * 3.7 + rr * 6.1 + 160);
+  return PLAZA_TILES[MIX_WEATHERED[Math.floor(h * MIX_WEATHERED.length) % MIX_WEATHERED.length]];
+}
 function flareTile(cc, rr, t) {
   // t: 0 at the plaza edge (clean, matches the inner paving) -> 1 at the
   // road-facing edge (progressively more worn, so the material reads as
   // easing toward the road's rougher cobble without a hard tileset swap).
   const h = hash(cc * 5.17 + rr * 8.31 + 90);
   const hh = h - t * 0.55;
-  if (hh < 0.55) return plazaBase(cc, rr);
-  if (hh < 0.78) return plazaWorn(cc, rr);
-  if (hh < 0.93) return plazaWeathered(cc, rr);
+  if (hh < 0.55) return mixBaseTile(cc, rr);
+  if (hh < 0.85) return mixWeatheredTile(cc, rr);
   return PLAZA_TILES.lightmoss;
 }
 
