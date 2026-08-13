@@ -880,7 +880,10 @@ export class TownScene {
     }
   }
 
-  /** Draw the visible road cells, picking each tile from its neighbour mask. */
+  /** Draw the visible road cells from the Crystal Plaza Modular Stone Pack.
+   * Per-cell hash-picked variants (mostly clean base, occasional weathered) —
+   * the exact same material system as the plaza floor, so roads and plaza
+   * read as one continuous masonry network with no seam anywhere. */
   _drawRoadTiles(g, visW, visH) {
     const has = (c, r) => this.roadCells.has(`${c},${r}`);
     const c0 = Math.floor(this.camX / ROAD_TILE) - 1, c1 = Math.ceil((this.camX + visW) / ROAD_TILE) + 1;
@@ -888,17 +891,11 @@ export class TownScene {
     for (let r = r0; r <= r1; r++) {
       for (let c = c0; c <= c1; c++) {
         if (!has(c, r)) continue;
-        const mask = (has(c, r - 1) ? 1 : 0) | (has(c + 1, r) ? 2 : 0) | (has(c, r + 1) ? 4 : 0) | (has(c - 1, r) ? 8 : 0);
-        const [name, flip] = ROAD_MASK[mask] || ROAD_MASK[15];
-        const img = ROAD_IMGS[name];
-        if (!img || !img.complete || !img.naturalWidth) continue;
         const x = c * ROAD_TILE, y = r * ROAD_TILE;
-        if (flip) {
-          g.save(); g.translate(x + ROAD_TILE, y); g.scale(-1, 1);
-          g.drawImage(img, 0, 0, ROAD_TILE, ROAD_TILE); g.restore();
-        } else {
-          g.drawImage(img, x, y, ROAD_TILE, ROAD_TILE);
-        }
+        const h = hash(c * 6.3 + r * 2.9 + 150);
+        const tile = h < 0.72 ? mixBaseTile(c, r) : mixWeatheredTile(c, r);
+        if (tile && tile.ready) g.drawImage(tile.img, x, y, ROAD_TILE, ROAD_TILE);
+        else rect(g, x, y, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback
         // Adventure Road wash: everything north of the Guild reads darker and
         // heavier until the dedicated adventure-road tiles are sliced.
         if (y < this.adventureRoadY) {
