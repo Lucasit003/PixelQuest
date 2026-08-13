@@ -248,18 +248,23 @@ export class TownScene {
     const PZ = { x: 1300, y: 1180 };
     const OFF = (dx, dy) => ({ x: PZ.x + dx, y: PZ.y + dy });
 
+    // Compact core (reorganization pass): every district pulled 30-50%+
+    // closer to the plaza than the old scattered layout, positioned so the
+    // town reads as one connected settlement radiating from the fountain.
+    // North axis is now a clear progression — Plaza -> Guild -> Watch ->
+    // Gate — instead of Guild sitting off to the west.
     const D = {
       plaza: PZ,
-      commercial: OFF(430, 0),      // east: shared Potion + Forge courtyard
-      market: OFF(180, 420),        // south-southeast: big open square
-      residential: OFF(-500, 370),  // southwest: neighborhood loop
-      southRoad: OFF(20, 640),      // south exit / expansion
-      guild: OFF(-430, -170),       // west-northwest: Shield & Stein + courtyard
-      archive: OFF(520, -430),      // northeast: landscaped property
-      sanctuary: OFF(-620, -530),   // northwest: green fenced property
-      training: OFF(-950, -240),    // far west: Valorhall compound
-      watch: OFF(60, -560),         // north, on the Adventure Road
-      gate: OFF(0, -960),           // far north landmark
+      commercial: OFF(260, 10),     // east: shared Potion + Forge courtyard
+      market: OFF(110, 300),        // south/southeast: open square
+      residential: OFF(-280, 270),  // southwest: neighborhood loop
+      southRoad: OFF(20, 380),      // south exit / expansion
+      guild: OFF(-90, -260),        // north(-ish): first stop on the adventure route
+      archive: OFF(480, -250),      // northeast: landscaped property
+      sanctuary: OFF(-500, -450),   // outer northwest: vegetation-buffered
+      training: OFF(-620, -190),    // west/northwest: Valorhall compound
+      watch: OFF(25, -700),         // north, on the Adventure Road, past the guild
+      gate: OFF(0, -1080),          // far north landmark
     };
 
     this.plazaCenter = PZ;
@@ -358,18 +363,20 @@ export class TownScene {
     this.solids = this.locations.filter((l) => l.solid).map((l) => l.solid);
 
     // district entry-banner regions
+    // Footprints sized down to match the compact reorg — kept smaller than
+    // the gaps between districts so entry banners don't overlap each other.
     this.regions = [
-      { name: 'Crystal Plaza', x: PZ.x - 150, y: PZ.y - 150, w: 300, h: 290 },
-      { name: 'Commercial District', x: D.commercial.x - 170, y: D.commercial.y - 120, w: 380, h: 230 },
-      { name: 'Market Square', x: D.market.x - 230, y: D.market.y - 170, w: 460, h: 350 },
-      { name: 'Residential Quarter', x: D.residential.x - 280, y: D.residential.y - 220, w: 540, h: 440 },
-      { name: 'Shield & Stein', x: D.guild.x - 150, y: D.guild.y - 120, w: 300, h: 240 },
-      { name: 'Runewood Archive', x: D.archive.x - 150, y: D.archive.y - 120, w: 300, h: 240 },
-      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 170, y: D.sanctuary.y - 140, w: 340, h: 290 },
-      { name: 'Valorhall Training Grounds', x: D.training.x - 200, y: D.training.y - 170, w: 400, h: 340 },
-      { name: "Wayfarer's Watch", x: D.watch.x - 200, y: D.watch.y - 140, w: 400, h: 250 },
-      { name: 'Runebound Gate', x: D.gate.x - 220, y: D.gate.y - 160, w: 440, h: 290 },
-      { name: 'South Road', x: D.southRoad.x - 150, y: D.southRoad.y - 120, w: 300, h: 240 },
+      { name: 'Crystal Plaza', x: PZ.x - 130, y: PZ.y - 130, w: 260, h: 250 },
+      { name: 'Commercial District', x: D.commercial.x - 110, y: D.commercial.y - 80, w: 220, h: 160 },
+      { name: 'Market Square', x: D.market.x - 140, y: D.market.y - 110, w: 280, h: 220 },
+      { name: 'Residential Quarter', x: D.residential.x - 170, y: D.residential.y - 140, w: 340, h: 280 },
+      { name: 'Shield & Stein', x: D.guild.x - 100, y: D.guild.y - 85, w: 200, h: 170 },
+      { name: 'Runewood Archive', x: D.archive.x - 110, y: D.archive.y - 90, w: 220, h: 180 },
+      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 130, y: D.sanctuary.y - 110, w: 260, h: 220 },
+      { name: 'Valorhall Training Grounds', x: D.training.x - 150, y: D.training.y - 130, w: 300, h: 260 },
+      { name: "Wayfarer's Watch", x: D.watch.x - 140, y: D.watch.y - 100, w: 280, h: 180 },
+      { name: 'Runebound Gate', x: D.gate.x - 160, y: D.gate.y - 120, w: 320, h: 220 },
+      { name: 'South Road', x: D.southRoad.x - 110, y: D.southRoad.y - 90, w: 220, h: 180 },
     ];
 
     // ------------------------------------------------------------ roads ---
@@ -405,47 +412,48 @@ export class TownScene {
     ];
 
     this.roads = [
-      // N: Plaza -> Watch -> Gate (the adventure trunk)
+      // N: Plaza -> Guild (passed on the way) -> Watch -> Gate — the clear
+      // adventure progression called for by the reorg brief.
       ...roadPath([exitN, guildBranch, [D.watch.x, D.watch.y + 45]], mainWidth),
-      ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 40, D.watch.y - 200], [D.gate.x, D.gate.y + 50]], advWidth),
+      ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 20, D.watch.y - 150], [D.gate.x, D.gate.y + 50]], advWidth),
       // E: Plaza -> Commercial courtyard
-      ...roadPath([exitE, [PZ.x + 250, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
+      ...roadPath([exitE, [PZ.x + 150, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
       // S: Plaza -> Market — straight south out of the plaza's own exit for
-      // a good stretch before bending toward market, instead of bending
-      // immediately at the plaza mouth (which read as a second road
-      // branching sideways right next to the exit).
-      ...roadPath([exitS, [PZ.x, PZ.y + 250], [D.market.x - 40, D.market.y - 140]], mainWidth),
+      // a stretch before bending toward market, instead of bending
+      // immediately at the plaza mouth.
+      ...roadPath([exitS, [PZ.x, PZ.y + 150], [D.market.x - 30, D.market.y - 90]], mainWidth),
       // Market <-> South Road
-      ...roadPath([[D.market.x - 20, D.market.y + 150], [D.southRoad.x, D.southRoad.y]], mainWidth),
+      ...roadPath([[D.market.x - 15, D.market.y + 90], [D.southRoad.x, D.southRoad.y]], mainWidth),
       // W: Plaza -> Residential entry
-      ...roadPath([exitW, [PZ.x - 280, PZ.y + 150], [D.residential.x + 200, D.residential.y - 40]], mainWidth),
+      ...roadPath([exitW, [PZ.x - 170, PZ.y + 90], [D.residential.x + 130, D.residential.y - 25]], mainWidth),
       // Residential neighborhood loop (organic ring with lot frontage)
       ...roadPath([
-        [D.residential.x + 200, D.residential.y - 40],
-        [D.residential.x + 120, D.residential.y - 40],
-        [D.residential.x - 200, D.residential.y - 60],
-        [D.residential.x - 230, D.residential.y + 130],
-        [D.residential.x + 10, D.residential.y + 190],
-        [D.residential.x + 170, D.residential.y + 90],
-        [D.residential.x + 200, D.residential.y - 40],
+        [D.residential.x + 130, D.residential.y - 25],
+        [D.residential.x + 75, D.residential.y - 25],
+        [D.residential.x - 125, D.residential.y - 35],
+        [D.residential.x - 140, D.residential.y + 80],
+        [D.residential.x + 5, D.residential.y + 115],
+        [D.residential.x + 105, D.residential.y + 55],
+        [D.residential.x + 130, D.residential.y - 25],
       ], mainWidth),
 
-      // Guild branch off the north trunk (west-northwest)
-      ...roadPath([guildBranch, [PZ.x - 260, PZ.y - 300], [D.guild.x, D.guild.y + 55]], mainWidth),
+      // Guild branch off the north trunk — a short spur, since the guild
+      // now sits almost directly on the Plaza->Watch line.
+      ...roadPath([guildBranch, [PZ.x - 95, PZ.y - 190], [D.guild.x, D.guild.y + 55]], mainWidth),
 
       // Commercial <-> Archive (northeast landscaped path) — branches off the
       // main Plaza->Commercial road well before the courtyard (same pattern
       // as guildBranch off the north trunk), so only one road visibly meets
       // the courtyard instead of two separate slabs merging there.
-      ...roadPath([[PZ.x + 250, PZ.y + 10], [D.commercial.x + 120, D.commercial.y - 250], [D.archive.x, D.archive.y + 48]], narrowWidth),
+      ...roadPath([[PZ.x + 150, PZ.y + 10], [D.commercial.x + 70, D.commercial.y - 150], [D.archive.x, D.archive.y + 48]], narrowWidth),
       // Archive <-> adventure road (west link across the north)
-      ...roadPath([[D.archive.x - 48, D.archive.y + 20], [PZ.x + 120, D.watch.y + 100], [D.watch.x + 40, D.watch.y + 60]], narrowWidth),
+      ...roadPath([[D.archive.x - 30, D.archive.y + 20], [PZ.x + 70, D.watch.y + 60], [D.watch.x + 25, D.watch.y + 40]], narrowWidth),
       // Guild <-> Sanctuary (northwest, vegetation-buffered)
-      ...roadPath([[D.guild.x - 40, D.guild.y - 35], [D.guild.x - 140, D.guild.y - 220], [D.sanctuary.x, D.sanctuary.y + 58]], narrowWidth),
+      ...roadPath([[D.guild.x - 25, D.guild.y - 20], [D.guild.x - 90, D.guild.y - 140], [D.sanctuary.x, D.sanctuary.y + 58]], narrowWidth),
       // Residential loop <-> Training compound (far west)
-      ...roadPath([[D.residential.x - 230, D.residential.y + 40], [D.residential.x - 420, D.residential.y - 180], [D.training.x, D.training.y + 95]], narrowWidth),
+      ...roadPath([[D.residential.x - 140, D.residential.y + 25], [D.residential.x - 260, D.residential.y - 110], [D.training.x, D.training.y + 95]], narrowWidth),
       // Training <-> Sanctuary (outer west link)
-      ...roadPath([[D.training.x, D.training.y - 60], [D.training.x + 120, D.sanctuary.y + 160], [D.sanctuary.x - 40, D.sanctuary.y + 60]], narrowWidth),
+      ...roadPath([[D.training.x, D.training.y - 40], [D.training.x + 70, D.sanctuary.y + 100], [D.sanctuary.x - 25, D.sanctuary.y + 40]], narrowWidth),
     ];
 
     // north of the guild's latitude, road tiles get the darker adventure wash
@@ -848,8 +856,9 @@ export class TownScene {
       }
     }
 
-    // Roads removed for now (per direction) — plaza and buildings are
-    // untouched, this just stops drawing the road-tile network.
+    // roads: reconnected after the reorganization pass, same modular stone
+    // material as the plaza floor.
+    this._drawRoadTiles(g, visW, visH);
 
     // Crystal Plaza: a real round stone floor, centered exactly on the
     // fountain's visual center, with genuine tile variation (base/worn/
