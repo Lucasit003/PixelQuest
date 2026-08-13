@@ -253,24 +253,33 @@ export class TownScene {
     // town reads as one connected settlement radiating from the fountain.
     // North axis is now a clear progression — Plaza -> Guild -> Watch ->
     // Gate — instead of Guild sitting off to the west.
+    // Every offset below is a deliberate percentage of the actual map size
+    // (MAP_W x MAP_H), not an eyeballed pixel guess, so the described
+    // positions ("decent bit right", "top center", "close proximity", etc)
+    // scale consistently against the real map rather than a screenshot's
+    // framing. Convention used throughout: "slight" ~5%, "a decent bit"
+    // ~15%, "close proximity/not too far" ~20%, "lower down/lower side"
+    // ~30%, edges (top/bottom center) ~10-12% margin from that edge.
+    const pctW = (p) => MAP_W * p / 100;
+    const pctH = (p) => MAP_H * p / 100;
     const D = {
       plaza: PZ,
       commercial: OFF(260, 10),     // (unused now — potion/weapon have standalone spots below)
-      market: OFF(280, 100),        // a decent bit right, only slightly below the fountain
+      market: OFF(pctW(15), pctH(5)),      // a decent bit right, only slightly below the fountain
       residential: OFF(-280, 270),  // cottage + lots + loop road (unmoved)
       southRoad: OFF(20, 380),      // south exit / expansion
-      guild: OFF(-180, 600),        // bottom-middle, left of the fountain, lower down
-      archive: OFF(180, 600),       // bottom-middle, right of the fountain, lower down
-      sanctuary: OFF(530, 250),     // right of market, lower side
-      training: OFF(-400, -100),    // left side, close to the fountain's left, slightly up
-      watch: OFF(0, -700),          // between gate and fountain, closer to the gate
-      gate: OFF(0, -1000),          // top center of the map
+      guild: OFF(-pctW(10), pctH(30)),     // bottom-middle, left of the fountain, lower down
+      archive: OFF(pctW(10), pctH(30)),    // bottom-middle, right of the fountain, lower down
+      training: OFF(-pctW(20), -pctH(5)),  // left side, close to the fountain's left, slightly up
+      watch: OFF(0, -pctH(25)),            // between gate and fountain, closer to the gate
+      gate: OFF(0, -(MAP_H / 2 - pctH(12))), // top center, ~12% margin from the map's top edge
     };
-    // Standalone points that used to ride on a shared district anchor but now
-    // have their own spot per the latest layout pass.
-    const houseSpot = { x: D.market.x + 250, y: D.market.y - 100 };  // right of market, upper side
-    const forgeSpot = { x: D.training.x, y: D.training.y + 170 };    // below training, gap included
-    const potionSpot = { x: forgeSpot.x, y: forgeSpot.y + 110 };     // below weapon smith, room between
+    // Standalone points anchored off Market/Training with the same percentage
+    // convention, since they no longer share a district anchor with anything.
+    const houseSpot = { x: D.market.x + pctW(15), y: D.market.y - pctH(5) };   // right of market, upper side
+    D.sanctuary = { x: D.market.x + pctW(15), y: D.market.y + pctH(8) };       // right of market, lower side
+    const forgeSpot = { x: D.training.x, y: D.training.y + pctH(8) };   // below training, gap included
+    const potionSpot = { x: forgeSpot.x, y: forgeSpot.y + pctH(8) };    // below weapon smith, room between
 
     this.plazaCenter = PZ;
     // The fountain sprite is anchored at its base (PZ.y) and drawn upward, so
