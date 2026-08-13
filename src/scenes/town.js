@@ -1094,6 +1094,15 @@ function drawBlacksmith(g, cx, baseY, t) {
   contactShadow(g, cx, baseY, BLACKSMITH_W * 0.42, 6, 0.32);
   if (!BLACKSMITH_ART.ready) return;
   g.drawImage(BLACKSMITH_ART.img, Math.round(cx - BLACKSMITH_W / 2), Math.round(baseY - BLACKSMITH_H), BLACKSMITH_W, BLACKSMITH_H);
+  // wisps of smoke off the chimney — the forge is always lit
+  const sx = cx + 5, sy0 = baseY - 59;
+  for (let i = 0; i < 3; i++) {
+    const k = ((t * 0.35 + i / 3) % 1);
+    const sy = sy0 - k * 16;
+    g.globalAlpha = (1 - k) * 0.35;
+    disc(g, sx + Math.sin(t * 1.3 + i * 2) * 2, sy, 1.5 + k * 2, '#c9c2ba');
+  }
+  g.globalAlpha = 1;
 }
 
 // The Potion Shop — rendered directly from the authored transparent PNG (real
@@ -1103,7 +1112,19 @@ function drawPotionShop(g, cx, baseY, t) {
   // subtle ground/contact shadow (light from upper-left -> shadow lower-right)
   contactShadow(g, cx, baseY, POTION_W * 0.42, 6, 0.30);
   if (!POTION_READY) return; // image not loaded yet this frame
+  // soft breathing glow behind the roof-peak potion sign, before the art so
+  // it reads as light coming from inside the glass, not painted on top
+  const sx = cx, sy = baseY - 43;
+  const f = 0.5 + Math.sin(t * 2.2) * 0.25;
+  g.globalAlpha = f * 0.35; disc(g, sx, sy, 9, '#c98bff'); g.globalAlpha = 1;
   g.drawImage(POTION_IMG, Math.round(cx - POTION_W / 2), Math.round(baseY - POTION_H), POTION_W, POTION_H);
+  // a couple of drifting sparkles, like the sign's magic never fully settles
+  for (let i = 0; i < 2; i++) {
+    const a = t * 1.4 + i * 3.1;
+    g.globalAlpha = 0.5 + Math.sin(t * 3 + i) * 0.3;
+    rect(g, Math.round(sx + Math.cos(a) * 8), Math.round(sy + Math.sin(a) * 6 - 2), 1, 1, '#eadcff');
+  }
+  g.globalAlpha = 1;
 }
 
 // The Crystal Plaza fountain — rendered from the authored transparent PNG.
@@ -1406,6 +1427,9 @@ function drawTavern(g, cx, baseY, t) {
   contactShadow(g, cx, baseY, GUILD_W * 0.42, 7, 0.34);
   if (!GUILD_ART.ready) return;
   g.drawImage(GUILD_ART.img, Math.round(cx - GUILD_W / 2), Math.round(baseY - GUILD_H), GUILD_W, GUILD_H);
+  // a slow gleam sweeping over the hanging shield sign above the door
+  const f = 0.55 + Math.sin(t * 1.8 + cx) * 0.25;
+  g.globalAlpha = f * 0.3; disc(g, cx + 2, baseY - 42, 8, '#ffe9a8'); g.globalAlpha = 1;
 }
 
 function drawTrainingGround(g, cx, cy, t) {
