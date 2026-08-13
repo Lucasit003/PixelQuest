@@ -567,6 +567,11 @@ export class TownScene {
         if (!this._nearAnyDistrict(xE, y, 40) && !this._nearAnyRoad(xE, y, 30)) this.trees.push({ x: xE, y: y + row * 12, kind: 'pine' });
       }
     }
+    // Vegetation stripped for now (per direction) — plain grass only. The
+    // generation above is left intact so trees/meadow can come back later;
+    // this just empties what actually gets drawn.
+    this.trees = [];
+    this.wildZones = [];
 
     // still a geometry pass: no props/lamps/NPCs yet
     this.propGroups = [];
