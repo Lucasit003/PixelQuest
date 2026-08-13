@@ -365,7 +365,7 @@ export class TownScene {
     // Broad organic streets: main roads and the Adventure Road rasterise two
     // tiles (~2.7 player-widths) wide; quiet district lanes stay one tile.
     // Bends every couple hundred units keep streets curving, never maze-like.
-    const mainWidth = 29, narrowWidth = 12, advWidth = 29;
+    const mainWidth = 34, narrowWidth = 12, advWidth = 34; // matches flareFarW below exactly
 
     // Crystal Plaza is a true 4-way intersection: exactly one road meets it
     // per cardinal direction (N/E/S/W), all the same width, all starting at
