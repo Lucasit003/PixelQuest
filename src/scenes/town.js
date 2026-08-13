@@ -842,24 +842,9 @@ export class TownScene {
     // wild zones: taller meadow tiles washed over the base grass around the
     // outer districts (Sanctuary, Training edge, Watch, Gate) and nowhere in
     // the developed core.
-    if (MEADOW_TILE_STATE.ready) {
-      const mc0 = Math.floor(camX / MEADOW_TILE), mc1 = Math.ceil((camX + visW) / MEADOW_TILE);
-      const mr0 = Math.floor(camY / MEADOW_TILE), mr1 = Math.ceil((camY + visH) / MEADOW_TILE);
-      for (let rr = mr0; rr <= mr1; rr++) {
-        for (let cc = mc0; cc <= mc1; cc++) {
-          const x = cc * MEADOW_TILE + MEADOW_TILE / 2, y = rr * MEADOW_TILE + MEADOW_TILE / 2;
-          let inWild = false;
-          for (const z of this.wildZones) {
-            if (Math.hypot(x - z.x, y - z.y) < z.r) { inWild = true; break; }
-          }
-          // perimeter ring of wild grass all around the map edge
-          if (!inWild && (x < 140 || x > MAP_W - 140 || y < 140 || y > MAP_H - 140)) inWild = true;
-          if (!inWild) continue;
-          if (this._nearAnyRoad(x, y, 30)) continue; // keep roads clear
-          g.drawImage(MEADOW_TILE_IMG, cc * MEADOW_TILE, rr * MEADOW_TILE, MEADOW_TILE, MEADOW_TILE);
-        }
-      }
-    }
+    // Meadow/tall-grass wash disabled along with the rest of the vegetation
+    // (this had its own hardcoded perimeter-ring band, separate from
+    // wildZones, so clearing wildZones alone didn't remove it).
 
     // Roads removed again (per direction) — plaza and buildings untouched,
     // this just stops drawing the road-tile network.
