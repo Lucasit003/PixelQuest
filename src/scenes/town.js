@@ -20,12 +20,18 @@ import { rect, rectOutline, disc, shadow, clamp, lerp, clamp01 } from '../gfx/pi
 import { drawCharacter, drawActor, drawPet } from '../gfx/actors.js';
 import { drawTree, drawPineTree, drawBush, drawRock, drawTorch, drawIcon, drawDummy } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
+import { buildWaterMask, proceduralRipples, drawFishJump } from '../gfx/waterfx.js';
 import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
 
-// Master Town Layout v1: a larger, organic hub built outward from Crystal
-// Plaza. See _buildTown() for the full district/road geography.
-const MAP_W = 1850; // trimmed — was leaving a large empty strip past the east tree line
-const MAP_H = 2400; // tall enough that Gate (PZ.y-1080) still clears y=0 after centering the plaza
+// Master Town Layout v5 (final spacing polish — coordinates LOCKED once
+// approved): a landscape settlement around Crystal Plaza with a compressed
+// adventure branch north to the Runebound Gate. Sized from walk times
+// (player speed 100 units/s -> 100 units = 1 second): fountain->gate is
+// ~2370 units (~24s), and the adventure route's remaining length is meant
+// to read through environment (forest/ruins/fortifications later), not
+// empty grass. Perimeter margins stay wilderness/expansion space.
+const MAP_W = 3600;
+const MAP_H = 4400;
 
 // Potion Shop artwork (real transparent PNG). Loaded once; drawn directly with
 // nearest-neighbor rendering. Authored to the game's native footprint so no
@@ -97,6 +103,68 @@ const STALL_GOODS_W = 52, STALL_GOODS_H = 32;
 const STALL_MERCHANT_ART = loadBuildingArt('assets/buildings/stall_merchant.png');
 const STALL_MERCHANT_W = 50, STALL_MERCHANT_H = 33;
 
+// The Lake — real transparent PNG (author's source was a JPEG "transparency
+// preview" with the checker pattern baked into the pixels as literal RGB, no
+// alpha channel; it was matted to real alpha by flood-filling the checker's
+// grayscale/bright pixels from the canvas border, then cropped tight to its
+// content bbox — see assets/pond.jpeg for the untouched original. No water
+// pixel was redrawn, recolored, or reshaped; only the surrounding checker
+// canvas became transparent). Native content 962x472 (2.038:1, already
+// broader E/W — no rotation needed).
+const POND_ART = loadBuildingArt('assets/pond.png');
+const POND_W = 816, POND_H = 400; // 170% of the original 480x236 pass, aspect preserved (2.040:1, <0.1% off)
+
+// Pond water FX (see gfx/waterfx.js): pixel-dot ripples/shimmer masked to
+// the pond art's own water pixels, same technique as the fountain's FX.
+// Mask built once, lazily, the first time the pond art is ready.
+let POND_MASK_INFO = null;
+
+// Lake collision, as fractions (0..1) of POND_W/POND_H so it stays correct
+// under any future rescale. Generated (not hand-drawn) from the matted PNG's
+// own water pixels — classified by hue (blue channel clearly over red, per
+// the art's actual water tones) rather than grass/dirt/rock/reed/lily-pad
+// pixels, then eroded ~9 source px inward (~4-5 world units at this scale)
+// so the collision edge sits slightly inside the drawn shoreline and the
+// player can visually reach the water's edge, then decomposed into
+// axis-aligned horizontal-run rects per 10px row-band (the collision system
+// only supports axis-aligned rects — this is the closest fit to "polygon
+// collision" it can express). Correctly leaves the island and lily pads as
+// non-solid gaps (surrounded by water either way, so unreachable on foot).
+const POND_WATER_RECTS = [
+  [0.2131,0.1271,0.0042,0.0212], [0.2464,0.1271,0.0042,0.0212], [0.7121,0.1271,0.0042,0.0212],
+  [0.1892,0.1483,0.0052,0.0212], [0.2027,0.1483,0.0728,0.0212], [0.6559,0.1483,0.0010,0.0212],
+  [0.6632,0.1483,0.1133,0.0212], [0.1965,0.1695,0.0811,0.0212], [0.3046,0.1695,0.0052,0.0212],
+  [0.4023,0.1695,0.0094,0.0212], [0.4501,0.1695,0.0052,0.0212], [0.6736,0.1695,0.1341,0.0212],
+  [0.1975,0.1907,0.1279,0.0212], [0.3493,0.1907,0.1081,0.0212], [0.6757,0.1907,0.1383,0.0212],
+  [0.1985,0.2119,0.2661,0.0212], [0.6237,0.2119,0.0010,0.0212], [0.6726,0.2119,0.1435,0.0212],
+  [0.1518,0.2331,0.0031,0.0212], [0.1913,0.2331,0.2807,0.0212], [0.6195,0.2331,0.0146,0.0212],
+  [0.6726,0.2331,0.1466,0.0212], [0.1393,0.2542,0.3389,0.0212], [0.6112,0.2542,0.0405,0.0212],
+  [0.6632,0.2542,0.1538,0.0212], [0.1414,0.2754,0.3638,0.0212], [0.5967,0.2754,0.2183,0.0212],
+  [0.1351,0.2966,0.4366,0.0212], [0.5769,0.2966,0.2380,0.0212], [0.0936,0.3178,0.0094,0.0212],
+  [0.1154,0.3178,0.6778,0.0212], [0.7983,0.3178,0.0052,0.0212], [0.0925,0.3390,0.6902,0.0212],
+  [0.0915,0.3602,0.6892,0.0212], [0.0842,0.3814,0.6944,0.0212], [0.8285,0.3814,0.0135,0.0212],
+  [0.0572,0.4025,0.0094,0.0212], [0.0717,0.4025,0.7141,0.0212], [0.8285,0.4025,0.0655,0.0212],
+  [0.0572,0.4237,0.5260,0.0212], [0.6216,0.4237,0.1840,0.0212], [0.8181,0.4237,0.0884,0.0212],
+  [0.0593,0.4449,0.0208,0.0212], [0.0863,0.4449,0.4854,0.0212], [0.6320,0.4449,0.2817,0.0212],
+  [0.0946,0.4661,0.4678,0.0212], [0.6362,0.4661,0.2900,0.0212], [0.1019,0.4873,0.4584,0.0212],
+  [0.6362,0.4873,0.3004,0.0212], [0.1019,0.5085,0.4595,0.0212], [0.6331,0.5085,0.3077,0.0212],
+  [0.0998,0.5297,0.4709,0.0212], [0.6247,0.5297,0.3160,0.0212], [0.0946,0.5508,0.4990,0.0212],
+  [0.5988,0.5508,0.3222,0.0212], [0.1175,0.5720,0.2235,0.0212], [0.3815,0.5720,0.5291,0.0212],
+  [0.1258,0.5932,0.2027,0.0212], [0.3929,0.5932,0.5156,0.0212], [0.1299,0.6144,0.1892,0.0212],
+  [0.4002,0.6144,0.5052,0.0212], [0.1372,0.6356,0.1788,0.0212], [0.4044,0.6356,0.4802,0.0212],
+  [0.1403,0.6568,0.1123,0.0212], [0.2599,0.6568,0.0031,0.0212], [0.2807,0.6568,0.0333,0.0212],
+  [0.4044,0.6568,0.4699,0.0212], [0.1435,0.6780,0.0125,0.0212], [0.1622,0.6780,0.0811,0.0212],
+  [0.2900,0.6780,0.0218,0.0212], [0.4023,0.6780,0.3950,0.0212], [0.8326,0.6780,0.0364,0.0212],
+  [0.1736,0.6992,0.0696,0.0212], [0.2900,0.6992,0.0166,0.0212], [0.3960,0.6992,0.0312,0.0212],
+  [0.4605,0.6992,0.3306,0.0212], [0.8399,0.6992,0.0083,0.0212], [0.1798,0.7203,0.0634,0.0212],
+  [0.2890,0.7203,0.0052,0.0212], [0.3929,0.7203,0.0270,0.0212], [0.4667,0.7203,0.3243,0.0212],
+  [0.1798,0.7415,0.0707,0.0212], [0.3950,0.7415,0.0249,0.0212], [0.4657,0.7415,0.3254,0.0212],
+  [0.1809,0.7627,0.0260,0.0212], [0.2516,0.7627,0.0239,0.0212], [0.3992,0.7627,0.0208,0.0212],
+  [0.4657,0.7627,0.3337,0.0212], [0.8160,0.7627,0.0010,0.0212], [0.4106,0.7839,0.0198,0.0212],
+  [0.4605,0.7839,0.3638,0.0212], [0.4241,0.8051,0.3368,0.0212], [0.4470,0.8263,0.2900,0.0212],
+  [0.4615,0.8475,0.1040,0.0212], [0.6559,0.8475,0.0229,0.0212],
+];
+
 // Crystal lamp posts flanking the north (Adventure Road) approach to the
 // plaza — a landmark pair, sized well above the plaza's own scale.
 const LAMP_CRYSTAL_ART = loadBuildingArt('assets/props/lamp_crystal.png');
@@ -165,6 +233,91 @@ const ROAD_MASK = {
   1: ['end_s2', 0], 4: ['end_s', 0], 2: ['end_w', 1], 8: ['end_w', 0],
   0: ['plaza_wide', 0],
 };
+
+// ------------------------------------------------------- road families ---
+// Five material families from the approved Road System Design doc. All five
+// are built from the SAME Crystal Plaza Modular Stone Pack already on disk,
+// so the entire network reads as one masonry world rather than five unrelated
+// tilesets — families differ by which variants they favour and by a subtle
+// per-family colour wash. No new art is required for this pass; when authored
+// road pieces arrive, a family's `pool`/`rough` lists are the only thing that
+// has to change.
+//
+// `roughAt` is the probability a cell uses the rougher list instead of the
+// clean one — the single knob that carries "well-maintained" vs "reclaimed".
+// `pri` decides the winner where two roads overlap (a main road paints over
+// a footpath, never the reverse).
+const ROAD_FAM = {
+  main: {   // Main Town Cobblestone — clean, light, faintly warm: the civic road
+    pool: ['mix_base01', 'mix_base02', 'mix_base03', 'mix_base04', 'mix_base05'],
+    rough: ['mix_weathered06', 'mix_weathered07'],
+    roughAt: 0.16, wash: [214, 178, 120, 0.13], edge: 'rgba(52,44,30,0.34)', pri: 5,
+  },
+  civic: {  // Civic-Adventure — heavier, cooler, more serious flagstone
+    pool: ['base1', 'base2', 'base3', 'base4'],
+    rough: ['weathered', 'worn1', 'worn2'],
+    roughAt: 0.34, wash: [52, 66, 98, 0.30], edge: 'rgba(30,32,44,0.40)', pri: 4,
+  },
+  ancient: { // Ancient/Ruined — cold, cracked, mossy, losing the fight
+    pool: ['weathered', 'cracked', 'mix_weathered08', 'mix_weathered09'],
+    rough: ['grasscracks', 'lightmoss', 'edge_broken'],
+    roughAt: 0.46, wash: [44, 46, 64, 0.42], edge: 'rgba(22,22,30,0.46)', pri: 4,
+  },
+  res: {    // Residential Stone Path — warm, worn smooth by daily use
+    pool: ['worn1', 'worn2', 'base2', 'base3'],
+    rough: ['lightmoss', 'grasscracks'],
+    roughAt: 0.30, wash: [158, 104, 46, 0.28], edge: 'rgba(56,42,24,0.36)', pri: 3,
+  },
+  nature: { // Nature/Scenic — grass reclaiming a dirt footpath
+    pool: ['grasscracks', 'edge_grass1', 'edge_grass2'],
+    rough: ['lightmoss', 'edge_moss'],
+    roughAt: 0.50, wash: [86, 124, 58, 0.42], edge: 'rgba(40,62,32,0.38)', pri: 2,
+  },
+};
+
+// Family transitions are carried by the colour wash, interpolated along the
+// route, rather than by dithering between two tile pools. A town road is only
+// ~1.2 stone tiles wide, so ANY tile-granularity mix on it lands as chunky
+// bands across the width instead of a blend; a wash gradient is independent of
+// road width and reads smooth at every size. The tile pool still swaps at the
+// midpoint, but underneath a wash that already matches, so the swap is
+// invisible. Blends are quantised to 9 steps and cached, so drawing a cell is
+// a plain lookup rather than per-frame string building.
+const WASH_STEPS = 8;
+const WASH_CACHE = new Map();
+function washFor(fam0, fam1, q) {
+  const key = fam0 + '|' + (fam1 || '') + '|' + q;
+  const hit = WASH_CACHE.get(key);
+  if (hit !== undefined) return hit;
+  const a = ROAD_FAM[fam0] && ROAD_FAM[fam0].wash;
+  const b = fam1 && ROAD_FAM[fam1] ? ROAD_FAM[fam1].wash : a;
+  let out = null;
+  if (a && b) {
+    const m = q / WASH_STEPS;
+    const r = Math.round(a[0] + (b[0] - a[0]) * m);
+    const g = Math.round(a[1] + (b[1] - a[1]) * m);
+    const bl = Math.round(a[2] + (b[2] - a[2]) * m);
+    const al = a[3] + (b[3] - a[3]) * m;
+    out = `rgba(${r},${g},${bl},${al.toFixed(3)})`;
+  }
+  WASH_CACHE.set(key, out);
+  return out;
+}
+// Deterministic per-tile variant pick, so the stone pattern is stable across
+// frames and identical on every reload.
+function roadTileFor(fam, tc, tr) {
+  const F = ROAD_FAM[fam] || ROAD_FAM.main;
+  const list = hash(tc * 7.7 + tr * 3.1 + 220) < F.roughAt ? F.rough : F.pool;
+  const i = Math.floor(hash(tc * 4.3 + tr * 9.1 + 77) * list.length) % list.length;
+  return PLAZA_TILES[list[i]];
+}
+// Coverage resolution for the road surface. Deliberately much finer than
+// ROAD_TILE (28): roads are 13-34 units wide, so a tile-sized grid could only
+// ever express "one tile" or "two tiles" and every family would collapse to
+// the same width. At 4 units the painted width matches the design spec
+// exactly while the stone texture still samples from the 28-unit tile grid,
+// which keeps the masonry continuous across the whole network.
+const ROAD_CELL = 4;
 
 // Town camera zoom: the world is drawn scaled up so the player sees roughly one
 // district plus a little of its neighbours, and the character reads at a good
@@ -239,47 +392,64 @@ export class TownScene {
 
   _buildTown() {
     // ======================================================================
-    // MASTER TOWN LAYOUT v3 — playable adaptation of the PIXEL QUEST TOWN
-    // master reference image. Compact core (plaza, guild, commercial,
-    // residential, market as ONE settlement), broad 2-tile streets, district
-    // footprints with recognizable shapes, dense vegetation defining space,
-    // and the adventure route (watch -> gate) direct to the north. Still a
-    // geometry pass: structures are dashed reserved-footprint markers.
-    const PZ = { x: MAP_W / 2, y: MAP_H / 2 }; // dead center of the map
+    // MASTER TOWN LAYOUT v4 — full spatial reorganization. One compact
+    // settlement radiating from Crystal Plaza, with the dungeon route
+    // running due NORTH: Plaza -> Guild -> Wayfarer's Watch -> Adventure
+    // Road -> Runebound Gate. Distances are speed-derived (100 units = 1s
+    // of walking) and chosen against the approved time targets: potion
+    // 5-8s, forge 7-10s, market/guild 8-12s, homes 10-15s, archive 12-18s,
+    // training/sanctuary 15-20s, watch 20-25s, gate 30-40s.
+    //
+    // Mental compass (core navigation): NORTH adventure, EAST shops,
+    // SOUTH/SE market, WEST/SW homes. Outer ring: training NW, archive NE,
+    // sanctuary SW. Nothing but the Gate lies beyond the Watch.
+    // FINAL SPACING POLISH: same landscape relationships, three density
+    // rings —
+    //   CORE (compact, around the plaza): potion 6.1s, forge 8.4s,
+    //     market 8.4s, guild 9.6s, residential ~11s (player house 13.7s)
+    //   OUTER TOWN: archive 13.5s, sanctuary 16.2s, training 17.0s
+    //   ADVENTURE OUTSKIRTS: watch 16.2s, gate 23.7s (longest route)
+    // vs the previous pass: market pulled 16% closer, archive 23% closer,
+    // guild->watch shortened 35%, watch->gate shortened 25%. The Gate is
+    // still the northernmost destination; its remaining distance is meant
+    // to read through environment, not empty grass. Developed-town bbox
+    // (training<->archive x guild<->market): ~2750x1750 on centers,
+    // ~2930x1930 on sprite edges -> ~1.5:1 landscape either way.
+    const PZ = { x: 2050, y: 2750 };
     const OFF = (dx, dy) => ({ x: PZ.x + dx, y: PZ.y + dy });
 
-    // Compact core (reorganization pass): every district pulled 30-50%+
-    // closer to the plaza than the old scattered layout, positioned so the
-    // town reads as one connected settlement radiating from the fountain.
-    // North axis is now a clear progression — Plaza -> Guild -> Watch ->
-    // Gate — instead of Guild sitting off to the west.
-    // Every offset below is a deliberate percentage of the actual map size
-    // (MAP_W x MAP_H), not an eyeballed pixel guess, so the described
-    // positions ("decent bit right", "top center", "close proximity", etc)
-    // scale consistently against the real map rather than a screenshot's
-    // framing. Convention used throughout: "slight" ~5%, "a decent bit"
-    // ~15%, "close proximity/not too far" ~20%, "lower down/lower side"
-    // ~30%, edges (top/bottom center) ~10-12% margin from that edge.
-    const pctW = (p) => MAP_W * p / 100;
-    const pctH = (p) => MAP_H * p / 100;
     const D = {
       plaza: PZ,
-      commercial: OFF(260, 10),     // (unused now — potion/weapon have standalone spots below)
-      market: OFF(pctW(15), pctH(5)),      // a decent bit right, only slightly below the fountain
-      residential: OFF(-280, 270),  // cottage + lots + loop road (unmoved)
-      southRoad: OFF(20, 380),      // south exit / expansion
-      guild: OFF(-pctW(10), pctH(30)),     // bottom-middle, left of the fountain, lower down
-      archive: OFF(pctW(10), pctH(30)),    // bottom-middle, right of the fountain, lower down
-      training: OFF(-pctW(20), -pctH(5)),  // left side, close to the fountain's left, slightly up
-      watch: OFF(0, -pctH(25)),            // between gate and fountain, closer to the gate
-      gate: OFF(0, -(MAP_H / 2 - pctH(12))), // top center, ~12% margin from the map's top edge
+      market: OFF(260, 800),        // S/SE core: destination square (~8.4s)
+      residential: OFF(-1050, 400), // W/SW core: neighborhood center (~11s)
+      southRoad: OFF(280, 1250),    // S: future world exit past the market
+      // Moved off the main trunk: slightly further up, and a lot further
+      // left — now shares the Lake's exact x (same side-to-side position),
+      // sitting just north of it instead of east on the adventure spine.
+      guild: OFF(-750, -1100),      // W, level with the Lake (~14.1s)
+      archive: OFF(1150, -700),     // NE outer: quiet landscaped property (~13.5s)
+      training: OFF(-1600, -560),   // W/NW outer: large dedicated compound (~17s)
+      sanctuary: OFF(-1500, 620),   // W/SW outer: green outskirts (~16.2s)
+      watch: OFF(0, -1620),         // N adventure: fortified checkpoint (~16.2s)
+      gate: OFF(0, -2370),          // FAR NORTH (locked): northernmost destination (~23.7s)
+      // Same side-to-side (x) position as the original NW placement; y
+      // recentred to sit between the Guild and the Fountain (halfway
+      // between their anchors) after the 170% size-up — see the in-browser
+      // clearance check this pass for exact neighbor gaps at the new size.
+      lake: OFF(-750, -415),        // between Guild and Crystal Fountain, nudged toward the plaza
     };
-    // Standalone points anchored off Market/Training with the same percentage
-    // convention, since they no longer share a district anchor with anything.
-    const houseSpot = { x: D.market.x + pctW(15), y: D.market.y - pctH(5) };   // right of market, upper side
-    D.sanctuary = { x: D.market.x + pctW(15), y: D.market.y + pctH(8) };       // right of market, lower side
-    const forgeSpot = { x: D.training.x, y: D.training.y + pctH(8) };   // below training, gap included
-    const potionSpot = { x: forgeSpot.x, y: forgeSpot.y + pctH(8) };    // below weapon smith, room between
+    // Commercial: the Forge keeps the east street. The Potion Shop was moved
+    // off that street and down the market-bound lane — the two shops were
+    // crowding each other at ~230 units apart, and each needs room for its
+    // own prop set later (herbs/crates vs firewood/weapon racks). They now sit
+    // ~490 apart on different roads, and the Potion Shop is on the OUTSIDE
+    // (south) side of the commercial street, roughly halfway toward Market.
+    const forgeSpot = OFF(820, -180);   // ~8.4s, on the east street
+    const potionSpot = OFF(560, 250);   // ~6.1s, south of the street, market-bound lane
+    // Residential quarter members: the player house gets the largest lot on
+    // the loop's quiet southwest side; Hearthwood cottage fronts the east.
+    const houseSpot = { x: D.residential.x - 200, y: D.residential.y + 160 };  // ~13.7s, largest lot
+    const cottageSpot = { x: D.residential.x + 150, y: D.residential.y - 140 };// ~9.4s
 
     this.plazaCenter = PZ;
     // The fountain sprite is anchored at its base (PZ.y) and drawn upward, so
@@ -325,13 +495,15 @@ export class TownScene {
       { id: 'home', name: 'Player House', dx: houseSpot.x, dy: houseSpot.y, action: 'house', district: 'Player House',
         draw: (g) => drawPlayerHouse(g, houseSpot.x, houseSpot.y, this.t),
         solid: { x: houseSpot.x - HOUSE_W / 2, y: houseSpot.y - HOUSE_H, w: HOUSE_W, h: HOUSE_H } },
-      { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: D.residential.x - 140, dy: D.residential.y - 75, action: null, district: 'Residential Quarter',
-        draw: (g) => drawPropArt(g, COTTAGE_ART, D.residential.x - 140, D.residential.y - 75, COTTAGE_W, COTTAGE_H, 0),
-        solid: { x: D.residential.x - 140 - COTTAGE_W / 2, y: D.residential.y - 75 - COTTAGE_H, w: COTTAGE_W, h: COTTAGE_H } },
-      { id: 'lotA', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 175,
-        draw: (g) => drawMarker(g, D.residential.x - 150, D.residential.y + 130, 60, 45, 'Future Home') },
-      { id: 'lotB', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 185,
-        draw: (g) => drawMarker(g, D.residential.x + 60, D.residential.y + 140, 60, 45, 'Future Home') },
+      { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: cottageSpot.x, dy: cottageSpot.y, action: null, district: 'Residential Quarter',
+        draw: (g) => drawPropArt(g, COTTAGE_ART, cottageSpot.x, cottageSpot.y, COTTAGE_W, COTTAGE_H, 0),
+        solid: { x: cottageSpot.x - COTTAGE_W / 2, y: cottageSpot.y - COTTAGE_H, w: COTTAGE_W, h: COTTAGE_H } },
+      // Reserved future-home lots fronting the neighborhood loop (NW + E),
+      // so all four residential properties face the same street.
+      { id: 'lotA', name: null, dx: null, dy: null, action: null, sortY: D.residential.y - 85,
+        draw: (g) => drawMarker(g, D.residential.x - 175, D.residential.y - 130, 62, 46, 'Future Home') },
+      { id: 'lotB', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 130,
+        draw: (g) => drawMarker(g, D.residential.x + 175, D.residential.y + 85, 62, 46, 'Future Home') },
 
       // ---- South Road ----
       { id: 'southExpand', name: null, dx: null, dy: null, action: null, sortY: D.southRoad.y,
@@ -358,57 +530,82 @@ export class TownScene {
         solid: { x: D.training.x - 75, y: D.training.y - 60, w: 150, h: 24 } },
 
       // ---- Wayfarer's Watch: fortified checkpoint straddling the road ----
-      { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y + 30,
+      // Compound art with baked courtyard ground: sortY sits at the base of
+      // the gatehouse wall so the player renders on top of the art while
+      // inside the courtyard, but behind the wall when north of it.
+      // Collision is the two wall slabs + the keeper's cottage (appended to
+      // this.solids below), leaving the central arch OPEN so the Adventure
+      // Road passes straight through the compound.
+      { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y - 29,
         draw: (g) => drawPropArt(g, WATCH_ART, D.watch.x + 35, D.watch.y + 30, WATCH_W, WATCH_H, 0),
-        solid: { x: D.watch.x + 35 - WATCH_W / 2, y: D.watch.y + 30 - WATCH_H, w: WATCH_W, h: WATCH_H * 0.55 } },
+        solid: null },
 
       // ---- Runebound Gate: large northern landmark approach ----
       { id: 'dungeon', name: 'Runebound Gate', dx: D.gate.x, dy: D.gate.y + 48, action: 'dungeon', district: 'Runebound Gate',
         draw: (g) => drawPropArt(g, DUNGEON_ART, D.gate.x, D.gate.y + 28, DUNGEON_W, DUNGEON_H, 0),
         solid: { x: D.gate.x - DUNGEON_W / 2, y: D.gate.y + 28 - DUNGEON_H, w: DUNGEON_W, h: DUNGEON_H * 0.65 } },
 
-      // ---- Quest Board: small functional prop by the Watch ----
-      { id: 'quest', name: 'Quest Board', dx: D.watch.x - 110, dy: D.watch.y + 55, action: 'quest', district: "Wayfarer's Watch",
-        draw: (g) => drawQuestBoard(g, D.watch.x - 110, D.watch.y + 51, this.t, !!this.hero.activeQuest()),
-        solid: { x: D.watch.x - 122, y: D.watch.y + 35, w: 24, h: 16 } },
+      // ---- Quest Board: small functional prop beside the Watch approach ----
+      { id: 'quest', name: 'Quest Board', dx: D.watch.x - 70, dy: D.watch.y + 115, action: 'quest', district: "Wayfarer's Watch",
+        draw: (g) => drawQuestBoard(g, D.watch.x - 70, D.watch.y + 111, this.t, !!this.hero.activeQuest()),
+        solid: { x: D.watch.x - 82, y: D.watch.y + 95, w: 24, h: 16 } },
     ];
 
     this.districts = D;
     this.solids = this.locations.filter((l) => l.solid).map((l) => l.solid);
+    // Wayfarer's Watch collision (measured off the art's own proportions):
+    // wall slabs flanking the open central arch, plus the keeper's cottage.
+    {
+      const wx = D.watch.x + 35, wTop = D.watch.y + 30 - WATCH_H;
+      this.solids.push(
+        { x: wx - 46, y: wTop + 1, w: 30, h: 51 },  // gatehouse wall, west of arch
+        { x: wx + 17, y: wTop + 1, w: 28, h: 51 },  // gatehouse wall, east of arch
+        { x: wx - 89, y: wTop + 16, w: 49, h: 59 }, // keeper's cottage
+      );
+    }
+    // Lake collision: axis-aligned rects decomposed from the matted PNG's
+    // own water pixels (POND_WATER_RECTS above) — the closest fit to
+    // "polygon collision" this engine's AABB-only solids can express. Only
+    // the water is solid, so the grass/dirt/rock shoreline stays walkable
+    // and the player can approach the water's edge.
+    this.lakeTopLeft = { x: D.lake.x - POND_W / 2, y: D.lake.y - POND_H / 2 };
+    for (const [fx, fy, fw, fh] of POND_WATER_RECTS) {
+      this.solids.push({
+        x: this.lakeTopLeft.x + fx * POND_W, y: this.lakeTopLeft.y + fy * POND_H,
+        w: fw * POND_W, h: fh * POND_H,
+      });
+    }
 
-    // district entry-banner regions
-    // Footprints sized down to match the compact reorg — kept smaller than
-    // the gaps between districts so entry banners don't overlap each other.
+    // district entry-banner regions (Player House folded into Residential —
+    // the house is a member of the neighborhood now, not its own district)
     this.regions = [
-      { name: 'Crystal Plaza', x: PZ.x - 130, y: PZ.y - 130, w: 260, h: 250 },
-      { name: 'Ironhearth Forge', x: forgeSpot.x - 110, y: forgeSpot.y - 130, w: 220, h: 160 },
-      { name: 'Potion Shop', x: potionSpot.x - 110, y: potionSpot.y - 130, w: 220, h: 160 },
-      { name: 'Market Square', x: D.market.x - 140, y: D.market.y - 110, w: 280, h: 220 },
-      { name: 'Player House', x: houseSpot.x - 130, y: houseSpot.y - 160, w: 260, h: 220 },
-      { name: 'Residential Quarter', x: D.residential.x - 170, y: D.residential.y - 140, w: 340, h: 280 },
-      { name: 'Shield & Stein', x: D.guild.x - 100, y: D.guild.y - 85, w: 200, h: 170 },
-      { name: 'Runewood Archive', x: D.archive.x - 110, y: D.archive.y - 90, w: 220, h: 180 },
-      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 220, y: D.sanctuary.y - 200, w: 440, h: 400 },
-      { name: 'Valorhall Training Grounds', x: D.training.x - 150, y: D.training.y - 130, w: 300, h: 260 },
-      { name: "Wayfarer's Watch", x: D.watch.x - 140, y: D.watch.y - 100, w: 280, h: 180 },
-      { name: 'Runebound Gate', x: D.gate.x - 300, y: D.gate.y - 220, w: 600, h: 400 },
-      { name: 'South Road', x: D.southRoad.x - 110, y: D.southRoad.y - 90, w: 220, h: 180 },
+      { name: 'Crystal Plaza', x: PZ.x - 160, y: PZ.y - 180, w: 320, h: 320 },
+      { name: 'Potion Shop', x: potionSpot.x - 130, y: potionSpot.y - 140, w: 250, h: 210 },
+      { name: 'Ironhearth Forge', x: forgeSpot.x - 110, y: forgeSpot.y - 140, w: 230, h: 210 },
+      { name: 'Market Square', x: D.market.x - 260, y: D.market.y - 210, w: 520, h: 420 },
+      { name: 'Residential Quarter', x: D.residential.x - 340, y: D.residential.y - 270, w: 660, h: 600 },
+      { name: 'Shield & Stein', x: D.guild.x - 130, y: D.guild.y - 90, w: 260, h: 250 },
+      { name: 'Runewood Archive', x: D.archive.x - 140, y: D.archive.y - 110, w: 280, h: 270 },
+      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 200, y: D.sanctuary.y - 170, w: 400, h: 340 },
+      { name: 'Valorhall Training Grounds', x: D.training.x - 190, y: D.training.y - 160, w: 380, h: 330 },
+      { name: "Wayfarer's Watch", x: D.watch.x - 160, y: D.watch.y - 140, w: 390, h: 300 },
+      { name: 'Runebound Gate', x: D.gate.x - 320, y: D.gate.y - 240, w: 640, h: 470 },
+      { name: 'South Road', x: D.southRoad.x - 140, y: D.southRoad.y - 110, w: 280, h: 220 },
     ];
 
     // ------------------------------------------------------------ roads ---
-    // Broad organic streets: main roads and the Adventure Road rasterise two
-    // tiles (~2.7 player-widths) wide; quiet district lanes stay one tile.
-    // Bends every couple hundred units keep streets curving, never maze-like.
-    const mainWidth = 34, narrowWidth = 12, advWidth = 34; // matches flareFarW below exactly
+    // SPATIAL PASS ONLY: these are logical centerlines for the coming
+    // handcrafted modular road pieces — no procedural road drawing. The
+    // waypoint polylines live in this.roadPlan (dev overview + future
+    // passes); this.roads/roadCells are still rasterised so tree/prop
+    // placement keeps avoiding the planned streets.
+    const mainWidth = 34, resWidth = 20, narrowWidth = 12, advWidth = 34; // main matches flareFarW below exactly
 
     // Crystal Plaza is a true 4-way intersection: exactly one road meets it
     // per cardinal direction (N/E/S/W), all the same width, all starting at
     // the same distance (the plaza radius) from the fountain's visual center
     // FC — never from the center itself, so nothing ever overlaps the
-    // fountain's collision box. Guild has no direct spoke into the plaza —
-    // it branches off the north (adventure) trunk a short way out, which
-    // also matches "Guild leads toward Wayfarer's Watch" from the brief.
-    const guildBranch = [PZ.x + 15, PZ.y - 250];
+    // fountain's collision box.
     const exitN = [FC.x, FC.y - this.plazaRadius];
     const exitS = [FC.x, FC.y + this.plazaRadius];
     const exitE = [FC.x + this.plazaRadius, FC.y];
@@ -427,58 +624,138 @@ export class TownScene {
       buildFlare(FC, R, 180, flareNearW, flareFarW, flareDepth), // W
     ];
 
-    this.roads = [
-      // N: Plaza -> Guild (passed on the way) -> Watch -> Gate — the clear
-      // adventure progression called for by the reorg brief.
-      ...roadPath([exitN, guildBranch, [D.watch.x, D.watch.y + 45]], mainWidth),
-      ...roadPath([[D.watch.x, D.watch.y - 28], [D.watch.x - 20, D.watch.y - 150], [D.gate.x, D.gate.y + 50]], advWidth),
-      // E: Plaza -> Commercial courtyard
-      ...roadPath([exitE, [PZ.x + 150, PZ.y + 10], [D.commercial.x, D.commercial.y + 55]], mainWidth),
-      // S: Plaza -> Market — straight south out of the plaza's own exit for
-      // a stretch before bending toward market, instead of bending
-      // immediately at the plaza mouth.
-      ...roadPath([exitS, [PZ.x, PZ.y + 150], [D.market.x - 30, D.market.y - 90]], mainWidth),
-      // Market <-> South Road
-      ...roadPath([[D.market.x - 15, D.market.y + 90], [D.southRoad.x, D.southRoad.y]], mainWidth),
-      // W: Plaza -> Residential entry
-      ...roadPath([exitW, [PZ.x - 170, PZ.y + 90], [D.residential.x + 130, D.residential.y - 25]], mainWidth),
-      // Residential neighborhood loop (organic ring with lot frontage)
-      ...roadPath([
-        [D.residential.x + 130, D.residential.y - 25],
-        [D.residential.x + 75, D.residential.y - 25],
-        [D.residential.x - 125, D.residential.y - 35],
-        [D.residential.x - 140, D.residential.y + 80],
-        [D.residential.x + 5, D.residential.y + 115],
-        [D.residential.x + 105, D.residential.y + 55],
-        [D.residential.x + 130, D.residential.y - 25],
-      ], mainWidth),
-
-      // Guild branch off the north trunk — a short spur, since the guild
-      // now sits almost directly on the Plaza->Watch line.
-      ...roadPath([guildBranch, [PZ.x - 95, PZ.y - 190], [D.guild.x, D.guild.y + 55]], mainWidth),
-
-      // Commercial <-> Archive (northeast landscaped path) — branches off the
-      // main Plaza->Commercial road well before the courtyard (same pattern
-      // as guildBranch off the north trunk), so only one road visibly meets
-      // the courtyard instead of two separate slabs merging there.
-      ...roadPath([[PZ.x + 150, PZ.y + 10], [D.commercial.x + 70, D.commercial.y - 150], [D.archive.x, D.archive.y + 48]], narrowWidth),
-      // Archive <-> adventure road (west link across the north)
-      ...roadPath([[D.archive.x - 30, D.archive.y + 20], [PZ.x + 70, D.watch.y + 60], [D.watch.x + 25, D.watch.y + 40]], narrowWidth),
-      // Guild <-> Sanctuary (northwest, vegetation-buffered)
-      ...roadPath([[D.guild.x - 25, D.guild.y - 20], [D.guild.x - 90, D.guild.y - 140], [D.sanctuary.x, D.sanctuary.y + 58]], narrowWidth),
-      // Residential loop <-> Training compound (far west)
-      ...roadPath([[D.residential.x - 140, D.residential.y + 25], [D.residential.x - 260, D.residential.y - 110], [D.training.x, D.training.y + 95]], narrowWidth),
-      // Training <-> Sanctuary (outer west link)
-      ...roadPath([[D.training.x, D.training.y - 40], [D.training.x + 70, D.sanctuary.y + 100], [D.sanctuary.x - 25, D.sanctuary.y + 40]], narrowWidth),
+    // WX = the Watch art's centerline (the arch); WX-24 = the south fence gap.
+    const WX = D.watch.x + 35;
+    // Each segment declares its material family and painted width. `famTo`
+    // makes a segment blend from one family into another along its length
+    // (the §7 transition rule — families never cut at a hard straight line);
+    // `w1` tapers the width along the same axis, which is how the Ancient
+    // road narrows as it approaches the Gate.
+    const plan = [
+      // MAIN N: Plaza -> Watch south approach, straight up the spine — no
+      // longer detours to the Guild now that it's moved west to the Lake
+      // (see the Guild spur below instead). The one road that matters for
+      // progression: town -> adventure, so it eases main -> civic as it goes.
+      { kind: 'main', fam: 'main', famTo: 'civic', w0: 34, w1: 31, width: mainWidth, pts: [
+        exitN, [PZ.x, PZ.y - 700], [WX - 24, D.watch.y + 500], [WX - 24, D.watch.y + 130]] },
+      // SECONDARY: main trunk -> Guild spur. Branches off the Plaza->Watch
+      // spine well north of the Lake (y=PZ.y-700, ~285 units clear of its
+      // top edge) and drops straight down into the Guild's courtyard —
+      // Guild's second connection besides the Training link below, so it's
+      // not a dead end reachable only by way of Training.
+      { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 27, w1: 27, width: narrowWidth, pts: [
+        [PZ.x, PZ.y - 700], [PZ.x - 250, PZ.y - 760], [D.guild.x + 180, D.guild.y + 190],
+        [D.guild.x + 55, D.guild.y + 40]] },
+      // ADVENTURE ROAD: through the Watch (fence gap -> courtyard -> arch),
+      // then the long wilderness run north to the Runebound Gate. Ancient
+      // family throughout, narrowing 30 -> 21 as civilization falls away.
+      { kind: 'adventure', fam: 'ancient', w0: 30, w1: 21, width: advWidth, pts: [
+        [WX - 24, D.watch.y + 130], [WX - 24, D.watch.y], [WX, D.watch.y - 30], [WX, D.watch.y - 90],
+        [D.gate.x + 40, D.gate.y + 620], [D.gate.x, D.gate.y + 370], [D.gate.x, D.gate.y + 45]] },
+      // MAIN E: Plaza -> Commercial street, running to the Forge's front.
+      { kind: 'main', fam: 'main', w0: 34, w1: 34, width: mainWidth, pts: [
+        exitE, [PZ.x + 330, PZ.y - 20], [PZ.x + 600, PZ.y - 90], [forgeSpot.x, forgeSpot.y + 55]] },
+      // MAIN S: Plaza -> Market Square. Runs down the square's WEST rim
+      // rather than through it, so the stalls front a real street while the
+      // open middle stays clear for NPC traffic and events.
+      { kind: 'main', fam: 'main', w0: 34, w1: 30, width: mainWidth, pts: [
+        exitS, [PZ.x + 60, PZ.y + 430], [D.market.x - 240, D.market.y - 300],
+        [D.market.x - 205, D.market.y - 60], [D.market.x - 195, D.market.y + 60]] },
+      // Market -> South Road (future world exit) — continues from the same
+      // rim point so the street reads as one continuous route through town,
+      // then tapers toward the map edge.
+      { kind: 'main', fam: 'main', w0: 30, w1: 24, width: mainWidth, pts: [
+        [D.market.x - 195, D.market.y + 60], [D.market.x - 120, D.market.y + 250],
+        [D.southRoad.x, D.southRoad.y]] },
+      // MAIN W: Plaza -> Residential entry (a long, clearly horizontal run)
+      { kind: 'main', fam: 'main', famTo: 'res', w0: 34, w1: 22, width: mainWidth, pts: [
+        exitW, [PZ.x - 420, PZ.y + 60], [PZ.x - 700, PZ.y + 260], [D.residential.x + 215, D.residential.y - 70]] },
+      // Residential neighborhood loop — a compact ring street with all four
+      // properties fronting it: Hearthwood + lotA on the north arc, lotB
+      // east, Player House on the south arc with the deepest yard.
+      // The west arc swings out to x-300 rather than x-235: at the tighter
+      // radius the arc ran diagonally straight THROUGH the Player House's
+      // footprint (the house sat on the street, not beside it). Pushed west,
+      // the house now sits inside the ring fronting the south arc, with its
+      // yard between.
+      { kind: 'res', fam: 'res', w0: 20, w1: 20, width: resWidth, pts: [
+        [D.residential.x + 215, D.residential.y - 70], [cottageSpot.x, cottageSpot.y + 40],
+        [D.residential.x - 95, D.residential.y - 65], [D.residential.x - 280, D.residential.y - 55],
+        [D.residential.x - 300, D.residential.y + 80], [houseSpot.x - 30, houseSpot.y + 62],
+        [D.residential.x + 60, D.residential.y + 175], [D.residential.x + 215, D.residential.y + 85],
+        [D.residential.x + 215, D.residential.y - 70]] },
+      // SECONDARY: Residential -> Valorhall (northwest lane), firming from
+      // neighbourhood stone into the wilder outskirts.
+      { kind: 'secondary', fam: 'res', famTo: 'nature', w0: 19, w1: 17, width: narrowWidth, pts: [
+        [D.residential.x - 280, D.residential.y - 55], [D.training.x + 230, D.residential.y - 240],
+        [D.training.x + 60, D.training.y + 230], [D.training.x, D.training.y + 100]] },
+      // SECONDARY: Valorhall -> Guild — closes the house -> training -> guild
+      // -> adventure loop and gives the north side a long east/west run.
+      // Rerouted (lake up to 170%/recentred pass) around the lake's north
+      // shore instead of straight through it: same two endpoints, a nub up
+      // and a sweep at y=1975 clears the lake's top edge (2075) by ~100
+      // units before dropping down into the Guild's courtyard. This is the
+      // scenic lakeside route, so it runs Nature until it reaches the Guild.
+      // Starts at Valorhall's own entrance (the same point the Residential
+      // lane arrives at) and runs up the compound's east side, so the two
+      // form one continuous Residential -> Training -> lakeside -> Guild
+      // route instead of this one dead-ending in grass beside the compound.
+      { kind: 'secondary', fam: 'nature', famTo: 'civic', w0: 17, w1: 22, width: narrowWidth, pts: [
+        [D.training.x + 30, D.training.y + 100], [D.training.x + 205, D.training.y + 20],
+        [D.training.x + 250, 1985], [D.guild.x - 150, 1930], [D.guild.x - 75, D.guild.y + 60]] },
+      // SECONDARY: Commercial -> Archive (quiet landscaped NE path)
+      { kind: 'secondary', fam: 'main', w0: 20, w1: 20, width: narrowWidth, pts: [
+        [forgeSpot.x + 30, forgeSpot.y + 30], [D.archive.x - 120, PZ.y - 420],
+        [D.archive.x, D.archive.y + 200], [D.archive.x, D.archive.y + 70]] },
+      // SECONDARY: Archive -> north road (adventure-route link, no backtrack)
+      // — joins the main trunk at the same waypoint the trunk itself bends
+      // through, now that this no longer doubles as "near the Guild".
+      { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 18, w1: 18, width: narrowWidth, pts: [
+        [D.archive.x - 40, D.archive.y - 20], [D.archive.x - 700, D.archive.y - 200], [WX - 24, D.watch.y + 500]] },
+      // SECONDARY: Commercial -> Market (east loop, skips the plaza). Runs
+      // down the square's EAST rim, mirroring the main road on the west, so
+      // the market sits framed between two streets instead of having a lane
+      // dead-end in the grass north of the stalls.
+      // It leaves the commercial street, passes the Potion Shop's front door
+      // on the way down, then continues to the market.
+      { kind: 'secondary', fam: 'main', w0: 22, w1: 20, width: narrowWidth, pts: [
+        [PZ.x + 480, PZ.y - 60], [potionSpot.x + 40, potionSpot.y - 130],
+        [potionSpot.x + 105, potionSpot.y + 30], [D.market.x + 235, D.market.y - 200],
+        [D.market.x + 205, D.market.y + 40]] },
+      // SECONDARY: Residential -> Market (south loop, skips the plaza).
+      // Starts exactly on a loop vertex — branching a few dozen units off the
+      // ring left a blobby smear of overlapping road at the junction.
+      { kind: 'secondary', fam: 'res', famTo: 'main', w0: 19, w1: 20, width: narrowWidth, pts: [
+        [D.residential.x + 60, D.residential.y + 175], [PZ.x - 700, D.market.y - 150],
+        [PZ.x - 250, D.market.y + 40], [D.market.x - 250, D.market.y + 30]] },
+      // SECONDARY: Residential -> Sanctuary (green outskirts lane, westward),
+      // starting on the loop's west vertex. Its second waypoint used to sit
+      // EAST of its own start, so the lane doubled back on itself and the
+      // resulting hook cut straight through the Player House; it now runs
+      // consistently south-west from the ring to the Sanctuary's front.
+      // The approach also used to place a waypoint inside the Sanctuary's own
+      // footprint, running the lane under the building; it now passes down its
+      // east side and comes back west along the front to reach the door.
+      { kind: 'secondary', fam: 'nature', w0: 15, w1: 14, width: narrowWidth, pts: [
+        [D.residential.x - 300, D.residential.y + 80], [D.sanctuary.x + 200, D.sanctuary.y - 40],
+        [D.sanctuary.x + 130, D.sanctuary.y + 90], [D.sanctuary.x, D.sanctuary.y + 80]] },
+      // NATURE: Lake shoreline spur — branches off the Residential->Valorhall
+      // lane and runs east to the Lake's calm SOUTH cove, stopping at the
+      // water's edge. Reserved future home of the fishing spot / bench /
+      // dock. Deliberately approaches from the town side: the north and west
+      // shores stay roadless wilderness, which is what keeps the far side of
+      // the lake feeling untouched.
+      { kind: 'secondary', fam: 'nature', w0: 13, w1: 14, width: narrowWidth, pts: [
+        [D.training.x + 165, D.training.y + 510], [D.lake.x - 400, D.lake.y + 305],
+        [D.lake.x - 150, D.lake.y + 215], [D.lake.x - 135, D.lake.y + 188]] },
     ];
+    this.roadPlan = plan;
+    this.roads = plan.flatMap((p) => roadPath(p.pts, p.width));
 
-    // north of the guild's latitude, road tiles get the darker adventure wash
-    this.adventureRoadY = PZ.y - 320;
-
-    // rasterise roads onto the tile grid (wide rects mark two-plus cells
-    // across) — rounds to the nearest tile count instead of doubling the
-    // instant a road exceeds one tile width, so a 29-wide road renders as
-    // one ~28-wide lane, not a 56-wide slab.
+    // Coarse tile-grid rasterisation, kept only for the vegetation/prop
+    // avoidance checks that already depend on it (_nearAnyRoad uses the
+    // rects; this Set is the cheap "is there road here" lookup). The visible
+    // road surface is painted from the finer coverage map built below.
     this.roadCells = new Set();
     for (const r of this.roads) {
       const horizontal = r.w >= r.h;
@@ -493,16 +770,8 @@ export class TownScene {
         for (let rr = r0; rr <= r1; rr++) for (let k = 0; k < across; k++) this.roadCells.add(`${cx + k},${rr}`);
       }
     }
-    // keep the plaza interior AND its flare zones free of road-tile texture
-    // — the plaza floor owns that area, roads only exist beyond it
-    for (const key of [...this.roadCells]) {
-      const [c, r] = key.split(',').map(Number);
-      const cx2 = c * ROAD_TILE + ROAD_TILE / 2, cy2 = r * ROAD_TILE + ROAD_TILE / 2;
-      if (Math.hypot(cx2 - FC.x, cy2 - FC.y) < this.plazaRadius - 6) { this.roadCells.delete(key); continue; }
-      for (const fl of this.plazaFlares) {
-        if (flareContains(fl, FC, this.plazaRadius, cx2, cy2, 2)) { this.roadCells.delete(key); break; }
-      }
-    }
+
+    this._buildRoadCoverage(FC);
 
     // ----------------------------------------------------------- terrain --
     // wild/meadow zones: outer districts + gate approach only
@@ -512,8 +781,10 @@ export class TownScene {
       { x: D.gate.x, y: D.gate.y, r: 260 },
     ];
 
-    // Market Square ground: an organic open square south of the plaza
-    this.marketGround = { cx: D.market.x, cy: D.market.y, rx: 210, ry: 160 };
+    // Market Square ground: one substantial open square southeast of the
+    // plaza — bigger than a building lot, far smaller than a field. Stalls
+    // sit on its rim (see drawMarket), the center stays open.
+    this.marketGround = { cx: D.market.x, cy: D.market.y, rx: 230, ry: 175 };
     // Forge + Potion + Guild + Archive courtyards: small stone aprons in front of the shops
     this.courtyards = [
       { cx: forgeSpot.x, cy: forgeSpot.y, rx: 85, ry: 35 },
@@ -597,6 +868,308 @@ export class TownScene {
     this.npcs = [];
     this.sanctuaryPets = [];
     this.sanctuary = { x: D.sanctuary.x - 40, y: D.sanctuary.y - 20, w: 80, h: 40 };
+
+    // Step-24 development overview data (drawn only while window.__townDebug
+    // is set from the console — never gameplay UI): big district tags, plus
+    // the road centerlines above.
+    this.debugLabels = [
+      ['CRYSTAL PLAZA', PZ.x, PZ.y - 190],
+      ['FORGE', forgeSpot.x, forgeSpot.y - 150],
+      ['POTION', potionSpot.x, potionSpot.y - 150],
+      ['MARKET', D.market.x, D.market.y + 260],
+      ['RESIDENTIAL', D.residential.x, D.residential.y + 330],
+      ['GUILD', D.guild.x, D.guild.y - 120],
+      ['TRAINING', D.training.x, D.training.y - 130],
+      ['ARCHIVE', D.archive.x, D.archive.y - 100],
+      ['SANCTUARY', D.sanctuary.x, D.sanctuary.y + 130],
+      ['WATCH', D.watch.x + 35, D.watch.y - 150],
+      ['RUNEBOUND GATE', D.gate.x, D.gate.y - 130],
+      ['LAKE', D.lake.x, D.lake.y - POND_H / 2 - 24],
+    ];
+  }
+
+  // ---- road surface -------------------------------------------------------
+  // Walks every planned centerline and marks a fine coverage grid with the
+  // family + progress at that point. Marking the real polyline (rather than
+  // reusing the coarse rects) is what lets each family keep its actual
+  // designed width — 34 units for a main road, 13 for a footpath — instead of
+  // every road collapsing to a whole number of 28-unit tiles.
+  _buildRoadCoverage(FC) {
+    const C = ROAD_CELL;
+    const cov = new Map();
+    const R = this.plazaRadius;
+
+    // Low-frequency ragged-edge offset. Sampled on a coarse (12-unit) lattice
+    // and blended between lattice points so the edge undulates in soft lobes
+    // rather than flickering cell to cell — per-cell randomness would read as
+    // static fuzz, not wear.
+    const EN = 12;
+    const edgeNoise = (x, y) => {
+      const gx = x / EN, gy = y / EN;
+      const ix = Math.floor(gx), iy = Math.floor(gy);
+      const fx = gx - ix, fy = gy - iy;
+      const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+      const n = (a, b) => hash(a * 41.3 + b * 97.7) - 0.5;
+      const top = n(ix, iy) + (n(ix + 1, iy) - n(ix, iy)) * sx;
+      const bot = n(ix, iy + 1) + (n(ix + 1, iy + 1) - n(ix, iy + 1)) * sx;
+      return (top + (bot - top) * sy) * 7;
+    };
+
+    const mark = (x, y, fam, t, wash) => {
+      const cx = Math.floor(x / C), cy = Math.floor(y / C);
+      const px = cx * C + C / 2, py = cy * C + C / 2;
+      // The plaza floor owns its own disc and flares — roads stop at its edge.
+      if (Math.hypot(px - FC.x, py - FC.y) < R - 2) return;
+      for (const fl of this.plazaFlares) {
+        if (flareContains(fl, FC, R, px, py, 0)) return;
+      }
+      const k = cx + ',' + cy;
+      const prev = cov.get(k);
+      const pri = (ROAD_FAM[fam] || ROAD_FAM.main).pri;
+      if (prev && prev.pri >= pri) return; // a main road paints over a footpath
+      cov.set(k, { fam, t, pri, wash });
+    };
+
+    for (let segIdx = 0; segIdx < this.roadPlan.length; segIdx++) {
+      const seg = this.roadPlan[segIdx];
+      // Follow the waypoints DIRECTLY, including diagonals. roadPath() has to
+      // emit axis-aligned L-bends because it feeds an axis-aligned rect list,
+      // but the painted surface has no such constraint — walking the true
+      // line is what stops the network from reading as stair-stepped plumbing.
+      const pts = seg.pts;
+
+      const lens = [];
+      let total = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        lens.push(L); total += L;
+      }
+      const w0 = seg.w0 != null ? seg.w0 : seg.width;
+      const w1 = seg.w1 != null ? seg.w1 : w0;
+
+      // Eased blend factor along the route: each end stays pure, only the
+      // middle transitions (a linear ramp would leave the whole road looking
+      // half-and-half end to end). Drives the wash gradient; the tile pool
+      // swaps once at the midpoint underneath it.
+      const blendAt = (t) => {
+        if (!seg.famTo) return 0;
+        const k = clamp01((t - 0.3) / 0.4);
+        return k * k * (3 - 2 * k);
+      };
+      // Which family's STONE is laid here. The wash above already carries the
+      // colour smoothly, but swapping the tile pool at a single midpoint still
+      // shows up as a hard line where the masonry pattern changes. Interleaving
+      // whole tiles across the middle of the blend hides that seam — and it is
+      // safe to dither here, unlike the wash, because both pools now sit under
+      // the same colour, so a mixed tile reads as texture rather than a stripe.
+      const poolFam = (x, y, bl) => {
+        const a = seg.fam || 'main';
+        if (!seg.famTo) return a;
+        if (bl <= 0.12) return a;
+        if (bl >= 0.88) return seg.famTo;
+        const tx = Math.floor(x / ROAD_TILE), ty = Math.floor(y / ROAD_TILE);
+        return hash(tx * 12.9898 + ty * 78.233) < bl ? seg.famTo : a;
+      };
+
+      // ---- natural wander -------------------------------------------------
+      // Roads drift sideways as they run, instead of being drawn taut between
+      // waypoints. Two sine octaves at unrelated wavelengths give a meander
+      // that never visibly repeats, and the amplitude is windowed to ZERO at
+      // both ends of the route — that part is essential, not cosmetic: every
+      // junction, building approach, plaza flare and the Watch's arch is
+      // positioned on the un-wandered endpoint, so a road that drifted at its
+      // ends would pull away from whatever it is supposed to meet. Engineered
+      // town roads wander least; wilderness footpaths wander most.
+      // [amplitude, wavelength] in world units. Wavelength is the real
+      // distance between crests — roughly one gentle curve per screen at the
+      // 300-unit gameplay viewport, so the bend is legible while walking
+      // rather than only visible on the overview.
+      const WOB = { main: [22, 420], res: [9, 190], secondary: [24, 320], adventure: [26, 520] };
+      const wobDef = seg.wob !== undefined ? seg.wob : WOB[seg.kind] || WOB.secondary;
+      const wobSeed = segIdx * 3.77;
+      const TAU = Math.PI * 2;
+      const lateral = (dist) => {
+        if (!wobDef || !wobDef[0] || total <= 0) return 0;
+        const [amp, wave] = wobDef;
+        const win = Math.sin(Math.PI * clamp01(dist / total)); // 0 at both ends
+        return win * amp * (
+          Math.sin(dist / wave * TAU + wobSeed) * 0.75 +
+          Math.sin(dist / (wave * 0.41) * TAU + wobSeed * 2.3) * 0.25
+        );
+      };
+
+      // Position at a given arc length along the raw polyline.
+      const posAt = (d) => {
+        d = clamp(d, 0, total);
+        let run = 0;
+        for (let i = 0; i < lens.length; i++) {
+          if (d <= run + lens[i] || i === lens.length - 1) {
+            const f = lens[i] > 0 ? (d - run) / lens[i] : 0;
+            return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f,
+                    pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f];
+          }
+          run += lens[i];
+        }
+        return [pts[0][0], pts[0][1]];
+      };
+      // Corner-rounded position: a small averaging window over the polyline,
+      // which turns each hard waypoint corner into an arc the way a real road
+      // sweeps through a bend. The window's influence fades to nothing at both
+      // ends so the route still starts and finishes exactly on its endpoints.
+      const SM = 34;
+      const smoothPos = (d) => {
+        const raw = posAt(d);
+        const w = clamp01(Math.min(d, total - d) / (SM * 2));
+        if (w <= 0) return raw;
+        let sx = 0, sy = 0;
+        for (let k = -2; k <= 2; k++) {
+          const p = posAt(d + k * SM * 0.5);
+          sx += p[0]; sy += p[1];
+        }
+        sx /= 5; sy /= 5;
+        return [raw[0] + (sx - raw[0]) * w, raw[1] + (sy - raw[1]) * w];
+      };
+      // Tangent from the rounded centreline, sampled either side, so the
+      // normal turns continuously instead of snapping at each waypoint — a
+      // snapping normal makes the wander jog sideways as the road crosses a
+      // vertex, which reads as a break in the road rather than a curve.
+      const frameAt = (d) => {
+        const a = smoothPos(Math.max(0, d - SM * 0.5));
+        const b = smoothPos(Math.min(total, d + SM * 0.5));
+        let tx = b[0] - a[0], ty = b[1] - a[1];
+        const m = Math.hypot(tx, ty) || 1;
+        tx /= m; ty /= m;
+        return { nx: -ty, ny: tx };
+      };
+
+      const stepLen = C * 0.5;
+      const nSteps = Math.max(1, Math.ceil(total / stepLen));
+      for (let s = 0; s <= nSteps; s++) {
+        const dist = (s / nSteps) * total;
+        const t = total > 0 ? dist / total : 0;
+        const { nx, ny } = frameAt(dist);
+        const base = smoothPos(dist);
+        const lat = lateral(dist);
+        const x = base[0] + nx * lat, y = base[1] + ny * lat;
+        const half = lerp(w0, w1, t) / 2;
+        const bl = blendAt(t);
+        const wash = washFor(seg.fam || 'main', seg.famTo, Math.round(bl * WASH_STEPS));
+        // Each side's width is nudged independently by low-frequency noise
+        // sampled at that edge's own position, so the two sides ripple out of
+        // step. A road held to an exact constant half-width reads as a ribbon
+        // stamped onto the grass; real wear is uneven.
+        const halfL = half + edgeNoise(x - nx * half, y - ny * half);
+        const halfR = half + edgeNoise(x + nx * half, y + ny * half);
+        for (let o = -halfL; o <= halfR; o += C * 0.5) {
+          const mx = x + nx * o, my = y + ny * o;
+          mark(mx, my, poolFam(mx, my, bl), t, wash);
+        }
+      }
+    }
+    // Distance (in cells, capped) from each cell to the nearest open ground,
+    // used by the renderer to fray the outermost ring into the grass. Kept
+    // deliberately shallow: a town road is only ~8 cells across, so a deep
+    // feather would reach the centreline and dissolve the road into rubble —
+    // and the narrowest footpaths are barely 3 cells wide, where anything
+    // beyond a single ring erases the path entirely.
+    const FEATHER = 2;
+    for (const [k, cell] of cov) {
+      const ci = k.indexOf(',');
+      const cx = +k.slice(0, ci), cy = +k.slice(ci + 1);
+      let d = FEATHER + 1;
+      search:
+      for (let ring = 1; ring <= FEATHER; ring++) {
+        for (let dy = -ring; dy <= ring; dy++) {
+          for (let dx = -ring; dx <= ring; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+            if (!cov.has((cx + dx) + ',' + (cy + dy))) { d = ring; break search; }
+          }
+        }
+      }
+      cell.edge = d;
+    }
+    this.roadCov = cov;
+  }
+
+  /** Paint the road surface: stone sampled from the shared 28-unit tile grid
+   * (so masonry stays continuous across the whole network and into the plaza),
+   * then a per-family wash, then a darker lip on any cell facing open ground. */
+  _drawRoads(g, visW, visH) {
+    const C = ROAD_CELL;
+    const cov = this.roadCov;
+    if (!cov || !cov.size) return;
+    const c0 = Math.floor(this.camX / C) - 1, c1 = Math.ceil((this.camX + visW) / C) + 1;
+    const r0 = Math.floor(this.camY / C) - 1, r1 = Math.ceil((this.camY + visH) / C) + 1;
+
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const cell = cov.get(c + ',' + r);
+        if (!cell) continue;
+        const x = c * C, y = r * C;
+        // Outer rings thin out into the turf by STIPPLING — cells are dropped
+        // at random so the grass beneath shows through in gaps, rather than
+        // drawing the stone semi-transparent. Alpha blending would average
+        // stone and grass into muddy in-between colours that belong to neither
+        // palette and read as blur at this resolution; dropping whole cells
+        // keeps every pixel a real palette colour, which is how pixel art
+        // handles a gradient. The result is a path that frays into the grass.
+        if (cell.edge === 1 && hash(c * 13.1 + r * 29.7) > 0.5) continue;
+        // Sample the stone from the coarse tile grid, not per coverage cell,
+        // so a single tile's pattern spans several cells uninterrupted.
+        const tc = Math.floor(x / ROAD_TILE), tr = Math.floor(y / ROAD_TILE);
+        const tile = roadTileFor(cell.fam, tc, tr);
+        if (tile && tile.ready) {
+          g.drawImage(tile.img, x - tc * ROAD_TILE, y - tr * ROAD_TILE, C, C, x, y, C, C);
+        } else {
+          rect(g, x, y, C, C, '#a89e84');
+        }
+        if (cell.wash) rect(g, x, y, C, C, cell.wash);
+        // Adventure decay: the Ancient road darkens and mosses over as it
+        // nears the Gate, driven by progress along the segment rather than a
+        // fixed world-Y threshold (which went stale when districts moved).
+        if (cell.fam === 'ancient' && cell.t > 0.35) {
+          g.globalAlpha = clamp01((cell.t - 0.35) / 0.65) * 0.35;
+          rect(g, x, y, C, C, '#20222e');
+          g.globalAlpha = 1;
+        }
+      }
+    }
+    // Contact shading, on ring 2 rather than the outermost ring: ring 1 is now
+    // mostly stippled away, so shading it would just outline scattered specks.
+    // Shading the first solid ring instead seats the stone into the ground
+    // without drawing a hard rim around the whole network.
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const cell = cov.get(c + ',' + r);
+        if (!cell || cell.edge !== 1) continue;
+        if (hash(c * 13.1 + r * 29.7) > 0.5) continue; // skip cells stippled out above
+        const F = ROAD_FAM[cell.fam] || ROAD_FAM.main;
+        g.globalAlpha = 0.4;
+        rect(g, c * C, r * C, C, C, F.edge);
+        g.globalAlpha = 1;
+      }
+    }
+  }
+
+  // ---- Step 24: temporary development overview ----------------------------
+  // Toggled from the console via `window.__townDebug = true` (paired with a
+  // small `window.__townZoom` for whole-map screenshots). Draws the planned
+  // road centerlines and district tags scaled to stay readable at any zoom.
+  _drawDebugOverview(g) {
+    const Z = (typeof window !== 'undefined' && window.__townZoom) || ZOOM;
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    for (const p of this.roadPlan) {
+      g.strokeStyle = p.kind === 'adventure' ? 'rgba(226,124,60,0.85)'
+        : p.kind === 'main' ? 'rgba(255,240,170,0.85)' : 'rgba(205,225,140,0.6)';
+      g.lineWidth = Math.max(p.width * 0.3, 2 / Z);
+      strokeRoundedPath(g, p.pts, 70);
+    }
+    const s = Math.max(2, Math.round(1.3 / Z));
+    for (const [name, x, y] of this.debugLabels) {
+      const w = textWidth(name, s) + 8 * s;
+      rect(g, x - w / 2, y - 5 * s, w, 10 * s, 'rgba(10,8,20,0.75)');
+      drawText(g, name, x, y - 3 * s, { color: '#ffd97a', align: 'center', scale: s });
+    }
   }
 
   /** True if (x,y) sits inside (or near) any location's solid footprint. */
@@ -715,8 +1288,8 @@ export class TownScene {
   _rest() {
     const healed = this.hero.s.hp < this.hero.maxHp || this.hero.s.mana < this.hero.maxMana;
     this.hero.s.hp = this.hero.maxHp; this.hero.s.mana = this.hero.maxMana; this.hero.save();
-    this.particles.pickup(560, 400, '#b58bff');
-    this.toasts.push(healed ? 'The crystal restores you!' : 'Already at full health', 560, 380, UI.good, { life: 1.6 });
+    this.particles.pickup(this.px, this.py - 12, '#b58bff');
+    this.toasts.push(healed ? 'The crystal restores you!' : 'Already at full health', this.px, this.py - 32, UI.good, { life: 1.6 });
     Audio.levelUp();
   }
 
@@ -796,6 +1369,9 @@ export class TownScene {
     ents.sort((a, b) => a.y - b.y);
     for (const e of ents) e.draw(g);
 
+    // development-only overview overlay (labels + road centerlines)
+    if (typeof window !== 'undefined' && window.__townDebug) this._drawDebugOverview(g);
+
     // lamps + braziers glow on top
     for (const [x, y] of this.lamps) lamp(g, x, y, this.t);
     for (const [x, y] of this.braziers) brazier(g, x, y, this.t);
@@ -856,6 +1432,21 @@ export class TownScene {
       }
     }
 
+    // The Lake: pure ground/environment artwork, drawn flat under everything
+    // depth-sorted (buildings, trees, the player) so it can never render over
+    // them — see the class comment on POND_ART/POND_WATER_RECTS above for
+    // provenance. Ripple/shimmer overlays layer on top the same way the
+    // fountain's water FX layers on its own PNG.
+    if (POND_ART.ready) {
+      g.drawImage(POND_ART.img, Math.round(this.lakeTopLeft.x), Math.round(this.lakeTopLeft.y), POND_W, POND_H);
+      if (!POND_MASK_INFO) POND_MASK_INFO = buildWaterMask(POND_ART.img);
+      proceduralRipples(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
+      // A fish breaks the surface every so often (assets/fish1.png). It draws
+      // above the water but still in the ground pass, which is fine — the lake
+      // is solid, so the player can never stand between the two.
+      drawFishJump(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
+    }
+
     // wild zones: taller meadow tiles washed over the base grass around the
     // outer districts (Sanctuary, Training edge, Watch, Gate) and nowhere in
     // the developed core.
@@ -863,17 +1454,22 @@ export class TownScene {
     // (this had its own hardcoded perimeter-ring band, separate from
     // wildZones, so clearing wildZones alone didn't remove it).
 
-    // Roads removed again (per direction) — plaza and buildings untouched,
-    // this just stops drawing the road-tile network.
+    // Road network: five material families painted from the shared stone
+    // pack (see ROAD_FAM). Drawn before the plaza so the plaza's own edge
+    // tiles and flares finish on top of where the roads meet it.
+    this._drawRoads(g, visW, visH);
 
-    // Plaza stone floor removed (per direction) — fountain sits directly on
-    // grass now, no surrounding paving drawn.
+    // Crystal Plaza floor: the approved zoned stone disc with its four
+    // flare transitions, which the roads above run into with no seam —
+    // both are drawn from the same modular pack on the same tile grid.
+    plaza(g, this.plazaFocus.x, this.plazaFocus.y, this.plazaRadius, this.plazaFlares);
 
-    // Market Square ground: one big organic open square (packed dirt with a
-    // stone edge), stalls live on its rim, center stays open.
-    marketSquareGround(g, this.marketGround);
-    // small stone courtyard aprons (commercial shops, guild social space)
-    for (const c of this.courtyards) courtyardGround(g, c);
+    // Market Square dirt-oval ground removed (per direction) — stalls sit
+    // directly on grass now, no packed-dirt ellipse drawn beneath them.
+    // Courtyard aprons removed too (per direction) — the oval discs under the
+    // shops/guild/archive read as odd floating circles now that real roads
+    // reach each door. The `courtyards` list is kept because the legacy
+    // roadCells rasteriser still subtracts it; nothing draws it.
 
     this._drawCorruption(g);
   }
@@ -893,33 +1489,11 @@ export class TownScene {
     }
   }
 
-  /** Draw the visible road cells from the Crystal Plaza Modular Stone Pack.
-   * Per-cell hash-picked variants (mostly clean base, occasional weathered) —
-   * the exact same material system as the plaza floor, so roads and plaza
-   * read as one continuous masonry network with no seam anywhere. */
-  _drawRoadTiles(g, visW, visH) {
-    const has = (c, r) => this.roadCells.has(`${c},${r}`);
-    const c0 = Math.floor(this.camX / ROAD_TILE) - 1, c1 = Math.ceil((this.camX + visW) / ROAD_TILE) + 1;
-    const r0 = Math.floor(this.camY / ROAD_TILE) - 1, r1 = Math.ceil((this.camY + visH) / ROAD_TILE) + 1;
-    for (let r = r0; r <= r1; r++) {
-      for (let c = c0; c <= c1; c++) {
-        if (!has(c, r)) continue;
-        const x = c * ROAD_TILE, y = r * ROAD_TILE;
-        const h = hash(c * 6.3 + r * 2.9 + 150);
-        const tile = h < 0.72 ? mixBaseTile(c, r) : mixWeatheredTile(c, r);
-        if (tile && tile.ready) g.drawImage(tile.img, x, y, ROAD_TILE, ROAD_TILE);
-        else rect(g, x, y, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback
-        // Adventure Road wash: everything north of the Guild reads darker and
-        // heavier until the dedicated adventure-road tiles are sliced.
-        if (y < this.adventureRoadY) {
-          g.globalAlpha = 0.22;
-          rect(g, x, y, ROAD_TILE, ROAD_TILE, '#2c3038');
-          g.globalAlpha = 1;
-        }
-      }
-    }
-  }
-
+  // (The old tile-grid road painter lived here. It has been replaced by
+  // _drawRoads() above, which paints from the finer coverage map so each
+  // family keeps its real designed width, and which drives the adventure
+  // decay from progress along the route rather than the old fixed world-Y
+  // threshold — that constant went stale the moment districts moved.)
 
   // ---- HUD + banners ------------------------------------------------------
 
@@ -1414,24 +1988,24 @@ function drawTrainingGround(g, cx, cy, t) {
 }
 
 function drawMarket(g, cx, cy, t) {
-  // compact lively market: 5 real stall sprites, well centrepiece
+  // Market Square: the five stalls ring the square's rim — produce + bakery
+  // along the north edge, cloth west, general goods east, the traveling
+  // merchant on the south rim — and the CENTER STAYS OPEN for NPC traffic,
+  // conversations and future events (per the approved market plan; never a
+  // single row of stalls).
   const stalls = [
-    { art: STALL_PRODUCE_ART, w: STALL_PRODUCE_W, h: STALL_PRODUCE_H },
-    { art: STALL_BAKERY_ART, w: STALL_BAKERY_W, h: STALL_BAKERY_H },
-    { art: STALL_CLOTH_ART, w: STALL_CLOTH_W, h: STALL_CLOTH_H },
-    { art: STALL_GOODS_ART, w: STALL_GOODS_W, h: STALL_GOODS_H },
-    { art: STALL_MERCHANT_ART, w: STALL_MERCHANT_W, h: STALL_MERCHANT_H },
+    { art: STALL_PRODUCE_ART, w: STALL_PRODUCE_W, h: STALL_PRODUCE_H, x: cx - 75, y: cy - 95 },
+    { art: STALL_BAKERY_ART, w: STALL_BAKERY_W, h: STALL_BAKERY_H, x: cx + 70, y: cy - 90 },
+    { art: STALL_CLOTH_ART, w: STALL_CLOTH_W, h: STALL_CLOTH_H, x: cx - 145, y: cy + 5 },
+    { art: STALL_GOODS_ART, w: STALL_GOODS_W, h: STALL_GOODS_H, x: cx + 140, y: cy + 10 },
+    { art: STALL_MERCHANT_ART, w: STALL_MERCHANT_W, h: STALL_MERCHANT_H, x: cx - 15, y: cy + 120 },
   ];
-  const startX = cx - 84;
-  for (let i = 0; i < 5; i++) {
-    const sx = startX + i * 42;
-    const sy = cy + (i % 2) * 8;
-    const s = stalls[i];
-    contactShadow(g, sx, sy + s.h * 0.32, s.w * 0.4, 4, 0.25);
-    if (s.art.ready) g.drawImage(s.art.img, Math.round(sx - s.w / 2), Math.round(sy - s.h / 2), s.w, s.h);
+  for (const s of stalls) {
+    contactShadow(g, s.x, s.y + s.h * 0.32, s.w * 0.4, 4, 0.25);
+    if (s.art.ready) g.drawImage(s.art.img, Math.round(s.x - s.w / 2), Math.round(s.y - s.h / 2), s.w, s.h);
   }
-  // well centrepiece
-  const wx = cx, wy = cy + 26;
+  // well tucked toward the northeast rim so the middle stays clear
+  const wx = cx + 95, wy = cy - 35;
   shadow(g, wx, wy, 9, 3, 0.3);
   rect(g, wx - 9, wy - 8, 18, 8, '#8a8ea0'); rectOutline(g, wx - 9, wy - 8, 18, 8, '#3a3e4a');
   rect(g, wx - 10, wy - 20, 2, 12, '#5a3a24'); rect(g, wx + 8, wy - 20, 2, 12, '#5a3a24');
@@ -2036,4 +2610,30 @@ function roadPath(points, width = 16) {
     seg(x1, y0, x1, y1);
   }
   return rects;
+}
+
+// Debug-overview only: strokes a waypoint polyline with rounded corners
+// instead of sharp joints, so the planning guides read as curving streets
+// rather than the right-angle L-bends `roadPath()` rasterises for collision.
+// Standard corner-rounding technique — pull back `radius` from each
+// waypoint toward its neighbours (clamped to half the shorter adjacent
+// segment so short hops never overshoot) and arc through the corner with a
+// quadratic curve. Purely cosmetic: doesn't touch this.roads/roadCells or
+// any collision, and the actual handcrafted road pieces will replace this
+// whole preview later regardless.
+function strokeRoundedPath(g, pts, radius) {
+  if (pts.length < 2) return;
+  g.beginPath();
+  g.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1);
+    const r = Math.min(radius, d1 / 2, d2 / 2);
+    const t1 = d1 > 0 ? r / d1 : 0, t2 = d2 > 0 ? r / d2 : 0;
+    g.lineTo(x1 - (x1 - x0) * t1, y1 - (y1 - y0) * t1);
+    g.quadraticCurveTo(x1, y1, x1 + (x2 - x1) * t2, y1 + (y2 - y1) * t2);
+  }
+  const last = pts[pts.length - 1];
+  g.lineTo(last[0], last[1]);
+  g.stroke();
 }
