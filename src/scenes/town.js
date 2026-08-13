@@ -848,8 +848,8 @@ export class TownScene {
       }
     }
 
-    // roads: autotiled cobblestone from the authored tileset
-    this._drawRoadTiles(g, visW, visH);
+    // Roads removed for now (per direction) — plaza and buildings are
+    // untouched, this just stops drawing the road-tile network.
 
     // Crystal Plaza: a real round stone floor, centered exactly on the
     // fountain's visual center, with genuine tile variation (base/worn/
