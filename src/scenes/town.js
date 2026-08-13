@@ -207,7 +207,7 @@ function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false) {
 export class TownScene {
   constructor(hero, hooks) {
     this.hero = hero;
-    this.hooks = hooks; // { toTraining, toDungeon, toHouse }
+    this.hooks = hooks; // { toTraining, toDungeon, toHouse, toPotionShop }
   }
 
   enter(game) {
@@ -669,7 +669,8 @@ export class TownScene {
     switch (loc.action) {
       case 'training': this.hero.save(); this.hooks.toTraining(); break;
       case 'weapon': this.overlay = new WeaponShop(this.hero, () => { this.overlay = null; }); break;
-      case 'potion': case 'market': this.overlay = new PotionShop(this.hero, () => { this.overlay = null; }); break;
+      case 'potion': this.hero.save(); if (this.hooks.toPotionShop) this.hooks.toPotionShop(); break;
+      case 'market': this.overlay = new PotionShop(this.hero, () => { this.overlay = null; }); break;
       case 'pets': this.overlay = new InventoryMenu(this.hero, () => { this.overlay = null; }, 2); break;
       case 'library': this.overlay = new InventoryMenu(this.hero, () => { this.overlay = null; }, 3); break;
       case 'quest': case 'guild': this._openQuest(loc.action === 'guild'); break;
