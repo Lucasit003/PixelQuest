@@ -24,7 +24,7 @@ import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
 
 // Master Town Layout v1: a larger, organic hub built outward from Crystal
 // Plaza. See _buildTown() for the full district/road geography.
-const MAP_W = 2600;
+const MAP_W = 1850; // trimmed — was leaving a large empty strip past the east tree line
 const MAP_H = 1900;
 
 // Potion Shop artwork (real transparent PNG). Loaded once; drawn directly with
