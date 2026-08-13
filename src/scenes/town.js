@@ -437,11 +437,14 @@ export class TownScene {
     // north of the guild's latitude, road tiles get the darker adventure wash
     this.adventureRoadY = PZ.y - 320;
 
-    // rasterise roads onto the tile grid (wide rects mark two cells across)
+    // rasterise roads onto the tile grid (wide rects mark two-plus cells
+    // across) — rounds to the nearest tile count instead of doubling the
+    // instant a road exceeds one tile width, so a 29-wide road renders as
+    // one ~28-wide lane, not a 56-wide slab.
     this.roadCells = new Set();
     for (const r of this.roads) {
       const horizontal = r.w >= r.h;
-      const across = Math.min(r.w, r.h) > ROAD_TILE ? 2 : 1;
+      const across = Math.max(1, Math.round(Math.min(r.w, r.h) / ROAD_TILE));
       const cy = Math.floor((r.y + r.h / 2) / ROAD_TILE);
       const cx = Math.floor((r.x + r.w / 2) / ROAD_TILE);
       if (horizontal) {
