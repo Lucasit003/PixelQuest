@@ -1,18 +1,30 @@
-// The Player House interior — a small, cozy, walkable room. The player enters
-// from town and exits back to town. A bed lets you rest (heal + save); a
-// fireplace, rug, table, bookshelf and a few pots dress the room. Home
-// decoration is intentionally structured but not yet a live catalog: the save
-// carries `hero.s.home.furniture` (empty for now) so a future decorate UI can
-// hang off it without a rewrite — nothing here is faked.
+// The Player House interior — a walkable cottage room, rendered from the
+// authored transparent PNG (assets/house_interior.png). Same "diorama
+// backdrop" approach as the Potion Shop / Weapon Shop: the player walks a
+// floor strip in front of the art. The bed lets you rest (heal + save); the
+// bookshelf gives a bit of flavour text. Home decoration is intentionally
+// structured but not yet a live catalog: the save carries
+// `hero.s.home.furniture` (empty for now) so a future decorate UI can hang
+// off it without a rewrite — nothing here is faked.
 
 import { Input } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { panel, dialogue, UI, Toasts } from '../gfx/ui.js';
-import { rect, rectOutline, disc, shadow, clamp } from '../gfx/pixel.js';
+import { rect, clamp } from '../gfx/pixel.js';
 import { drawCharacter } from '../gfx/actors.js';
-import { drawIcon } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
+
+// Authored art, cropped to its content bbox (from a 1536x1024 canvas) and
+// scaled to fill the game's width. This one's proportions happen to nearly
+// fill the whole canvas height, so there's barely any surround visible.
+const INTERIOR_IMG = new Image();
+let INTERIOR_READY = false;
+INTERIOR_IMG.onload = () => { INTERIOR_READY = true; };
+INTERIOR_IMG.src = 'assets/house_interior.png';
+const CROP = { x: 118, y: 144, w: 1282, h: 730 };
+const IMG_Y = 6; // backdrop's top on screen
+const IMG_W = 480, IMG_H = Math.round(CROP.h * (IMG_W / CROP.w)); // ~273
 
 export class HouseScene {
   constructor(hero, onExit) {
@@ -30,23 +42,22 @@ export class HouseScene {
     this.toasts = new Toasts();
     this.dialogue = null; this.dialogueReveal = 0;
 
-    // room bounds (the wooden floor area)
-    this.room = { x: 96, y: 70, w: 288, h: 150 };
-    this.px = this.W / 2; this.py = 190; this.facing = 1;
+    this.room = { x: 40, y: 60, w: this.W - 80, h: 190 };
+    // spawn/exit at the drawn door on the back wall, not the bottom of frame
+    this.px = 242; this.py = 121; this.facing = 1;
     this.moving = false; this.walkT = 0;
 
-    // interactables: bed (rest), exit door, bookshelf (flavor)
     this.spots = [
-      { id: 'bed', x: 140, y: 110, label: 'Rest' },
-      { id: 'door', x: this.W / 2, y: this.room.y + this.room.h - 2, label: 'Leave' },
-      { id: 'shelf', x: 330, y: 96, label: 'Read' },
+      { id: 'bed', x: 52, y: 150, label: 'Rest' },
+      { id: 'shelf', x: 122, y: 88, label: 'Read' },
+      { id: 'door', x: 242, y: 121, label: 'Leave' },
     ];
-    // solids inside the room (furniture footprints)
+    // hitboxes eyeballed against the art
     this.solids = [
-      { x: 116, y: 92, w: 54, h: 26 },   // bed
-      { x: 300, y: 82, w: 60, h: 16 },   // bookshelf
-      { x: 210, y: 150, w: 40, h: 16 },  // table
-      { x: 340, y: 150, w: 30, h: 22 },  // fireplace
+      { x: 12, y: 90, w: 75, h: 95 },      // bed
+      { x: 95, y: 62, w: 55, h: 46 },      // bookshelf + nightstand
+      { x: 230, y: 175, w: 140, h: 45 },   // dining table + benches
+      { x: 388, y: 128, w: 92, h: 58 },    // kitchen counter/stove
     ];
     this.near = null;
   }
@@ -56,8 +67,8 @@ export class HouseScene {
   update(dt) {
     this.t += dt;
     this.particles.update(dt); this.toasts.update(dt);
-    // fireplace embers
-    if (Math.random() < dt * 4) this.particles.spawn({ x: 355 + Math.random() * 4, y: 168, kind: 'ember', color: '#f2942b', vx: 0, vy: -10, life: 0.6, size: 1 });
+    // hearth/stove flicker over on the kitchen side
+    if (Math.random() < dt * 4) this.particles.spawn({ x: 462 + Math.random() * 4, y: 165, kind: 'ember', color: '#f2942b', vx: 0, vy: -10, life: 0.6, size: 1 });
 
     if (this.dialogue) { this._updateDialogue(dt); return; }
 
@@ -80,16 +91,16 @@ export class HouseScene {
   _tryMove(dx, dy) {
     const r = this.room;
     const nx = clamp(this.px + dx, r.x + 8, r.x + r.w - 8);
-    const ny = clamp(this.py + dy, r.y + 24, r.y + r.h - 6);
+    const ny = clamp(this.py + dy, r.y, r.y + r.h - 4);
     const box = { x: (dx ? nx : this.px) - 4, y: (dy ? ny : this.py) - 3, w: 8, h: 5 };
     for (const s of this.solids) if (box.x < s.x + s.w && box.x + box.w > s.x && box.y < s.y + s.h && box.y + box.h > s.y) return;
     if (dx) this.px = nx; if (dy) this.py = ny;
   }
 
   _use(spot) {
+    if (spot.id === 'door') { this._leave(); return; }
     Audio.confirm();
-    if (spot.id === 'door') { this._leave(); }
-    else if (spot.id === 'bed') {
+    if (spot.id === 'bed') {
       const healed = this.hero.s.hp < this.hero.maxHp || this.hero.s.mana < this.hero.maxMana;
       this.hero.s.hp = this.hero.maxHp; this.hero.s.mana = this.hero.maxMana; this.hero.save();
       this.toasts.push(healed ? 'You feel well rested.' : 'Already rested', this.px, this.py - 26, UI.good, { life: 1.5 });
@@ -116,30 +127,12 @@ export class HouseScene {
   // ---- draw ---------------------------------------------------------------
 
   draw(g) {
-    const r = this.room;
-    // dark surround
-    rect(g, 0, 0, this.W, this.H, '#0e0b16');
-    // wall
-    rect(g, r.x - 8, r.y - 20, r.w + 16, 30, '#4a3d5a');
-    for (let x = r.x - 8; x < r.x + r.w + 8; x += 12) rect(g, x, r.y - 20, 1, 30, '#3d3149');
-    rect(g, r.x - 8, r.y - 20, r.w + 16, 3, '#5c4d70');
-    // wooden floor
-    rect(g, r.x, r.y + 10, r.w, r.h - 10, '#8a6a44');
-    for (let y = r.y + 10; y < r.y + r.h; y += 8) rect(g, r.x, y, r.w, 1, '#7a5a38');
-    for (let x = r.x; x < r.x + r.w; x += 24) rect(g, x, r.y + 10, 1, r.h - 10, '#7a5a38');
-    rectOutline(g, r.x, r.y + 10, r.w, r.h - 10, '#3a2a1e');
-    // rug
-    rect(g, this.W / 2 - 40, 150, 80, 44, '#7a3550'); rectOutline(g, this.W / 2 - 40, 150, 80, 44, '#a85578');
-    rect(g, this.W / 2 - 34, 156, 68, 32, '#8a4460');
+    rect(g, 0, 0, this.W, this.H, '#160e0a');
 
-    // wall dressings: window + hanging emblem + banner
-    rect(g, r.x + 30, r.y - 16, 20, 16, '#2a3550'); rect(g, r.x + 31, r.y - 15, 18, 14, '#6fa0d8'); rect(g, r.x + 39, r.y - 16, 2, 16, '#2a3550');
-    rect(g, r.x + r.w - 60, r.y - 16, 20, 16, '#2a3550'); rect(g, r.x + r.w - 59, r.y - 15, 18, 14, '#6fa0d8'); rect(g, r.x + r.w - 51, r.y - 16, 2, 16, '#2a3550');
-    disc(g, this.W / 2, r.y - 8, 4, '#e0679a'); rect(g, this.W / 2 - 1, r.y - 12, 2, 8, '#dfe6f2'); // home emblem
+    if (INTERIOR_READY) {
+      g.drawImage(INTERIOR_IMG, CROP.x, CROP.y, CROP.w, CROP.h, 0, IMG_Y, IMG_W, IMG_H);
+    }
 
-    this._furniture(g);
-
-    // player + pet
     const pet = this.hero.pet();
     if (pet) { /* pet stays outside; skip in house for calm */ }
     drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
@@ -147,48 +140,17 @@ export class HouseScene {
     this.particles.draw(g);
     this.toasts.draw(g);
 
-    // prompt
-    if (this.near) {
+    if (this.near && !this.dialogue) {
       const label = '[E] ' + this.near.label;
       const w = textWidth(label) + 10;
-      panel(g, this.near.x - w / 2, this.near.y - 30, w, 12, { bg: 'rgba(12,10,22,0.9)' });
+      panel(g, this.near.x - w / 2, this.near.y - 14, w, 12, { bg: 'rgba(12,10,22,0.9)' });
       const blink = Math.floor(this.t * 3) % 2 === 0;
-      drawText(g, label, this.near.x, this.near.y - 27, { color: blink ? UI.gold : UI.ink, align: 'center' });
+      drawText(g, label, this.near.x, this.near.y - 11, { color: blink ? UI.gold : UI.ink, align: 'center' });
     }
 
-    // header
-    drawText(g, 'YOUR HOUSE', this.W / 2, 8, { color: UI.gold, align: 'center' });
+    drawText(g, 'YOUR HOUSE', this.W / 2, 6, { color: UI.gold, align: 'center' });
     if (this.t < 4) drawText(g, 'WASD move   E interact   Esc leave', this.W / 2, this.H - 10, { color: 'rgba(230,223,251,0.55)', align: 'center' });
 
     if (this.dialogue) dialogue(g, this.W, this.H, this.dialogue.speaker, this.dialogue.lines[this.dialogue.idx], this.dialogueReveal, { prompt: this.dialogue.idx < this.dialogue.lines.length - 1 ? 'J: more' : 'J: ok' });
-  }
-
-  _furniture(g) {
-    // bed
-    shadow(g, 143, 118, 26, 3, 0.25);
-    rect(g, 116, 92, 54, 26, '#6b4a2e'); rectOutline(g, 116, 92, 54, 26, '#4a3220');
-    rect(g, 120, 96, 16, 18, '#dfe6f2');          // pillow area
-    rect(g, 136, 96, 30, 18, '#5c6a8a');          // blanket
-    rect(g, 136, 96, 30, 3, '#7c8ab0');
-    // bookshelf
-    rect(g, 300, 82, 60, 16, '#5a3a24'); rectOutline(g, 300, 82, 60, 16, '#3a2414');
-    for (let i = 0; i < 10; i++) rect(g, 304 + i * 5, 84, 3, 12, ['#c0463c', '#3f7a5c', '#5c6a8a', '#c99a2f', '#8a4a8a'][i % 5]);
-    rect(g, 300, 90, 60, 1, '#3a2414');
-    // table with a candle
-    shadow(g, 230, 166, 20, 3, 0.24);
-    rect(g, 210, 150, 40, 8, '#7a5530'); rect(g, 214, 158, 3, 8, '#5a3a24'); rect(g, 243, 158, 3, 8, '#5a3a24');
-    rect(g, 228, 144, 3, 6, '#e8e2c8'); const cf = 0.6 + Math.sin(this.t * 6) * 0.2; g.globalAlpha = cf; disc(g, 229, 142, 2, '#ffd67a'); g.globalAlpha = 1;
-    // fireplace
-    rect(g, 340, 150, 30, 22, '#6b6b7a'); rectOutline(g, 340, 150, 30, 22, '#3a3e4a');
-    rect(g, 346, 160, 18, 12, '#2a1a12');
-    const ff = 0.6 + Math.sin(this.t * 7) * 0.25; g.globalAlpha = ff; disc(g, 355, 168, 5, '#f2942b'); disc(g, 355, 169, 3, '#ffd67a'); g.globalAlpha = 1;
-    rect(g, 340, 148, 30, 3, '#5a5a68');
-    // potted plants
-    rect(g, 104, 200, 6, 5, '#6b4a2e'); rect(g, 105, 194, 2, 6, '#3a7a3e'); rect(g, 108, 195, 2, 5, '#3a7a3e');
-    rect(g, 366, 200, 6, 5, '#6b4a2e'); rect(g, 367, 194, 2, 6, '#3a7a3e');
-    // exit doormat + door on the south wall
-    rect(g, this.W / 2 - 12, this.room.y + this.room.h - 6, 24, 6, '#8a5a3a');
-    rect(g, this.W / 2 - 9, this.room.y + this.room.h - 16, 18, 16, '#4a2f1c'); rectOutline(g, this.W / 2 - 9, this.room.y + this.room.h - 16, 18, 16, '#2a1a10');
-    rect(g, this.W / 2 + 4, this.room.y + this.room.h - 9, 2, 2, '#d8b24a');
   }
 }
