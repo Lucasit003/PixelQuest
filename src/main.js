@@ -11,6 +11,7 @@ import { TrainingScene } from './scenes/training.js';
 import { CombatScene } from './scenes/combat.js';
 import { HouseScene } from './scenes/house.js';
 import { PotionShopScene } from './scenes/potionshop.js';
+import { WeaponShopScene } from './scenes/weaponshop.js';
 
 const canvas = document.getElementById('game');
 const BASE_W = canvas.width;   // 480
@@ -54,6 +55,7 @@ function goTown(hero, outcome) {
     toDungeon: () => goDungeon(hero),
     toHouse: () => goHouse(hero),
     toPotionShop: () => goPotionShop(hero),
+    toWeaponShop: () => goWeaponShop(hero),
   });
   game.transition(() => town);
   if (outcome) setTimeout(() => town.setOutcome && town.setOutcome(outcome), 400);
@@ -65,6 +67,10 @@ function goHouse(hero) {
 
 function goPotionShop(hero) {
   game.transition(() => new PotionShopScene(hero, () => goTown(hero)));
+}
+
+function goWeaponShop(hero) {
+  game.transition(() => new WeaponShopScene(hero, () => goTown(hero)));
 }
 
 function goTraining(hero) {
