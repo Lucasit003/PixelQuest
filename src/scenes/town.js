@@ -245,7 +245,7 @@ export class TownScene {
     // footprints with recognizable shapes, dense vegetation defining space,
     // and the adventure route (watch -> gate) direct to the north. Still a
     // geometry pass: structures are dashed reserved-footprint markers.
-    const PZ = { x: 1300, y: 1180 };
+    const PZ = { x: MAP_W / 2, y: MAP_H / 2 }; // dead center of the map
     const OFF = (dx, dy) => ({ x: PZ.x + dx, y: PZ.y + dy });
 
     // Compact core (reorganization pass): every district pulled 30-50%+
