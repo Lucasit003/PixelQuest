@@ -70,7 +70,7 @@ const GUILD_W = 122, GUILD_H = 78;
 const BLACKSMITH_ART = loadBuildingArt('assets/blacksmith.png');
 const BLACKSMITH_W = 112, BLACKSMITH_H = 68;
 const HOUSE_ART = loadBuildingArt('assets/house.png');
-const HOUSE_W = 75, HOUSE_H = 66;
+const HOUSE_W = 188, HOUSE_H = 165; // +150%
 
 // Real building art swapped in for districts that were still using
 // procedural placeholders (drawMarker or hand-drawn rects).
@@ -81,21 +81,21 @@ const COTTAGE_W = 140, COTTAGE_H = 88;
 const WATCH_ART = loadBuildingArt('assets/buildings/wayferers_watch.png');
 const WATCH_W = 220, WATCH_H = 111;
 const SANCTUARY_ART = loadBuildingArt('assets/buildings/pet_sanctuary.png');
-const SANCTUARY_W = 150, SANCTUARY_H = 94;
+const SANCTUARY_W = 375, SANCTUARY_H = 235; // +150%
 const TRAINING_ART = loadBuildingArt('assets/buildings/training_grounds.png');
 const TRAINING_W = 260, TRAINING_H = 141;
 const DUNGEON_ART = loadBuildingArt('assets/buildings/duengon_gate.png');
-const DUNGEON_W = 200, DUNGEON_H = 105;
+const DUNGEON_W = 550, DUNGEON_H = 289; // +175%
 const STALL_PRODUCE_ART = loadBuildingArt('assets/buildings/stall_produce.png');
-const STALL_PRODUCE_W = 50, STALL_PRODUCE_H = 33;
+const STALL_PRODUCE_W = 125, STALL_PRODUCE_H = 83; // +150%
 const STALL_BAKERY_ART = loadBuildingArt('assets/buildings/stall_bakery.png');
-const STALL_BAKERY_W = 42, STALL_BAKERY_H = 36;
+const STALL_BAKERY_W = 105, STALL_BAKERY_H = 90; // +150%
 const STALL_CLOTH_ART = loadBuildingArt('assets/buildings/stall_cloth.png');
-const STALL_CLOTH_W = 42, STALL_CLOTH_H = 37;
+const STALL_CLOTH_W = 105, STALL_CLOTH_H = 93; // +150%
 const STALL_GOODS_ART = loadBuildingArt('assets/buildings/stall_goods.png');
-const STALL_GOODS_W = 52, STALL_GOODS_H = 32;
+const STALL_GOODS_W = 130, STALL_GOODS_H = 80; // +150%
 const STALL_MERCHANT_ART = loadBuildingArt('assets/buildings/stall_merchant.png');
-const STALL_MERCHANT_W = 50, STALL_MERCHANT_H = 33;
+const STALL_MERCHANT_W = 125, STALL_MERCHANT_H = 83; // +150%
 
 // Crystal lamp posts flanking the north (Adventure Road) approach to the
 // plaza — a landmark pair, sized well above the plaza's own scale.
@@ -255,17 +255,22 @@ export class TownScene {
     // Gate — instead of Guild sitting off to the west.
     const D = {
       plaza: PZ,
-      commercial: OFF(260, 10),     // east: shared Potion + Forge courtyard
-      market: OFF(110, 300),        // south/southeast: open square
-      residential: OFF(-280, 270),  // southwest: neighborhood loop
+      commercial: OFF(260, 10),     // (unused now — potion/weapon have standalone spots below)
+      market: OFF(280, 100),        // a decent bit right, only slightly below the fountain
+      residential: OFF(-280, 270),  // cottage + lots + loop road (unmoved)
       southRoad: OFF(20, 380),      // south exit / expansion
-      guild: OFF(-90, -260),        // north(-ish): first stop on the adventure route
-      archive: OFF(480, -250),      // northeast: landscaped property
-      sanctuary: OFF(-500, -450),   // outer northwest: vegetation-buffered
-      training: OFF(-620, -190),    // west/northwest: Valorhall compound
-      watch: OFF(25, -700),         // north, on the Adventure Road, past the guild
-      gate: OFF(0, -1080),          // far north landmark
+      guild: OFF(-180, 600),        // bottom-middle, left of the fountain, lower down
+      archive: OFF(180, 600),       // bottom-middle, right of the fountain, lower down
+      sanctuary: OFF(530, 250),     // right of market, lower side
+      training: OFF(-400, -100),    // left side, close to the fountain's left, slightly up
+      watch: OFF(0, -700),          // between gate and fountain, closer to the gate
+      gate: OFF(0, -1000),          // top center of the map
     };
+    // Standalone points that used to ride on a shared district anchor but now
+    // have their own spot per the latest layout pass.
+    const houseSpot = { x: D.market.x + 250, y: D.market.y - 100 };  // right of market, upper side
+    const forgeSpot = { x: D.training.x, y: D.training.y + 170 };    // below training, gap included
+    const potionSpot = { x: forgeSpot.x, y: forgeSpot.y + 110 };     // below weapon smith, room between
 
     this.plazaCenter = PZ;
     // The fountain sprite is anchored at its base (PZ.y) and drawn upward, so
@@ -295,22 +300,22 @@ export class TownScene {
         draw: (g) => drawPropArt(g, LAMP4_ART, FC.x + 34, FC.y + this.plazaRadius + 28, LAMP4_W, LAMP4_H, 6, true),
         solid: { x: FC.x + 34 - 4, y: FC.y + this.plazaRadius + 28 - 4, w: 8, h: 8 } },
 
-      // ---- Commercial District: two shops around one shared courtyard ----
-      { id: 'potion', name: 'Potion Shop', dx: D.commercial.x - 80, dy: D.commercial.y + 62, action: 'potion', district: 'Commercial District',
-        draw: (g) => drawPotionShop(g, D.commercial.x - 80, D.commercial.y + 62, this.t),
-        solid: { x: D.commercial.x - 80 - 56, y: D.commercial.y - 18, w: 113, h: 80 } },
-      { id: 'weapon', name: 'Ironhearth Forge', dx: D.commercial.x + 85, dy: D.commercial.y + 62, action: 'weapon', district: 'Commercial District',
-        draw: (g) => drawBlacksmith(g, D.commercial.x + 85, D.commercial.y + 62, this.t),
-        solid: { x: D.commercial.x + 85 - 56, y: D.commercial.y - 6, w: 112, h: 68 } },
+      // ---- Weapon Smith + Potion Shop: standalone column below Training ----
+      { id: 'weapon', name: 'Ironhearth Forge', dx: forgeSpot.x, dy: forgeSpot.y, action: 'weapon', district: 'Ironhearth Forge',
+        draw: (g) => drawBlacksmith(g, forgeSpot.x, forgeSpot.y, this.t),
+        solid: { x: forgeSpot.x - 56, y: forgeSpot.y - 68, w: 112, h: 68 } },
+      { id: 'potion', name: 'Potion Shop', dx: potionSpot.x, dy: potionSpot.y, action: 'potion', district: 'Potion Shop',
+        draw: (g) => drawPotionShop(g, potionSpot.x, potionSpot.y, this.t),
+        solid: { x: potionSpot.x - 56, y: potionSpot.y - 80, w: 113, h: 80 } },
 
       // ---- Market Square: one shared open square, stalls on its edges ----
       { id: 'market', name: 'Market Square', dx: D.market.x, dy: D.market.y, action: 'market', district: 'Market Square', zone: true,
         draw: (g) => drawMarket(g, D.market.x, D.market.y, this.t), solid: null },
 
       // ---- Residential Quarter: neighborhood loop with 4 lots ----
-      { id: 'home', name: 'Player House', dx: D.residential.x + 120, dy: D.residential.y - 95, action: 'house', district: 'Residential Quarter',
-        draw: (g) => drawPlayerHouse(g, D.residential.x + 120, D.residential.y - 95, this.t),
-        solid: { x: D.residential.x + 120 - 70, y: D.residential.y - 195, w: 140, h: 100 } },
+      { id: 'home', name: 'Player House', dx: houseSpot.x, dy: houseSpot.y, action: 'house', district: 'Player House',
+        draw: (g) => drawPlayerHouse(g, houseSpot.x, houseSpot.y, this.t),
+        solid: { x: houseSpot.x - HOUSE_W / 2, y: houseSpot.y - HOUSE_H, w: HOUSE_W, h: HOUSE_H } },
       { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: D.residential.x - 140, dy: D.residential.y - 75, action: null, district: 'Residential Quarter',
         draw: (g) => drawPropArt(g, COTTAGE_ART, D.residential.x - 140, D.residential.y - 75, COTTAGE_W, COTTAGE_H, 0),
         solid: { x: D.residential.x - 140 - COTTAGE_W / 2, y: D.residential.y - 75 - COTTAGE_H, w: COTTAGE_W, h: COTTAGE_H } },
@@ -367,15 +372,17 @@ export class TownScene {
     // the gaps between districts so entry banners don't overlap each other.
     this.regions = [
       { name: 'Crystal Plaza', x: PZ.x - 130, y: PZ.y - 130, w: 260, h: 250 },
-      { name: 'Commercial District', x: D.commercial.x - 110, y: D.commercial.y - 80, w: 220, h: 160 },
+      { name: 'Ironhearth Forge', x: forgeSpot.x - 110, y: forgeSpot.y - 130, w: 220, h: 160 },
+      { name: 'Potion Shop', x: potionSpot.x - 110, y: potionSpot.y - 130, w: 220, h: 160 },
       { name: 'Market Square', x: D.market.x - 140, y: D.market.y - 110, w: 280, h: 220 },
+      { name: 'Player House', x: houseSpot.x - 130, y: houseSpot.y - 160, w: 260, h: 220 },
       { name: 'Residential Quarter', x: D.residential.x - 170, y: D.residential.y - 140, w: 340, h: 280 },
       { name: 'Shield & Stein', x: D.guild.x - 100, y: D.guild.y - 85, w: 200, h: 170 },
       { name: 'Runewood Archive', x: D.archive.x - 110, y: D.archive.y - 90, w: 220, h: 180 },
-      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 130, y: D.sanctuary.y - 110, w: 260, h: 220 },
+      { name: 'Moonpaw Sanctuary', x: D.sanctuary.x - 220, y: D.sanctuary.y - 200, w: 440, h: 400 },
       { name: 'Valorhall Training Grounds', x: D.training.x - 150, y: D.training.y - 130, w: 300, h: 260 },
       { name: "Wayfarer's Watch", x: D.watch.x - 140, y: D.watch.y - 100, w: 280, h: 180 },
-      { name: 'Runebound Gate', x: D.gate.x - 160, y: D.gate.y - 120, w: 320, h: 220 },
+      { name: 'Runebound Gate', x: D.gate.x - 300, y: D.gate.y - 220, w: 600, h: 400 },
       { name: 'South Road', x: D.southRoad.x - 110, y: D.southRoad.y - 90, w: 220, h: 180 },
     ];
 
@@ -498,9 +505,10 @@ export class TownScene {
 
     // Market Square ground: an organic open square south of the plaza
     this.marketGround = { cx: D.market.x, cy: D.market.y, rx: 210, ry: 160 };
-    // Commercial + Guild + Archive courtyards: small stone aprons in front of the shops
+    // Forge + Potion + Guild + Archive courtyards: small stone aprons in front of the shops
     this.courtyards = [
-      { cx: D.commercial.x, cy: D.commercial.y + 62, rx: 160, ry: 42 },
+      { cx: forgeSpot.x, cy: forgeSpot.y, rx: 85, ry: 35 },
+      { cx: potionSpot.x, cy: potionSpot.y, rx: 85, ry: 35 },
       { cx: D.guild.x, cy: D.guild.y + 72, rx: 90, ry: 38 },
       { cx: D.archive.x, cy: D.archive.y + 45, rx: 85, ry: 35 },
     ];
@@ -849,10 +857,8 @@ export class TownScene {
     // Roads removed again (per direction) — plaza and buildings untouched,
     // this just stops drawing the road-tile network.
 
-    // Crystal Plaza: a real round stone floor, centered exactly on the
-    // fountain's visual center, with genuine tile variation (base/worn/
-    // moss/cracked/crystal-accent) instead of a flat wash.
-    plaza(g, this.plazaFocus.x, this.plazaFocus.y, this.plazaRadius, this.plazaFlares);
+    // Plaza stone floor removed (per direction) — fountain sits directly on
+    // grass now, no surrounding paving drawn.
 
     // Market Square ground: one big organic open square (packed dirt with a
     // stone edge), stalls live on its rim, center stays open.
@@ -1407,16 +1413,17 @@ function drawMarket(g, cx, cy, t) {
     { art: STALL_GOODS_ART, w: STALL_GOODS_W, h: STALL_GOODS_H },
     { art: STALL_MERCHANT_ART, w: STALL_MERCHANT_W, h: STALL_MERCHANT_H },
   ];
-  const startX = cx - 84;
+  const spacing = 105; // scaled up with the +150% stall size so they don't overlap
+  const startX = cx - spacing * 2;
   for (let i = 0; i < 5; i++) {
-    const sx = startX + i * 42;
-    const sy = cy + (i % 2) * 8;
+    const sx = startX + i * spacing;
+    const sy = cy + (i % 2) * 20;
     const s = stalls[i];
     contactShadow(g, sx, sy + s.h * 0.32, s.w * 0.4, 4, 0.25);
     if (s.art.ready) g.drawImage(s.art.img, Math.round(sx - s.w / 2), Math.round(sy - s.h / 2), s.w, s.h);
   }
   // well centrepiece
-  const wx = cx, wy = cy + 26;
+  const wx = cx, wy = cy + 65;
   shadow(g, wx, wy, 9, 3, 0.3);
   rect(g, wx - 9, wy - 8, 18, 8, '#8a8ea0'); rectOutline(g, wx - 9, wy - 8, 18, 8, '#3a3e4a');
   rect(g, wx - 10, wy - 20, 2, 12, '#5a3a24'); rect(g, wx + 8, wy - 20, 2, 12, '#5a3a24');
