@@ -191,7 +191,9 @@ function contactShadow(g, cx, by, rx, ry, alpha = 0.32) {
 // horizontally so a prop on the right of a path reads as facing inward
 // (toward the centerline) the same way its left-side twin naturally does.
 function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false) {
-  contactShadow(g, x, y, shadowRx, Math.max(2, shadowRx * 0.4), 0.22);
+  // shadowRx 0 skips the shadow entirely — used by compound-style art
+  // (Watch, Sanctuary, Cottage, Gate) whose PNGs include their own ground.
+  if (shadowRx > 0) contactShadow(g, x, y, shadowRx, Math.max(2, shadowRx * 0.4), 0.22);
   if (!art.ready) return;
   if (flip) {
     g.save();
@@ -305,7 +307,7 @@ export class TownScene {
         draw: (g) => drawPlayerHouse(g, D.residential.x + 120, D.residential.y - 95, this.t),
         solid: { x: D.residential.x + 120 - 70, y: D.residential.y - 195, w: 140, h: 100 } },
       { id: 'cottage', name: 'Hearthwood Cottage (reserved)', dx: D.residential.x - 140, dy: D.residential.y - 75, action: null, district: 'Residential Quarter',
-        draw: (g) => drawPropArt(g, COTTAGE_ART, D.residential.x - 140, D.residential.y - 75, COTTAGE_W, COTTAGE_H, COTTAGE_W * 0.28),
+        draw: (g) => drawPropArt(g, COTTAGE_ART, D.residential.x - 140, D.residential.y - 75, COTTAGE_W, COTTAGE_H, 0),
         solid: { x: D.residential.x - 140 - COTTAGE_W / 2, y: D.residential.y - 75 - COTTAGE_H, w: COTTAGE_W, h: COTTAGE_H } },
       { id: 'lotA', name: null, dx: null, dy: null, action: null, sortY: D.residential.y + 175,
         draw: (g) => drawMarker(g, D.residential.x - 150, D.residential.y + 130, 60, 45, 'Future Home') },
@@ -328,7 +330,7 @@ export class TownScene {
 
       // ---- Moonpaw Sanctuary: large green fenced property ----
       { id: 'pets', name: 'Moonpaw Sanctuary (reserved)', dx: D.sanctuary.x, dy: D.sanctuary.y + 55, action: 'pets', district: 'Moonpaw Sanctuary',
-        draw: (g) => drawPropArt(g, SANCTUARY_ART, D.sanctuary.x, D.sanctuary.y + 55, SANCTUARY_W, SANCTUARY_H, SANCTUARY_W * 0.28),
+        draw: (g) => drawPropArt(g, SANCTUARY_ART, D.sanctuary.x, D.sanctuary.y + 55, SANCTUARY_W, SANCTUARY_H, 0),
         solid: { x: D.sanctuary.x - SANCTUARY_W / 2, y: D.sanctuary.y + 55 - SANCTUARY_H, w: SANCTUARY_W, h: SANCTUARY_H } },
 
       // ---- Valorhall: large dedicated compound ----
@@ -338,12 +340,12 @@ export class TownScene {
 
       // ---- Wayfarer's Watch: fortified checkpoint straddling the road ----
       { id: 'watchGate', name: null, dx: null, dy: null, action: null, district: "Wayfarer's Watch", sortY: D.watch.y + 30,
-        draw: (g) => drawPropArt(g, WATCH_ART, D.watch.x + 35, D.watch.y + 30, WATCH_W, WATCH_H, WATCH_W * 0.22),
+        draw: (g) => drawPropArt(g, WATCH_ART, D.watch.x + 35, D.watch.y + 30, WATCH_W, WATCH_H, 0),
         solid: { x: D.watch.x + 35 - WATCH_W / 2, y: D.watch.y + 30 - WATCH_H, w: WATCH_W, h: WATCH_H * 0.55 } },
 
       // ---- Runebound Gate: large northern landmark approach ----
       { id: 'dungeon', name: 'Runebound Gate', dx: D.gate.x, dy: D.gate.y + 48, action: 'dungeon', district: 'Runebound Gate',
-        draw: (g) => drawPropArt(g, DUNGEON_ART, D.gate.x, D.gate.y + 28, DUNGEON_W, DUNGEON_H, DUNGEON_W * 0.22),
+        draw: (g) => drawPropArt(g, DUNGEON_ART, D.gate.x, D.gate.y + 28, DUNGEON_W, DUNGEON_H, 0),
         solid: { x: D.gate.x - DUNGEON_W / 2, y: D.gate.y + 28 - DUNGEON_H, w: DUNGEON_W, h: DUNGEON_H * 0.65 } },
 
       // ---- Quest Board: small functional prop by the Watch ----
@@ -1400,7 +1402,6 @@ function drawTavern(g, cx, baseY, t) {
 }
 
 function drawTrainingGround(g, cx, cy, t) {
-  contactShadow(g, cx, cy + TRAINING_H / 2 - 6, TRAINING_W * 0.3, 6, 0.25);
   if (!TRAINING_ART.ready) return;
   g.drawImage(TRAINING_ART.img, Math.round(cx - TRAINING_W / 2), Math.round(cy - TRAINING_H / 2), TRAINING_W, TRAINING_H);
 }
