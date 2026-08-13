@@ -1094,9 +1094,10 @@ function drawPotionShop(g, cx, baseY, t) {
 // The Crystal Plaza fountain — rendered from the authored transparent PNG.
 // Anchored bottom-centre on the plaza with only a very subtle contact shadow
 // beneath the stone base (the crystal glow/sparkles are separate particles).
+const RING_SCALE = 0.8; // ring visual size only -- plazaRadius (roads/floor) untouched
 function drawFountainSprite(g, cx, baseY, t, ringRadius) {
   if (RING_READY && ringRadius) {
-    const ringSize = Math.round(ringRadius * 2 * (RING_SRC_HALF / RING_SRC_OUTER));
+    const ringSize = Math.round(ringRadius * 2 * (RING_SRC_HALF / RING_SRC_OUTER) * RING_SCALE);
     const ringCy = baseY - FOUNTAIN_H / 2; // true visual center of the plaza (see FC below)
     g.drawImage(RING_IMG, Math.round(cx - ringSize / 2), Math.round(ringCy - ringSize / 2), ringSize, ringSize);
   }
