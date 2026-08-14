@@ -130,6 +130,16 @@ function hasClearWater(info, worldW, worldH, cx, cy, rx) {
   return info.clearance[sy * info.w + sx] >= (rx + 2) * kx;
 }
 
+// How much clear water there is around a point, in world units — i.e. the
+// largest ring that can be drawn here without touching anything.
+function clearRadius(info, worldW, worldH, cx, cy) {
+  if (!info.clearance) return 0;
+  const kx = info.w / worldW;
+  const sx = Math.round(cx * kx), sy = Math.round(cy * (info.h / worldH));
+  if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return 0;
+  return info.clearance[sy * info.w + sx] / kx;
+}
+
 // Crisp scattered-dot "ring" — reads as a ripple crest without a true stroke
 // (same helper as the fountain's pixelRingDots). Dot count scales with the
 // ring's circumference so large ripples stay a smooth circle instead of
@@ -193,35 +203,54 @@ const FISH_FRAMES = [
 const FISH_TOTAL_MS = FISH_FRAMES.reduce((s, f) => s + f[5], 0);
 const FISH_SCALE = 0.105;  // source px -> world units
 const FISH_TRAVEL = 17;    // world units of forward drift across the whole jump
+// Frame 8 is the tail-first entry: it begins 1070ms into the jump, so that is
+// the moment the water is struck and the wake starts spreading.
+const FISH_ENTRY_S = 1.07;
+
+// Room the fish and its splash need around the jump point, in world units.
+// The widest frame is ~27 units across, so this keeps the whole sprite — and
+// the spray either side of it — over open water.
+const FISH_CLEARANCE = 17;
 
 /**
- * Occasional fish jump on the pond. Same (left, top, worldW, worldH) framing as
- * proceduralRipples, and the same water mask picks a believable spot.
- * `period` is the seconds between jumps.
+ * Fish jumping on the pond. Draws `count` separate fish, each on its own
+ * rhythm and each picking its own spot, so jumps come from different places
+ * around the water rather than one repeating location.
+ *
+ * Same (left, top, worldW, worldH) framing as the rest of this module.
+ * `period` is roughly the seconds between one fish's jumps; with several fish
+ * the pond as a whole sees a jump every period/count seconds or so.
  */
-export function drawFishJump(g, info, left, top, worldW, worldH, t, period = 6.5) {
+export function drawFishJump(g, info, left, top, worldW, worldH, t, period = 8, count = 3) {
   if (!info || !FISH_READY) return;
+  for (let n = 0; n < count; n++) {
+    // Each fish gets a slightly different period so they drift out of step
+    // instead of jumping on a metronome, and a starting offset so the first
+    // few jumps are spread around the cycle rather than landing together.
+    drawOneJump(g, info, left, top, worldW, worldH,
+      t + (period / count) * n, period + n * 0.9, n);
+  }
+}
+
+function drawOneJump(g, info, left, top, worldW, worldH, t, period, salt) {
   const jumpDur = FISH_TOTAL_MS / 1000;
   const cycle = Math.floor(t / period);
   const local = t % period;
-  if (local > jumpDur) return; // resting between jumps
+  // The wake outlives the jump itself, so this window has to stay open past the
+  // last sprite frame.
+  if (local > Math.max(jumpDur, FISH_ENTRY_S + WAKE_LIFE)) return;
 
   // Pick a spot with clear water all round, so the fish never erupts through
   // the bank, a lily pad, or the island. The candidate sequence is salted with
-  // the cycle number, so consecutive jumps land in genuinely different places
-  // rather than cycling through the same few spots.
+  // both the cycle number and which fish this is, so successive jumps — and the
+  // different fish — land in genuinely different places.
   let jx = 0, jy = 0, found = false;
-  for (let tries = 0; tries < 16 && !found; tries++) {
-    const sa = hash(cycle * 7.7 + tries * 3.1 + 200);
-    const sb = hash(cycle * 4.3 + tries * 5.9 + 201);
+  for (let tries = 0; tries < 20 && !found; tries++) {
+    const sa = hash(cycle * 7.7 + tries * 3.1 + salt * 137.7 + 200);
+    const sb = hash(cycle * 4.3 + tries * 5.9 + salt * 91.3 + 201);
     jx = 40 + sa * (worldW - 80);
     jy = 40 + sb * (worldH - 80);
-    found = true;
-    for (let dx = -22; dx <= 22 && found; dx += 11) {
-      for (let dy = -14; dy <= 14 && found; dy += 7) {
-        if (!waterAt(info, worldW, worldH, jx + dx, jy + dy)) found = false;
-      }
-    }
+    found = hasClearWater(info, worldW, worldH, jx, jy, FISH_CLEARANCE);
   }
   if (!found) return;
 
@@ -233,19 +262,236 @@ export function drawFishJump(g, info, left, top, worldW, worldH, t, period = 6.5
     if (ms < acc) { idx = i; break; }
     idx = i;
   }
-  const f = FISH_FRAMES[idx];
-  const progress = Math.min(1, ms / FISH_TOTAL_MS);
+  // Where the fish actually re-enters the water: its own drifted position at
+  // the moment of the entry frame, not the point it launched from.
+  const entryX = jx + (FISH_ENTRY_S * 1000 / FISH_TOTAL_MS - 0.5) * FISH_TRAVEL;
+  drawFishWake(g, info, left, top, worldW, worldH, entryX, jy, local - FISH_ENTRY_S, salt + cycle * 13.1);
 
-  const dw = Math.round(f[2] * FISH_SCALE);
-  const dh = Math.round(f[3] * FISH_SCALE);
-  // centre each frame horizontally on the jump point, plus forward drift
-  const dx = Math.round(left + jx - dw / 2 + (progress - 0.5) * FISH_TRAVEL);
-  const dy = Math.round(top + jy + f[4] * FISH_SCALE);
+  if (local <= jumpDur) {
+    const f = FISH_FRAMES[idx];
+    // Forward drift stops the instant the fish is back in the water. The last
+    // frames of the sheet are the splash and its rings, and those belong to the
+    // point of entry — letting them keep sliding forward would walk them away
+    // from it, and the procedural rings that follow would then appear to jump
+    // back sideways.
+    const progress = Math.min(FISH_ENTRY_S * 1000 / FISH_TOTAL_MS, ms / FISH_TOTAL_MS);
+
+    const dw = Math.round(f[2] * FISH_SCALE);
+    const dh = Math.round(f[3] * FISH_SCALE);
+    // centre each frame horizontally on the jump point, plus forward drift
+    const dx = Math.round(left + jx - dw / 2 + (progress - 0.5) * FISH_TRAVEL);
+    const dy = Math.round(top + jy + f[4] * FISH_SCALE);
+
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.drawImage(FISH_IMG, f[0], f[1], f[2], f[3], dx, dy, dw, dh);
+    g.restore();
+  }
+}
+
+// Concentric rings spreading from the point the fish drops back in. The sheet's
+// own last frames give the first splash ring; this carries the disturbance on
+// outward the way real water does.
+//
+// Three details do most of the work in selling it:
+//  - rings are emitted at a steady interval, so several are travelling at once
+//    at even spacing, rather than one lonely expanding circle;
+//  - each ring slows as it travels and fades as it grows, because the same
+//    energy is spread around an ever longer crest;
+//  - the whole set is capped by the clear water actually available at the entry
+//    point, so rings stay complete circles instead of being cut by the bank.
+const WAKE_RINGS = 5;
+const WAKE_INTERVAL = 0.30;   // seconds between successive rings
+const WAKE_SPEED = 14;        // world units/sec — constant, see below
+const WAKE_LIFE = 2.7;        // seconds until the last ring has died away
+const WAKE_MAX_R = 42;        // ceiling on ring size in open water
+
+function drawFishWake(g, info, left, top, worldW, worldH, cx, cy, age, seed) {
+  if (age < 0 || age > WAKE_LIFE) return;
+  const room = clearRadius(info, worldW, worldH, cx, cy) - 2;
+  if (room <= 2) return;
+  const rMax = Math.min(WAKE_MAX_R, room);
+  const inWater = (x, y) => waterAt(info, worldW, worldH, x - left, y - top);
 
   g.save();
-  g.imageSmoothingEnabled = false;
-  g.drawImage(FISH_IMG, f[0], f[1], f[2], f[3], dx, dy, dw, dh);
+  for (let k = 0; k < WAKE_RINGS; k++) {
+    const a = age - k * WAKE_INTERVAL;
+    if (a <= 0) continue;
+    // Constant travel speed. Ripples move at a near-fixed phase speed, so the
+    // gap between successive crests stays even — the giveaway of a real wake.
+    // Decelerating them instead makes every ring converge on the same radius
+    // and the whole set collapses into a bullseye.
+    const r = WAKE_SPEED * a;
+    if (r >= rMax) continue;
+    // Later rings start weaker, the splash having already spent most of its
+    // energy; each then fades with age, and again with radius because the same
+    // energy is stretched around an ever longer crest.
+    const born = 1 - k / WAKE_RINGS * 0.55;
+    const alpha = 0.62 * born * Math.pow(1 - a / WAKE_LIFE, 1.2) / (1 + r * 0.02);
+    if (alpha <= 0.025) continue;
+    ringDots(g, left + cx, top + cy, r, Math.max(1, r * 0.5),
+      [214, 238, 250], alpha, inWater, seed + k * 2.3);
+  }
   g.restore();
+}
+
+// ----------------------------------------------------------------- ducks
+// assets/duck.png is a behaviour sheet rather than a single action: six
+// labelled rows (swim, idle float, look about, head dip, full dabble, wing
+// flap). Unlike the fish — one shot, then gone — ducks are permanent residents,
+// so they hold a position on the water, drift around it, and every so often
+// break the float with one of the one-off behaviours.
+//
+// Frame boxes were read off the sheet by locating each frame's green head and
+// taking a window measured from an isolated duck; at ~207px head spacing that
+// window provably cannot touch a neighbouring frame. Every frame is anchored by
+// its BOTTOM edge, which is where the sheet draws the waterline ripple, so the
+// duck stays sitting in the water however much its body pitches.
+//
+// The first frame of every row is skipped: the row's label ("SWIM —" etc.) is
+// set hard against that duck's tail and overlaps it by 3-25px, so slicing it
+// would drag the text in. Every row has frames to spare, and frame 1 is close
+// enough to frame 0 that no motion is lost.
+const DUCK_IMG = new Image();
+let DUCK_READY = false;
+DUCK_IMG.onload = () => { DUCK_READY = true; };
+DUCK_IMG.src = 'assets/duck.png';
+
+const DUCK_ANIM = {
+  swim: { ms: 110, frames: [
+    [293, 46, 157, 99], [502, 46, 157, 99], [713, 46, 157, 99],
+    [920, 45, 157, 100], [1127, 45, 157, 102], [1322, 45, 164, 103], [1512, 45, 158, 107],
+  ] },
+  idle: { ms: 460, frames: [
+    [461, 183, 156, 95], [667, 182, 158, 102],
+  ] },
+  look: { ms: 200, frames: [
+    [436, 327, 130, 102], [647, 327, 157, 101],
+    [862, 327, 155, 101], [1075, 329, 156, 99],
+  ] },
+  dip: { ms: 150, frames: [
+    [239, 459, 153, 92], [459, 476, 148, 71], [672, 481, 147, 67],
+    [870, 470, 158, 86], [1063, 447, 163, 104], [1280, 458, 156, 94], [1484, 455, 155, 97],
+  ] },
+  dabble: { ms: 180, frames: [
+    [255, 573, 152, 146], [443, 590, 152, 123], [662, 586, 154, 125],
+    [872, 611, 153, 90], [1078, 621, 157, 82], [1281, 600, 162, 111], [1490, 599, 157, 112],
+  ] },
+  flap: { ms: 85, frames: [
+    [246, 739, 157, 136], [455, 738, 156, 138], [656, 733, 157, 143],
+    [874, 754, 156, 122], [1093, 776, 158, 112], [1293, 777, 157, 98], [1495, 772, 158, 102],
+  ] },
+};
+
+const DUCK_SCALE = 0.11;    // source px -> world units (duck reads ~17 units long)
+const DUCK_WANDER = 20;     // how far a duck drifts from its home spot
+const DUCK_ROOM = DUCK_WANDER + 12;  // clear water needed around home
+const DUCK_SPACING = 130;   // keep ducks' home spots this far apart
+const DUCK_BEAT = 4.5;      // seconds between "should I do something?" moments
+const DUCK_SWIM_SPEED = 3.5; // world units/sec above which the swim cycle plays
+
+// Where duck `n` is at time t. A pair of out-of-phase sines gives a wandering
+// path that never repeats exactly but always stays inside DUCK_WANDER of home —
+// which is what keeps the duck on open water.
+//
+// Only the rates below set the pace; the amplitudes are untouched, so making
+// the ducks livelier never widens how far they roam and cannot push them onto
+// the bank. DUCK_SWIM_SPEED is scaled alongside them so the split between
+// paddling and floating stays where it was.
+function duckPos(home, n, t) {
+  const p1 = n * 1.7, p2 = n * 2.9, p3 = n * 0.8;
+  const x = home.x
+    + Math.sin(t * 0.30 + p1) * DUCK_WANDER * 0.7
+    + Math.sin(t * 0.18 + p3) * DUCK_WANDER * 0.3;
+  const y = home.y
+    + Math.cos(t * 0.24 + p2) * DUCK_WANDER * 0.34
+    + Math.cos(t * 0.15 + p1) * DUCK_WANDER * 0.16;
+  return { x, y };
+}
+
+/**
+ * A few ducks living on the pond. Each keeps to its own patch of water,
+ * paddling around it and now and then looking about, dipping its head,
+ * upending to dabble, or beating its wings.
+ */
+export function drawDucks(g, info, left, top, worldW, worldH, t, count = 3) {
+  if (!info || !DUCK_READY) return;
+
+  // Choose all the home spots up front so they can be kept apart: picked
+  // independently, two ducks can happen to settle almost on top of each other,
+  // which reads as a pair rather than birds spread over the lake.
+  const homes = [];
+  for (let n = 0; n < count; n++) {
+    let home = null;
+    for (let tries = 0; tries < 40 && !home; tries++) {
+      const sa = hash(n * 53.7 + tries * 3.7 + 300);
+      const sb = hash(n * 29.3 + tries * 6.1 + 301);
+      const hx = 40 + sa * (worldW - 80), hy = 40 + sb * (worldH - 80);
+      if (!hasClearWater(info, worldW, worldH, hx, hy, DUCK_ROOM)) continue;
+      // far enough from the ducks already placed (relaxes if the pond is tight)
+      const minGap = tries < 28 ? DUCK_SPACING : DUCK_WANDER * 2;
+      if (homes.some((o) => Math.hypot(o.x - hx, o.y - hy) < minGap)) continue;
+      home = { x: hx, y: hy };
+    }
+    if (home) homes.push(home);
+  }
+
+  for (let n = 0; n < homes.length; n++) {
+    const home = homes[n];
+    const pos = duckPos(home, n, t);
+    // finite difference for heading and speed
+    const prev = duckPos(home, n, t - 0.12);
+    const vx = (pos.x - prev.x) / 0.12, vy = (pos.y - prev.y) / 0.12;
+    const speed = Math.hypot(vx, vy);
+
+    // Pick this beat's behaviour. Most beats are "carry on"; the rest trigger
+    // one of the one-off actions, which plays once and then returns to
+    // floating/paddling for the remainder of the beat.
+    const beat = Math.floor(t / DUCK_BEAT + n * 0.37);
+    const roll = hash(n * 17.9 + beat * 7.3 + 310);
+    let key, oneShot = null;
+    if (roll > 0.86) oneShot = 'flap';
+    else if (roll > 0.74) oneShot = 'dabble';
+    else if (roll > 0.60) oneShot = 'dip';
+    else if (roll > 0.46) oneShot = 'look';
+
+    const intoBeat = (t + n * 0.37 * DUCK_BEAT) % DUCK_BEAT;
+    let anim, frameIdx;
+    if (oneShot) {
+      const a = DUCK_ANIM[oneShot];
+      const dur = (a.frames.length * a.ms) / 1000;
+      if (intoBeat < dur) {
+        anim = a;
+        frameIdx = Math.min(a.frames.length - 1, Math.floor(intoBeat * 1000 / a.ms));
+        key = oneShot;
+      }
+    }
+    if (!anim) {
+      // no action this beat (or it has finished): paddle if moving, else float
+      key = speed > DUCK_SWIM_SPEED ? 'swim' : 'idle';
+      anim = DUCK_ANIM[key];
+      frameIdx = Math.floor((t * 1000 / anim.ms) + n * 3) % anim.frames.length;
+    }
+
+    const f = anim.frames[frameIdx];
+    const dw = Math.max(1, Math.round(f[2] * DUCK_SCALE));
+    const dh = Math.max(1, Math.round(f[3] * DUCK_SCALE));
+    // bottom edge of the frame is the waterline in every row of the sheet
+    const dx = Math.round(left + pos.x - dw / 2);
+    const dy = Math.round(top + pos.y - dh);
+
+    g.save();
+    g.imageSmoothingEnabled = false;
+    if (vx < 0) {
+      // sheet ducks face right; mirror when paddling the other way
+      g.translate(dx + dw, dy);
+      g.scale(-1, 1);
+      g.drawImage(DUCK_IMG, f[0], f[1], f[2], f[3], 0, 0, dw, dh);
+    } else {
+      g.drawImage(DUCK_IMG, f[0], f[1], f[2], f[3], dx, dy, dw, dh);
+    }
+    g.restore();
+  }
 }
 
 // ------------------------------------------------------- A) procedural FX

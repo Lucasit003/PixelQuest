@@ -20,7 +20,7 @@ import { rect, rectOutline, disc, shadow, clamp, lerp, clamp01 } from '../gfx/pi
 import { drawCharacter, drawActor, drawPet } from '../gfx/actors.js';
 import { drawTree, drawPineTree, drawBush, drawRock, drawTorch, drawIcon, drawDummy } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
-import { buildWaterMask, proceduralRipples, drawFishJump } from '../gfx/waterfx.js';
+import { buildWaterMask, drawFishJump, drawDucks } from '../gfx/waterfx.js';
 import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
 
 // Master Town Layout v5 (final spacing polish — coordinates LOCKED once
@@ -172,12 +172,46 @@ const LAMP_W = 36, LAMP_H = 49;
 const LAMP4_ART = loadBuildingArt('assets/props/lamp_04.png');
 const LAMP4_W = 36, LAMP4_H = 47;
 
-// ------------------------------------------------------------ road tileset
-// Authored cobblestone tiles (96px squares, real alpha) with corners,
-// T-junctions, intersections and end caps. The town's road network is rasterised
-// onto a grid and each cell picks its tile from a 4-bit neighbour mask
-// (N=1, E=2, S=4, W=8), so junctions form automatically.
-const ROAD_TILE = 28;               // world units per road cell
+// ------------------------------------------------------------ decor props
+// Sliced out of the project's asset-library sheets (village decorations,
+// fences & property decor, natural vegetation, rocks & forest floor) and
+// matted to real alpha. Every sprite is bottom-anchored like the lamps
+// above, so an entry is just its on-screen size in world units — the sheets
+// are drawn at roughly twice the game's scale, hence the consistent
+// reduction. Only what the Crystal Plaza dressing actually uses is loaded.
+const DECOR_SIZE = {
+  // civic furniture — the benches match each other on purpose; a square reads
+  // as municipal when its furniture is a set, not an assortment
+  bench_01: [32, 20],
+  planter_01: [28, 21], planter_02: [32, 16],
+  lamppost_twin: [26, 38],
+  signpost: [20, 26],
+  // a trader's pitch — the plaza in use, not just furnished. Sized against the
+  // player rather than the sheet: a barrel reaches a hero's waist, a stack of
+  // crates their shoulder, so these run smaller than the civic furniture.
+  crate_stack: [23, 25], crate_01: [14, 16], barrel_01: [13, 16], barrel_stack: [21, 23],
+  sack_pile: [22, 18], sack_01: [12, 14], cart: [28, 24],
+  // planting
+  bush_01: [20, 18], bush_02: [20, 17], bush_03: [18, 16], bush_04: [18, 10],
+  bush_low: [26, 20], bush_big: [34, 32],
+  flowers_white: [16, 14], flowers_yellow: [17, 16], flowers_blue: [16, 16],
+  flowers_red: [17, 16], flowers_mixed: [23, 22],
+  grass_tuft_01: [17, 18], grass_tuft_02: [18, 17], grass_tuft_03: [17, 16], grass_tuft_04: [17, 17],
+  fern_clump: [25, 26], weeds_01: [18, 17], weeds_02: [16, 16],
+  tree_small_pine: [30, 38],
+  // ground detail
+  rock_small_01: [18, 15], rock_small_02: [18, 15], rock_small_03: [17, 15], rock_med_01: [27, 23],
+  pebbles_01: [11, 10], pebbles_02: [13, 9], pebbles_03: [18, 13],
+};
+const DECOR_ART = {};
+for (const n of Object.keys(DECOR_SIZE)) DECOR_ART[n] = loadBuildingArt(`assets/props/${n}.png`);
+
+// --------------------------------------------------------- road stone grid
+// The size one masonry tile covers on the ground. The road surface itself is
+// painted by the ROAD_FAM family system below, but the stone variant for any
+// given point is picked per ROAD_TILE cell (see roadTileFor), so this is what
+// sets the apparent scale of the paving across the roads and the plaza alike.
+const ROAD_TILE = 28;               // world units per stone cell
 
 // Town grass ground tiles (sliced from the user's Town Grass sheet). Variants:
 // 01 base, 02 base variation, 03 light flowers, 04 patchy dirt.
@@ -218,21 +252,6 @@ for (const n of ['base1', 'base2', 'base3', 'base4', 'worn1', 'worn2', 'lightmos
   img.src = `assets/plaza/${n}.png`;
   PLAZA_TILES[n] = st;
 }
-const ROAD_IMGS = {};
-for (const n of ['straight_v', 'straight_h', 'cross', 't_up', 't_down', 't_left', 't_right',
-  'corner_tl', 'corner_tr', 'corner_bl', 'end_s', 'end_s2', 'end_w', 'plaza_wide', 'damaged']) {
-  const img = new Image();
-  img.src = `assets/roads/${n}.png`;
-  ROAD_IMGS[n] = img;
-}
-// mask -> [tile, flipX]
-const ROAD_MASK = {
-  5: ['straight_v', 0], 10: ['straight_h', 0], 15: ['cross', 0],
-  7: ['t_right', 0], 13: ['t_left', 0], 11: ['t_up', 0], 14: ['t_down', 0],
-  6: ['corner_tl', 0], 12: ['corner_bl', 0], 3: ['corner_tr', 0], 9: ['corner_tr', 1],
-  1: ['end_s2', 0], 4: ['end_s', 0], 2: ['end_w', 1], 8: ['end_w', 0],
-  0: ['plaza_wide', 0],
-};
 
 // ------------------------------------------------------- road families ---
 // Five material families from the approved Road System Design doc. All five
@@ -458,8 +477,13 @@ export class TownScene {
     // the fountain is actually centered on both axes rather than just close.
     const FC = { x: PZ.x, y: PZ.y - FOUNTAIN_H / 2 };
     this.plazaFocus = FC;
-    // diameter ~2.35x the fountain's width -> fountain occupies ~43% of it
-    this.plazaRadius = Math.round(FOUNTAIN_W * 2.2 / 2); // ~2.2x fountain diameter
+    // Plaza disc diameter as a multiple of the fountain's width, so the paving
+    // always scales with the landmark rather than being a fixed pixel figure.
+    // Tightened from 2.2x to 1.9x: with the roads widened, the old disc read
+    // as a large empty apron around the fountain. The four road exits, both
+    // lamps and the flares are all derived from this radius, so they follow it
+    // inward automatically.
+    this.plazaRadius = Math.round(FOUNTAIN_W * 1.9 / 2); // ~1.9x fountain diameter
 
     this.locations = [
       { id: 'plaza', name: 'Crystal Plaza', dx: PZ.x, dy: PZ.y + 18, action: 'rest', district: 'Crystal Plaza',
@@ -599,7 +623,7 @@ export class TownScene {
     // waypoint polylines live in this.roadPlan (dev overview + future
     // passes); this.roads/roadCells are still rasterised so tree/prop
     // placement keeps avoiding the planned streets.
-    const mainWidth = 34, resWidth = 20, narrowWidth = 12, advWidth = 34; // main matches flareFarW below exactly
+    const mainWidth = 42, resWidth = 26, narrowWidth = 16, advWidth = 38; // main matches flareFarW below exactly
 
     // Crystal Plaza is a true 4-way intersection: exactly one road meets it
     // per cardinal direction (N/E/S/W), all the same width, all starting at
@@ -616,7 +640,10 @@ export class TownScene {
     // boundary — see buildFlare(). Locked to explicit values (not derived
     // from mainWidth) so plaza-connection geometry never drifts if the
     // regular road width elsewhere changes.
-    const flareNearW = 44, flareFarW = 34, flareDepth = 32;
+    // Near width is generously wider than the road it feeds so the funnel
+    // overlaps the circle well past the outward wobble above, leaving no
+    // sliver at the join; far width matches the main road exactly.
+    const flareNearW = 62, flareFarW = 42, flareDepth = 34;
     this.plazaFlares = [
       buildFlare(FC, R, -90, flareNearW, flareFarW, flareDepth), // N
       buildFlare(FC, R, 90, flareNearW, flareFarW, flareDepth),  // S
@@ -636,39 +663,39 @@ export class TownScene {
       // longer detours to the Guild now that it's moved west to the Lake
       // (see the Guild spur below instead). The one road that matters for
       // progression: town -> adventure, so it eases main -> civic as it goes.
-      { kind: 'main', fam: 'main', famTo: 'civic', w0: 34, w1: 31, width: mainWidth, pts: [
+      { kind: 'main', fam: 'main', famTo: 'civic', w0: 42, w1: 38, width: mainWidth, pts: [
         exitN, [PZ.x, PZ.y - 700], [WX - 24, D.watch.y + 500], [WX - 24, D.watch.y + 130]] },
       // SECONDARY: main trunk -> Guild spur. Branches off the Plaza->Watch
       // spine well north of the Lake (y=PZ.y-700, ~285 units clear of its
       // top edge) and drops straight down into the Guild's courtyard —
       // Guild's second connection besides the Training link below, so it's
       // not a dead end reachable only by way of Training.
-      { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 27, w1: 27, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 33, w1: 33, width: narrowWidth, pts: [
         [PZ.x, PZ.y - 700], [PZ.x - 250, PZ.y - 760], [D.guild.x + 180, D.guild.y + 190],
         [D.guild.x + 55, D.guild.y + 40]] },
       // ADVENTURE ROAD: through the Watch (fence gap -> courtyard -> arch),
       // then the long wilderness run north to the Runebound Gate. Ancient
       // family throughout, narrowing 30 -> 21 as civilization falls away.
-      { kind: 'adventure', fam: 'ancient', w0: 30, w1: 21, width: advWidth, pts: [
+      { kind: 'adventure', fam: 'ancient', w0: 38, w1: 27, width: advWidth, pts: [
         [WX - 24, D.watch.y + 130], [WX - 24, D.watch.y], [WX, D.watch.y - 30], [WX, D.watch.y - 90],
         [D.gate.x + 40, D.gate.y + 620], [D.gate.x, D.gate.y + 370], [D.gate.x, D.gate.y + 45]] },
       // MAIN E: Plaza -> Commercial street, running to the Forge's front.
-      { kind: 'main', fam: 'main', w0: 34, w1: 34, width: mainWidth, pts: [
+      { kind: 'main', fam: 'main', w0: 42, w1: 42, width: mainWidth, pts: [
         exitE, [PZ.x + 330, PZ.y - 20], [PZ.x + 600, PZ.y - 90], [forgeSpot.x, forgeSpot.y + 55]] },
       // MAIN S: Plaza -> Market Square. Runs down the square's WEST rim
       // rather than through it, so the stalls front a real street while the
       // open middle stays clear for NPC traffic and events.
-      { kind: 'main', fam: 'main', w0: 34, w1: 30, width: mainWidth, pts: [
+      { kind: 'main', fam: 'main', w0: 42, w1: 37, width: mainWidth, pts: [
         exitS, [PZ.x + 60, PZ.y + 430], [D.market.x - 240, D.market.y - 300],
         [D.market.x - 205, D.market.y - 60], [D.market.x - 195, D.market.y + 60]] },
       // Market -> South Road (future world exit) — continues from the same
       // rim point so the street reads as one continuous route through town,
       // then tapers toward the map edge.
-      { kind: 'main', fam: 'main', w0: 30, w1: 24, width: mainWidth, pts: [
+      { kind: 'main', fam: 'main', w0: 37, w1: 30, width: mainWidth, pts: [
         [D.market.x - 195, D.market.y + 60], [D.market.x - 120, D.market.y + 250],
         [D.southRoad.x, D.southRoad.y]] },
       // MAIN W: Plaza -> Residential entry (a long, clearly horizontal run)
-      { kind: 'main', fam: 'main', famTo: 'res', w0: 34, w1: 22, width: mainWidth, pts: [
+      { kind: 'main', fam: 'main', famTo: 'res', w0: 42, w1: 28, width: mainWidth, pts: [
         exitW, [PZ.x - 420, PZ.y + 60], [PZ.x - 700, PZ.y + 260], [D.residential.x + 215, D.residential.y - 70]] },
       // Residential neighborhood loop — a compact ring street with all four
       // properties fronting it: Hearthwood + lotA on the north arc, lotB
@@ -678,7 +705,7 @@ export class TownScene {
       // footprint (the house sat on the street, not beside it). Pushed west,
       // the house now sits inside the ring fronting the south arc, with its
       // yard between.
-      { kind: 'res', fam: 'res', w0: 20, w1: 20, width: resWidth, pts: [
+      { kind: 'res', fam: 'res', w0: 26, w1: 26, width: resWidth, pts: [
         [D.residential.x + 215, D.residential.y - 70], [cottageSpot.x, cottageSpot.y + 40],
         [D.residential.x - 95, D.residential.y - 65], [D.residential.x - 280, D.residential.y - 55],
         [D.residential.x - 300, D.residential.y + 80], [houseSpot.x - 30, houseSpot.y + 62],
@@ -686,7 +713,7 @@ export class TownScene {
         [D.residential.x + 215, D.residential.y - 70]] },
       // SECONDARY: Residential -> Valorhall (northwest lane), firming from
       // neighbourhood stone into the wilder outskirts.
-      { kind: 'secondary', fam: 'res', famTo: 'nature', w0: 19, w1: 17, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'res', famTo: 'nature', w0: 25, w1: 23, width: narrowWidth, pts: [
         [D.residential.x - 280, D.residential.y - 55], [D.training.x + 230, D.residential.y - 240],
         [D.training.x + 60, D.training.y + 230], [D.training.x, D.training.y + 100]] },
       // SECONDARY: Valorhall -> Guild — closes the house -> training -> guild
@@ -700,17 +727,17 @@ export class TownScene {
       // lane arrives at) and runs up the compound's east side, so the two
       // form one continuous Residential -> Training -> lakeside -> Guild
       // route instead of this one dead-ending in grass beside the compound.
-      { kind: 'secondary', fam: 'nature', famTo: 'civic', w0: 17, w1: 22, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'nature', famTo: 'civic', w0: 23, w1: 28, width: narrowWidth, pts: [
         [D.training.x + 30, D.training.y + 100], [D.training.x + 205, D.training.y + 20],
         [D.training.x + 250, 1985], [D.guild.x - 150, 1930], [D.guild.x - 75, D.guild.y + 60]] },
       // SECONDARY: Commercial -> Archive (quiet landscaped NE path)
-      { kind: 'secondary', fam: 'main', w0: 20, w1: 20, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'main', w0: 26, w1: 26, width: narrowWidth, pts: [
         [forgeSpot.x + 30, forgeSpot.y + 30], [D.archive.x - 120, PZ.y - 420],
         [D.archive.x, D.archive.y + 200], [D.archive.x, D.archive.y + 70]] },
       // SECONDARY: Archive -> north road (adventure-route link, no backtrack)
       // — joins the main trunk at the same waypoint the trunk itself bends
       // through, now that this no longer doubles as "near the Guild".
-      { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 18, w1: 18, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 24, w1: 24, width: narrowWidth, pts: [
         [D.archive.x - 40, D.archive.y - 20], [D.archive.x - 700, D.archive.y - 200], [WX - 24, D.watch.y + 500]] },
       // SECONDARY: Commercial -> Market (east loop, skips the plaza). Runs
       // down the square's EAST rim, mirroring the main road on the west, so
@@ -718,14 +745,14 @@ export class TownScene {
       // dead-end in the grass north of the stalls.
       // It leaves the commercial street, passes the Potion Shop's front door
       // on the way down, then continues to the market.
-      { kind: 'secondary', fam: 'main', w0: 22, w1: 20, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'main', w0: 28, w1: 26, width: narrowWidth, pts: [
         [PZ.x + 480, PZ.y - 60], [potionSpot.x + 40, potionSpot.y - 130],
         [potionSpot.x + 105, potionSpot.y + 30], [D.market.x + 235, D.market.y - 200],
         [D.market.x + 205, D.market.y + 40]] },
       // SECONDARY: Residential -> Market (south loop, skips the plaza).
       // Starts exactly on a loop vertex — branching a few dozen units off the
       // ring left a blobby smear of overlapping road at the junction.
-      { kind: 'secondary', fam: 'res', famTo: 'main', w0: 19, w1: 20, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'res', famTo: 'main', w0: 25, w1: 26, width: narrowWidth, pts: [
         [D.residential.x + 60, D.residential.y + 175], [PZ.x - 700, D.market.y - 150],
         [PZ.x - 250, D.market.y + 40], [D.market.x - 250, D.market.y + 30]] },
       // SECONDARY: Residential -> Sanctuary (green outskirts lane, westward),
@@ -736,7 +763,7 @@ export class TownScene {
       // The approach also used to place a waypoint inside the Sanctuary's own
       // footprint, running the lane under the building; it now passes down its
       // east side and comes back west along the front to reach the door.
-      { kind: 'secondary', fam: 'nature', w0: 15, w1: 14, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'nature', w0: 19, w1: 18, width: narrowWidth, pts: [
         [D.residential.x - 300, D.residential.y + 80], [D.sanctuary.x + 200, D.sanctuary.y - 40],
         [D.sanctuary.x + 130, D.sanctuary.y + 90], [D.sanctuary.x, D.sanctuary.y + 80]] },
       // NATURE: Lake shoreline spur — branches off the Residential->Valorhall
@@ -745,7 +772,7 @@ export class TownScene {
       // dock. Deliberately approaches from the town side: the north and west
       // shores stay roadless wilderness, which is what keeps the far side of
       // the lake feeling untouched.
-      { kind: 'secondary', fam: 'nature', w0: 13, w1: 14, width: narrowWidth, pts: [
+      { kind: 'secondary', fam: 'nature', w0: 17, w1: 18, width: narrowWidth, pts: [
         [D.training.x + 165, D.training.y + 510], [D.lake.x - 400, D.lake.y + 305],
         [D.lake.x - 150, D.lake.y + 215], [D.lake.x - 135, D.lake.y + 188]] },
     ];
@@ -869,6 +896,8 @@ export class TownScene {
     this.sanctuaryPets = [];
     this.sanctuary = { x: D.sanctuary.x - 40, y: D.sanctuary.y - 20, w: 80, h: 40 };
 
+    this._buildPlazaDecor(FC);
+
     // Step-24 development overview data (drawn only while window.__townDebug
     // is set from the console — never gameplay UI): big district tags, plus
     // the road centerlines above.
@@ -886,6 +915,288 @@ export class TownScene {
       ['RUNEBOUND GATE', D.gate.x, D.gate.y - 130],
       ['LAKE', D.lake.x, D.lake.y - POND_H / 2 - 24],
     ];
+  }
+
+  // ---- Crystal Plaza dressing ---------------------------------------------
+  // The town's centrepiece, furnished. Everything here stays within roughly
+  // three plaza radii of the fountain, so it reads as the landmark's setting
+  // rather than as a return of the town-wide vegetation (still deliberately
+  // stripped above). The passes run outward from the stone:
+  //
+  //   1. Civic furniture on the paving — benches on the north diagonals so
+  //      their fronts face the water, planters on the south pair, twin lamps
+  //      completing the four-point lighting the existing N/S lamps start.
+  //   2. Grass over the paving's rim and grit between its flagstones, so the
+  //      square looks used and its edge is not a stamped-out circle.
+  //   3. Verges hugging the streets that leave the square, and a trader's
+  //      pitch on the grass off the south-east, so the plaza reads as in use.
+  //   4. Planting in the four wedges the roads cut the surround into, graded
+  //      outward — clipped border, flower bed, shrub mass, then pines at the
+  //      corners — a density top-up per wedge, and a final thinning taper that
+  //      hands off to open ground instead of stopping on a line.
+  //
+  // Placement is deterministic (hash-driven, never Math.random) so the square
+  // looks identical every visit. Each pass draws from its own slice of the
+  // hash space, so retuning one never rerolls the others.
+  _buildPlazaDecor(FC) {
+    this.decor = [];        // depth-sorted against the player
+    this.groundDecor = [];  // flat detail, drawn beneath every entity
+    const R = this.plazaRadius;
+
+    // `solid` is the footprint in world units centred on the anchor; props
+    // without one (planting, ground detail) stay walk-through. Every standing
+    // prop also records the rectangle it actually DRAWS into, so later passes
+    // can be checked against what will be on screen.
+    const placed = [];
+    const FURNITURE = /^(bench|planter|lamppost|signpost|cart|crate|barrel|sack)/;
+    const put = (name, x, y, opts = {}) => {
+      const [w, h] = DECOR_SIZE[name];
+      x = Math.round(x); y = Math.round(y);
+      const list = opts.flat ? this.groundDecor : this.decor;
+      list.push({ name, x, y, w, h, flip: !!opts.flip,
+                  sortY: opts.sortY != null ? opts.sortY : y,
+                  shadow: opts.shadow != null ? opts.shadow : Math.round(w * 0.28) });
+      if (!opts.flat) {
+        placed.push({ x0: x - w / 2, x1: x + w / 2, y0: y - h, y1: y,
+                      area: w * h, furn: FURNITURE.test(name) });
+      }
+      if (opts.solid) {
+        const [sw, sh] = opts.solid;
+        this.solids.push({ x: x - sw / 2, y: y - sh, w: sw, h: sh });
+      }
+    };
+    // Sprites are bottom-anchored and drawn UPWARD, so two props whose bases sit
+    // well apart can still cover each other on screen — a circle around the base
+    // point cannot see that, which is how a shrub ends up growing through a
+    // bench. Compare the drawn rectangles instead. Plants may lean into each
+    // other (that is what a thicket looks like); nothing may grow through the
+    // furniture, which has to stay legible as furniture.
+    const fits = (name, x, y, plantSlack = 0.28) => {
+      const [w, h] = DECOR_SIZE[name];
+      const x0 = x - w / 2, x1 = x + w / 2, y0 = y - h, area = w * h;
+      for (const p of placed) {
+        const ox = Math.min(x1, p.x1) - Math.max(x0, p.x0);
+        const oy = Math.min(y, p.y1) - Math.max(y0, p.y0);
+        if (ox <= 0 || oy <= 0) continue;
+        if ((ox * oy) / Math.min(area, p.area) > (p.furn ? 0.02 : plantSlack)) return false;
+      }
+      return true;
+    };
+    const pick = (pool, h) => pool[Math.floor(h * pool.length) % pool.length];
+    // Polar helper — the plaza is a circle, so everything is placed by angle
+    // and distance from the fountain's visual centre rather than in raw x/y.
+    const at = (deg, dist) => {
+      const a = deg * Math.PI / 180;
+      return [FC.x + Math.cos(a) * dist, FC.y + Math.sin(a) * dist];
+    };
+
+    // ---------------------------------------------------- 1. on the paving
+    // Benches north of the water: drawn front-on, so sitting them above the
+    // fountain is what makes them face it.
+    for (const [deg, flip] of [[-124, false], [-56, true]]) {
+      const [x, y] = at(deg, 80);
+      put('bench_01', x, y, { flip, solid: [26, 9] });
+    }
+    // Planters on the southern diagonals, the low counterweight to the benches.
+    for (const [deg, name, flip] of [[128, 'planter_01', false], [52, 'planter_02', true]]) {
+      const [x, y] = at(deg, 86);
+      put(name, x, y, { flip, solid: [DECOR_SIZE[name][0] - 6, 8] });
+    }
+    // Twin lanterns flanking the east and west approaches, set just south of
+    // those roads so their light falls across the square rather than the verge.
+    for (const [deg, flip] of [[159, false], [21, true]]) {
+      const [x, y] = at(deg, 96);
+      put('lamppost_twin', x, y, { flip, solid: [8, 6] });
+    }
+    // Signpost on the green west of the south road, set well clear of both the
+    // existing lamp on that kerb and the trader's pitch on the far side — it
+    // needs its own space to read as wayfinding rather than as more clutter.
+    put('signpost', FC.x - 44, FC.y + R + 38, { solid: [8, 6] });
+
+    // Grass creeping over the paving's rim, wrapped continuously around the
+    // circle rather than wedge by wedge — an unbroken run is what stops the
+    // stone/grass boundary reading as a cut line, the biggest tell that a disc
+    // was stamped onto a field. Flat, so the player walks straight over it,
+    // and skipped at the four road mouths where the paving legitimately runs
+    // out onto the streets.
+    for (let i = 0; i < 56; i++) {
+      const h1 = hash(400 + i * 2), h2 = hash(401 + i * 2);
+      const deg = (i / 56) * 360 + (h1 - 0.5) * 5;
+      const [x, y] = at(deg, R - 4 + h2 * 12);
+      if (this._nearAnyRoad(x, y, 8)) continue;   // never across a road mouth
+      put(pick(['grass_tuft_02', 'grass_tuft_03', 'grass_tuft_04', 'weeds_02',
+        'grass_tuft_01', 'weeds_01'], h1), x, y, { flat: true, flip: h2 > 0.5 });
+    }
+
+    // Weeds and grit working up between the flagstones. Flat and sparse, but
+    // it is what keeps the paving from reading as one poured grey field, and
+    // it costs the player nothing since none of it is solid. The lanes the four
+    // roads actually enter on stay swept clean — taken from the road rects,
+    // since the streets do not all leave on the square's own axes.
+    const GRIT = ['weeds_02', 'pebbles_01', 'pebbles_02', 'weeds_02', 'grass_tuft_03', 'pebbles_01'];
+    for (let i = 0; i < 48; i++) {
+      const h1 = hash(101 + i * 3), h2 = hash(102 + i * 3), h3 = hash(103 + i * 3);
+      const [x, y] = at(h1 * 360, 64 + h2 * (R - 72));
+      if (this._nearAnyRoad(x, y, 14)) continue;   // keep the crossings swept
+      const name = pick(GRIT, h3);
+      if (!fits(name, x, y, 0.3)) continue;        // the furniture rule still applies
+      put(name, x, y, { flat: true, flip: h2 > 0.5 });
+    }
+
+    // A trader's pitch on the grass off the south-east quadrant: the cart
+    // parked with its back to the square and its load stacked beside it, so
+    // the plaza reads as somewhere business happens rather than a showpiece.
+    const TX = FC.x + 136, TY = FC.y + 104;
+    put('cart', TX, TY, { flip: true, solid: [24, 10], shadow: 11 });
+    put('crate_stack', TX - 33, TY - 5, { solid: [20, 10], shadow: 9 });
+    put('barrel_01', TX - 15, TY + 5, { solid: [12, 7], shadow: 6 });
+    put('sack_pile', TX - 38, TY + 14, { solid: [18, 8], shadow: 8 });
+    put('barrel_stack', TX + 25, TY - 2, { flip: true, solid: [18, 8], shadow: 9 });
+    put('crate_01', TX + 5, TY + 15, { flip: true, solid: [12, 7], shadow: 6 });
+    put('sack_01', TX - 25, TY + 17, { shadow: 5 });   // one sack set down, unstacked
+
+    // Verges along the four approaches. The wedge planting deliberately keeps
+    // 30 units clear of every road, which leaves the shoulders themselves bare
+    // — and those are exactly what the player looks down on walking in. Low
+    // planting only, hugging the kerb, so the roads read as edged rather than
+    // as paving that simply stops.
+    // Worked off the road rects themselves rather than off compass directions
+    // from the fountain: the streets leave the square on their own alignments
+    // (the south road runs down the square's eastern half, not through its
+    // centre), so anything assuming four clean cardinal spokes plants the
+    // verge in the wrong field.
+    const VERGE = ['grass_tuft_01', 'grass_tuft_02', 'grass_tuft_04', 'bush_04', 'bush_03',
+                   'flowers_yellow', 'flowers_white', 'weeds_01', 'bush_low', 'flowers_red'];
+    let vk = 9000;
+    for (const rd of this.roads) {
+      const cx = rd.x + rd.w / 2, cy = rd.y + rd.h / 2;
+      if (Math.hypot(cx - FC.x, cy - FC.y) > 320) continue;
+      const horiz = rd.w >= rd.h;
+      const n = Math.max(6, Math.min(26, Math.round((horiz ? rd.w : rd.h) / 17)));
+      for (let i = 0; i < n; i++) {
+        const h1 = hash(vk++), h2 = hash(vk++), h3 = hash(vk++);
+        const t = (i + 0.15 + h1 * 0.7) / n;
+        const off = 7 + h3 * 13;                       // just past the kerb
+        const near = h2 > 0.5;                         // which side of the road
+        const x = horiz ? rd.x + t * rd.w : (near ? rd.x + rd.w + off : rd.x - off);
+        const y = horiz ? (near ? rd.y + rd.h + off : rd.y - off) : rd.y + t * rd.h;
+        if (Math.hypot(x - FC.x, y - FC.y) < R + 4) continue;  // the square keeps its own edge
+        if (this._nearAnyRoad(x, y, 2)) continue;              // never on a surface
+        const name = pick(VERGE, h1);
+        if (!fits(name, x, y, 0.45)) continue;   // a verge run may knit together
+        put(name, x, y, { flip: h3 > 0.5 });
+      }
+    }
+
+    // -------------------------------------------------- 2. the grass wedges
+    // The four wedges the radiating roads cut the surround into get the same
+    // composed structure rather than a uniform sprinkle — a clipped border
+    // hugging the stone, a flower bed just outside it, shrub mass beyond, and
+    // a tree anchoring the outer corner. Identical bones in every wedge is
+    // what makes the square read as landscaped; the hash only varies which
+    // species, how far out, and which way each sprite faces.
+    //
+    // Lay props along an arc at a given radius, spanning `span` degrees. Each
+    // band draws from its own slice of the hash space (`base`), so retuning one
+    // ring never reshuffles the others — without that, every edit rerolls the
+    // whole square and there is no way to converge on a composition.
+    const arc = (base, centre, span, n, r0, r1, pool, opts = {}) => {
+      for (let i = 0; i < n; i++) {
+        const f = n === 1 ? 0.5 : i / (n - 1);
+        const k = base + centre * 31 + i * 3;
+        const h1 = hash(k), h2 = hash(k + 1), h3 = hash(k + 2);
+        const deg = centre + (f - 0.5) * span + (h1 - 0.5) * (span / n) * 0.8;
+        const dist = r0 + (r1 - r0) * h2;
+        const [x, y] = at(deg, dist);
+        if (this._nearAnyRoad(x, y, 30)) continue;
+        if (opts.avoid && opts.avoid(x, y)) continue;
+        const name = pick(pool, h3);
+        if (!opts.flat && !fits(name, x, y, opts.slack)) continue;
+        put(name, x, y, { flip: h1 > 0.5, flat: opts.flat });
+      }
+    };
+    // The trader's pitch owns its corner of the SE wedge — planting keeps out.
+    const pitch = (x, y) => Math.abs(x - TX) < 78 && Math.abs(y - TY) < 52;
+
+    for (const centre of [-45, 45, 135, 225]) {
+      const opts = { avoid: pitch };
+      // clipped border against the paving — the spans narrow as the radius
+      // shrinks so the road corridors never cut a hole in the near rings
+      arc(1000, centre, 58, 8, R + 8, R + 15, ['bush_04', 'bush_03', 'bush_low', 'bush_04'], opts);
+      // flower bed just beyond it
+      arc(2000, centre, 54, 5, R + 24, R + 32, ['flowers_white', 'flowers_yellow', 'flowers_blue',
+        'flowers_red', 'flowers_mixed'], opts);
+      // shrub mass and grass filling the body of the wedge
+      arc(3000, centre, 64, 6, R + 42, R + 80, ['bush_01', 'bush_02', 'bush_big', 'bush_low',
+        'grass_tuft_01', 'fern_clump'], opts);
+      arc(4000, centre, 76, 6, R + 60, R + 116, ['grass_tuft_02', 'grass_tuft_03', 'grass_tuft_04',
+        'bush_03', 'weeds_01', 'bush_01'], opts);
+      // outer corner: a tree anchor plus a boulder, handing off to open ground
+      arc(5000, centre, 44, 2, R + 130, R + 166, ['tree_small_pine', 'bush_big', 'tree_small_pine'], opts);
+      arc(6000, centre, 90, 3, R + 104, R + 158, ['rock_med_01', 'grass_tuft_01', 'bush_big', 'bush_02'], opts);
+    }
+    // The arcs above lay the design down; how much of it survives depends on
+    // how much road each wedge happens to contain, which leaves the east side
+    // thinner than the west. This pass tops every wedge up to the same count
+    // by dart-throwing into whatever space is genuinely free, so density reads
+    // even without the arcs having to know the road network's shape. Species
+    // still grade outward — shrub and flower near the stone, tree and boulder
+    // at the far edge — so the filler obeys the same planting plan.
+    for (const centre of [-45, 45, 135, 225]) {
+      let want = 9;
+      for (let tries = 0; tries < 220 && want > 0; tries++) {
+        const k = 7000 + centre * 61 + tries * 3;
+        const h1 = hash(k), h2 = hash(k + 1), h3 = hash(k + 2);
+        const deg = centre + (h1 - 0.5) * 82;
+        const dist = R + 16 + h2 * h2 * 168;   // biased inward, where it shows
+        const [x, y] = at(deg, dist);
+        if (this._nearAnyRoad(x, y, 30) || pitch(x, y)) continue;
+        const near = dist < R + 60, far = dist > R + 120;
+        const pool = near
+          ? ['bush_03', 'bush_04', 'flowers_yellow', 'flowers_white', 'flowers_blue',
+             'flowers_red', 'grass_tuft_01', 'bush_low']
+          : far
+            ? ['tree_small_pine', 'bush_big', 'rock_med_01', 'bush_01', 'grass_tuft_03', 'bush_02']
+            : ['bush_01', 'bush_02', 'grass_tuft_02', 'grass_tuft_04', 'fern_clump', 'bush_low',
+               'flowers_mixed', 'weeds_01'];
+        const name = pick(pool, h3);
+        if (!fits(name, x, y)) continue;
+        put(name, x, y, { flip: h3 > 0.5 });
+        want--;
+      }
+    }
+
+    // Outermost taper. Without it the planting stops on a visible line and the
+    // player walking in along a road crosses from dressed ground to bare field
+    // in one step; this thins out over another hundred units so the square's
+    // surround hands off to the (deliberately empty) rest of the map instead
+    // of ending at it.
+    for (const centre of [-45, 45, 135, 225]) {
+      for (let i = 0; i < 22; i++) {
+        const k = 11000 + centre * 43 + i * 3;
+        const h1 = hash(k), h2 = hash(k + 1), h3 = hash(k + 2);
+        const [x, y] = at(centre + (h1 - 0.5) * 104, R + 158 + h2 * 118);
+        if (this._nearAnyRoad(x, y, 26)) continue;
+        const name = pick(['tree_small_pine', 'bush_big', 'bush_01', 'rock_med_01',
+          'grass_tuft_01', 'grass_tuft_03', 'bush_02', 'bush_low'], h3);
+        if (!fits(name, x, y, 0.12)) continue;   // sparser than the core
+        put(name, x, y, { flip: h3 > 0.5 });
+      }
+    }
+
+    // Flat detail over the same ground: pebbles and weeds that break up bare
+    // grass without ever standing between the player and the water.
+    for (let i = 0; i < 30; i++) {
+      const h1 = hash(8000 + i * 3), h2 = hash(8001 + i * 3), h3 = hash(8002 + i * 3);
+      const [x, y] = at(h1 * 360, R + 14 + h2 * 175);
+      if (this._nearAnyRoad(x, y, 28) || pitch(x, y)) continue;
+      put(pick(['pebbles_01', 'pebbles_02', 'pebbles_03', 'weeds_01', 'weeds_02',
+        'rock_small_01', 'rock_small_02', 'rock_small_03'], h3), x, y, { flat: true, flip: h2 > 0.5 });
+    }
+
+    this.propGroups.push({ fn: (g) => {
+      for (const d of this.groundDecor) drawPropArt(g, DECOR_ART[d.name], d.x, d.y, d.w, d.h, 0, d.flip);
+    } });
   }
 
   // ---- road surface -------------------------------------------------------
@@ -918,11 +1229,16 @@ export class TownScene {
     const mark = (x, y, fam, t, wash) => {
       const cx = Math.floor(x / C), cy = Math.floor(y / C);
       const px = cx * C + C / 2, py = cy * C + C / 2;
-      // The plaza floor owns its own disc and flares — roads stop at its edge.
-      if (Math.hypot(px - FC.x, py - FC.y) < R - 2) return;
-      for (const fl of this.plazaFlares) {
-        if (flareContains(fl, FC, R, px, py, 0)) return;
-      }
+      // Roads deliberately run UNDER the plaza rather than stopping at its
+      // edge. The plaza floor is painted after the roads and is fully opaque,
+      // so the overlap is invisible — and stopping short caused two visible
+      // faults at the junction: the plaza's edge is jittered (±5%), so at
+      // angles where it fell inside the cut-off a ring of bare grass showed
+      // between paving and road; and a road ending there counted as an edge,
+      // so the frayed-edge stipple punched holes into the surface exactly
+      // where it should read as solid. Only the innermost area is skipped,
+      // purely to avoid marking cells no one can ever see.
+      if (Math.hypot(px - FC.x, py - FC.y) < R * 0.55) return;
       const k = cx + ',' + cy;
       const prev = cov.get(k);
       const pri = (ROAD_FAM[fam] || ROAD_FAM.main).pri;
@@ -984,7 +1300,7 @@ export class TownScene {
       // distance between crests — roughly one gentle curve per screen at the
       // 300-unit gameplay viewport, so the bend is legible while walking
       // rather than only visible on the overview.
-      const WOB = { main: [22, 420], res: [9, 190], secondary: [24, 320], adventure: [26, 520] };
+      const WOB = { main: [26, 430], res: [11, 200], secondary: [27, 330], adventure: [30, 530] };
       const wobDef = seg.wob !== undefined ? seg.wob : WOB[seg.kind] || WOB.secondary;
       const wobSeed = segIdx * 3.77;
       const TAU = Math.PI * 2;
@@ -1363,6 +1679,7 @@ export class TownScene {
     const ents = [];
     for (const loc of this.locations) ents.push({ y: loc.sortY != null ? loc.sortY : (loc.solid ? loc.solid.y + loc.solid.h : loc.dy), draw: (gg) => this._drawLocation(gg, loc) });
     for (const tr of this.trees) ents.push({ y: tr.y, draw: (gg) => bigTree(gg, tr.x, tr.y, tr.kind === 'pine' ? 'pine' : 'oak', this.t) });
+    for (const d of this.decor) ents.push({ y: d.sortY, draw: (gg) => drawPropArt(gg, DECOR_ART[d.name], d.x, d.y, d.w, d.h, d.shadow, d.flip) });
     for (const n of this.npcs) ents.push({ y: n.y, draw: (gg) => { contactShadow(gg, n.x, n.y, 6, 2); drawActor(gg, { x: n.x, y: n.y, facing: n.facing, sprite: n.sprite, weapon: n.sprite === 'warrior' ? 'sword' : (n.sprite === 'mage' ? 'staff' : 'none'), state: 'idle', animTime: this.t + n.x }); } });
     for (const p of this.sanctuaryPets) ents.push({ y: p.y, draw: (gg) => drawPet(gg, p, p.x, p.y, this.t) });
     ents.push({ y: this.py, draw: (gg) => this._drawPlayer(gg) });
@@ -1435,16 +1752,23 @@ export class TownScene {
     // The Lake: pure ground/environment artwork, drawn flat under everything
     // depth-sorted (buildings, trees, the player) so it can never render over
     // them — see the class comment on POND_ART/POND_WATER_RECTS above for
-    // provenance. Ripple/shimmer overlays layer on top the same way the
-    // fountain's water FX layers on its own PNG.
+    // provenance.
+    //
+    // The ambient water layer (procedural ripples, breaking waves, bubbles,
+    // surface glint) is deliberately not drawn: disturbances are going to come
+    // from what's actually in the scene — animals and environment — rather than
+    // appearing on their own. proceduralRipples() is still in gfx/waterfx.js
+    // for when that's built. The fish carries its own ripples, in its sheet.
     if (POND_ART.ready) {
       g.drawImage(POND_ART.img, Math.round(this.lakeTopLeft.x), Math.round(this.lakeTopLeft.y), POND_W, POND_H);
       if (!POND_MASK_INFO) POND_MASK_INFO = buildWaterMask(POND_ART.img);
-      proceduralRipples(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
-      // A fish breaks the surface every so often (assets/fish1.png). It draws
-      // above the water but still in the ground pass, which is fine — the lake
-      // is solid, so the player can never stand between the two.
+      // Fish break the surface from spots around the lake (assets/fish1.png).
+      // They draw above the water but still in the ground pass, which is fine —
+      // the lake is solid, so the player can never stand between the two.
       drawFishJump(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
+      // Ducks live on the lake full-time (assets/duck.png) — paddling, looking
+      // about, dipping and dabbling.
+      drawDucks(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
     }
 
     // wild zones: taller meadow tiles washed over the base grass around the
@@ -2198,8 +2522,14 @@ function corruptedRock(g, x, y) {
 // jittered circle boundary (same formula the plaza silhouette uses), so the
 // join is pixel-exact with no seam, and it tapers down to the constant road
 // width over a short run so the widen reads as a flare, not a step.
+// Per-angle radius wobble that keeps the plaza from reading as a perfect
+// circle. It only ever bumps the edge OUTWARD (1.00 to 1.05), never inward:
+// the road flares are built assuming the paving reaches at least R at every
+// angle, so an inward dip left a wedge of bare grass between a flare's side
+// and the circle — visible as holes punched around the fountain at each of
+// the four road mouths.
 function plazaEdgeJitter(a) {
-  return 1 + (hash(Math.floor(a * 6.37) * 3.1 + 0.5) - 0.5) * 0.1;
+  return 1 + Math.abs(hash(Math.floor(a * 6.37) * 3.1 + 0.5) - 0.5) * 0.1;
 }
 function buildFlare(FC, R, angleDeg, nearW, farW, depth) {
   const a0 = angleDeg * Math.PI / 180;
