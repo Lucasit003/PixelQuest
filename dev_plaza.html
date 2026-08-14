@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Plaza dressing preview</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:8px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .lbl { padding:3px 0; color:#ffcc66; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+// Standalone framing harness for the Crystal Plaza dressing pass. Boots the
+// real TownScene (no title/menu), parks the camera on the plaza and renders
+// with the game's own camera/zoom, so what's captured is exactly what ships.
+//
+//   ?shot=play|wide|near|plaza   what to frame (see PRESETS)
+//   &zoom=N   &scale=N           camera zoom / on-screen pixel scale
+//   &px=..&py=..                 explicit player position (world units)
+//   &cx=..&cy=..                 explicit camera centre (world units)
+//   &t=seconds                   animation phase
+//   &hud=0                       hide the HUD panel
+//   &hero=0                      hide the player sprite
+//   &guide=1                     overlay plaza radius + road corridors
+const q = new URLSearchParams(location.search);
+const bust = '?v=' + Date.now();
+const { TownScene } = await import('./src/scenes/town.js' + bust);
+const { Hero } = await import('./src/game/state.js' + bust);
+
+const BASE_W = 480, BASE_H = 270;
+const scale = +(q.get('scale') || 2);
+const shot = q.get('shot') || 'play';
+const PRESETS = {
+  play:  { zoom: 1.6, dy: 60, centre: false }, // what the player sees standing south of the fountain
+  wide:  { zoom: 0.85, dy: 60, centre: true }, // composition — whole plaza + all four approaches
+  near:  { zoom: 2.6, dy: 46, centre: false }, // detail check on the dressing itself
+  plaza: { zoom: 1.25, dy: 60, centre: true }, // plaza centred, one screen
+};
+const P = PRESETS[shot] || PRESETS.play;
+const zoom = +(q.get('zoom') || P.zoom);
+
+const canvas = document.createElement('canvas');
+canvas.width = BASE_W; canvas.height = BASE_H;
+canvas.style.width = (BASE_W * scale) + 'px';
+canvas.style.height = (BASE_H * scale) + 'px';
+const g = canvas.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+const lbl = document.createElement('div');
+lbl.className = 'lbl';
+document.getElementById('out').appendChild(lbl);
+document.getElementById('out').appendChild(canvas);
+
+const hero = Hero.create('warrior');
+const scene = new TownScene(hero, {});
+scene.enter({ width: BASE_W, height: BASE_H });
+
+const PZ = scene.plazaCenter, FC = scene.plazaFocus, R = scene.plazaRadius;
+const visW = BASE_W / zoom, visH = BASE_H / zoom;
+
+// The scene derives its camera from the player, so "centre the camera on X"
+// is expressed by solving that relation for the player position.
+let px = +(q.get('px') || PZ.x);
+let py = +(q.get('py') || (PZ.y + P.dy));
+if (q.has('cx')) px = +q.get('cx');
+else if (P.centre) px = FC.x;
+if (q.has('cy')) py = +q.get('cy') + visH * 0.12;
+else if (P.centre) py = FC.y + visH * 0.12;
+scene.px = px; scene.py = py;
+window.__townZoom = zoom;
+
+if (q.get('hud') === '0') scene._drawHUD = () => {};
+if (q.get('hero') === '0') scene._drawPlayer = () => {};
+// decor=0 renders the same framing with the plaza dressing stripped out — the
+// before half of a before/after pair. Emptying both lists is enough: the flat
+// layer's draw call reads groundDecor live.
+if (q.get('decor') === '0') { scene.decor = []; scene.groundDecor = []; }
+
+// Let every PNG decode before the first capture — the fountain water mask and
+// all the prop art load async, and a shot taken too early misses them.
+await new Promise((r) => setTimeout(r, 1400));
+
+const T = +(q.get('t') || 3.2);
+scene.t = T;
+scene.introHintT = 0;       // no control hint over the shot
+scene.districtBannerT = 0;  // no district banner over the shot
+scene.draw(g, { width: BASE_W, height: BASE_H, shake: 0 });
+
+// Placement guides: the plaza circle, the road corridors it must keep clear,
+// and a world-unit ruler — so prop coordinates can be read straight off the
+// shot instead of guessed.
+if (q.get('guide') === '1') {
+  const camX = Math.round(scene.camX), camY = Math.round(scene.camY);
+  g.save();
+  g.scale(zoom, zoom);
+  g.translate(-camX, -camY);
+  g.lineWidth = 1 / zoom;
+  const ring = (r, col) => { g.strokeStyle = col; g.beginPath(); g.arc(FC.x, FC.y, r, 0, Math.PI * 2); g.stroke(); };
+  ring(R, 'rgba(255,80,80,0.9)');            // plaza edge
+  ring(R * 0.62, 'rgba(255,200,60,0.7)');    // fountain keep-clear
+  g.strokeStyle = 'rgba(80,180,255,0.8)';    // road corridors (42 wide)
+  for (const [dx, dy] of [[0,-1],[0,1],[1,0],[-1,0]]) {
+    const len = 240;
+    if (dx) g.strokeRect(FC.x + dx * R - (dx < 0 ? len : 0), FC.y - 21, len, 42);
+    else g.strokeRect(FC.x - 21, FC.y + dy * R - (dy < 0 ? len : 0), 42, len);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.75)';    // 50-unit ruler ticks off the focus
+  for (let d = -300; d <= 300; d += 50) { g.fillRect(FC.x + d, FC.y - 2, 1, 4); g.fillRect(FC.x - 2, FC.y + d, 4, 1); }
+  g.restore();
+}
+
+lbl.textContent = `shot=${shot} zoom=${zoom} cam=(${Math.round(scene.camX)},${Math.round(scene.camY)}) `
+  + `player=(${Math.round(scene.px)},${Math.round(scene.py)}) plazaFocus=(${FC.x},${Math.round(FC.y)}) r=${R}`;
+window.__ready = true;
+window.__scene = scene;
+</script>
+</body>
+</html>

@@ -114,6 +114,25 @@ const STALL_MERCHANT_W = 50, STALL_MERCHANT_H = 33;
 const POND_ART = loadBuildingArt('assets/pond.png');
 const POND_W = 816, POND_H = 400; // 170% of the original 480x236 pass, aspect preserved (2.040:1, <0.1% off)
 
+// Ornamental gazebo bridge over the lake (assets/bridge.png). The author's
+// source had the transparency checkerboard baked into the pixels with no alpha
+// channel, so it was matted by flood-filling that pattern in from the border —
+// no art pixel was altered, see assets/bridgedock.png for the untouched
+// original. Drawn as a side-elevation sprite bottom-anchored on the map, the
+// same convention the town's buildings use.
+//
+// It spans the eastern basin, the widest stretch of open water. Both deck ends
+// were checked to sit on the true bank: "land" was taken to mean ground joined
+// to the shore, so the little island in the middle can't be mistaken for one.
+const BRIDGE_ART = loadBuildingArt('assets/bridge.png');
+// Position as fractions of the pond, so it follows any future rescale.
+const BRIDGE_FX0 = 310 / 816, BRIDGE_FX1 = 753 / 816;  // deck ends
+const BRIDGE_FY = 255 / 400;                            // deck line
+const BRIDGE_RATIO = 649 / 1372;                        // source h/w
+// The deck the player actually walks along, as a band either side of the
+// deck line — used to open a gap in the lake's collision.
+const BRIDGE_WALK_H = 22;
+
 // Pond water FX (see gfx/waterfx.js): pixel-dot ripples/shimmer masked to
 // the pond art's own water pixels, same technique as the fountain's FX.
 // Mask built once, lazily, the first time the pond art is ready.
@@ -199,6 +218,24 @@ const DECOR_SIZE = {
   grass_tuft_01: [17, 18], grass_tuft_02: [18, 17], grass_tuft_03: [17, 16], grass_tuft_04: [17, 17],
   fern_clump: [25, 26], weeds_01: [18, 17], weeds_02: [16, 16],
   tree_small_pine: [30, 38],
+  // Broadleaf stock (sliced from the tree sheet). Sized as a planting
+  // hierarchy rather than to the art's own proportions: a whip, an understory
+  // tree, ornamentals, then canopy. Real planting never jumps straight from a
+  // 32-unit shrub to a 62-unit canopy — the intermediate sizes are what let a
+  // group read as one planted mass instead of as big sprites next to small
+  // ones. Heights are the design; each width is the source aspect held exactly,
+  // so nothing is squashed.
+  tree_sapling: [22, 34], tree_young: [26, 44],
+  tree_blossom_white: [43, 52], tree_blossom_blue: [42, 52], tree_blossom_violet: [42, 51],
+  tree_oak_round: [52, 62], tree_oak_spread: [50, 64], tree_oak_broad: [75, 60],
+  // Specimens that carry their own ground treatment — a root flare with rough
+  // grass, and a skirt of flowers. They dress their own base, so they read as
+  // planted rather than dropped, and need no understory placed around them.
+  tree_rooted: [50, 66], tree_flowerbed: [42, 62],
+  // Built containers: civic furniture that happens to be alive. Kept near
+  // lamppost height (38) on purpose — they belong to the furniture set that
+  // frames the square, not to the landscape beyond it.
+  topiary_square: [28, 42], topiary_round: [24, 40],
   // ground detail
   rock_small_01: [18, 15], rock_small_02: [18, 15], rock_small_03: [17, 15], rock_med_01: [27, 23],
   pebbles_01: [11, 10], pebbles_02: [13, 9], pebbles_03: [18, 13],
@@ -593,11 +630,22 @@ export class TownScene {
     // the water is solid, so the grass/dirt/rock shoreline stays walkable
     // and the player can approach the water's edge.
     this.lakeTopLeft = { x: D.lake.x - POND_W / 2, y: D.lake.y - POND_H / 2 };
+    // The bridge deck is walkable, so the lake's collision has to open up along
+    // it. Each water rect is a horizontal run; any run crossing the deck band
+    // gets the crossing portion cut out and the remainder kept as up to two
+    // pieces either side, leaving a clear corridor from bank to bank.
+    const bx0 = this.lakeTopLeft.x + BRIDGE_FX0 * POND_W;
+    const bx1 = this.lakeTopLeft.x + BRIDGE_FX1 * POND_W;
+    const by = this.lakeTopLeft.y + BRIDGE_FY * POND_H;
+    const bTop = by - BRIDGE_WALK_H / 2, bBot = by + BRIDGE_WALK_H / 2;
     for (const [fx, fy, fw, fh] of POND_WATER_RECTS) {
-      this.solids.push({
-        x: this.lakeTopLeft.x + fx * POND_W, y: this.lakeTopLeft.y + fy * POND_H,
-        w: fw * POND_W, h: fh * POND_H,
-      });
+      const x = this.lakeTopLeft.x + fx * POND_W, y = this.lakeTopLeft.y + fy * POND_H;
+      const w = fw * POND_W, h = fh * POND_H;
+      const straddles = y < bBot && y + h > bTop;
+      if (!straddles) { this.solids.push({ x, y, w, h }); continue; }
+      // keep whatever lies left and right of the walkway
+      if (x < bx0) this.solids.push({ x, y, w: Math.min(w, bx0 - x), h });
+      if (x + w > bx1) this.solids.push({ x: Math.max(x, bx1), y, w: x + w - Math.max(x, bx1), h });
     }
 
     // district entry-banner regions (Player House folded into Residential —
@@ -948,7 +996,7 @@ export class TownScene {
     // prop also records the rectangle it actually DRAWS into, so later passes
     // can be checked against what will be on screen.
     const placed = [];
-    const FURNITURE = /^(bench|planter|lamppost|signpost|cart|crate|barrel|sack)/;
+    const FURNITURE = /^(bench|planter|lamppost|signpost|cart|crate|barrel|sack|topiary)/;
     const put = (name, x, y, opts = {}) => {
       const [w, h] = DECOR_SIZE[name];
       x = Math.round(x); y = Math.round(y);
@@ -1012,6 +1060,56 @@ export class TownScene {
     // existing lamp on that kerb and the trader's pitch on the far side — it
     // needs its own space to read as wayfinding rather than as more clutter.
     put('signpost', FC.x - 44, FC.y + R + 38, { solid: [8, 6] });
+
+    // Clipped bay trees in stone containers, one pair flanking every street
+    // that enters the square. A matched pair either side of an opening is the
+    // oldest move in civic design for marking a way in, and repeating the same
+    // pair at every approach is what makes the square read as laid out rather
+    // than grown — the same reason the benches match. Round containers echo the
+    // circle they stand on. They are furniture, not planting: built, solid, and
+    // held clear of the carriageway.
+    //
+    // The mouths are found by walking the rim and asking where the roads
+    // actually cross it, not from compass directions — the streets leave on
+    // their own alignments (the south road runs down the square's eastern
+    // half), so a hardcoded cross would stand a container in a carriageway.
+    const onRoad = [];
+    for (let d = 0; d < 360; d++) {
+      const [x, y] = at(d, R + 7);
+      onRoad.push(this._nearAnyRoad(x, y, 4));
+    }
+    // Set out past the existing lamps rather than beside them: the lamppost
+    // pairs already mark the east and west approaches, and two different
+    // markers stacked on one threshold is clutter, not emphasis.
+    for (let d = 0; d < 360; d++) {
+      if (!onRoad[d] || onRoad[(d + 359) % 360]) continue;   // only a run's first degree
+      let end = d;
+      while (onRoad[(end + 1) % 360] && end - d < 359) end++;
+      if (end - d > 150) continue;            // an open quadrant, not a street
+      // Set off the kerb by the mouth's own half-width, so a wide street gets
+      // its pair set correspondingly wider and every approach reads the same.
+      const gap = 8 + (end - d) * 0.12;
+      const pair = [[d - gap, false], [end + gap, true]].map(([deg, flip]) => {
+        const [x, y] = at(deg, R + 26);
+        return { x: Math.round(x), y: Math.round(y), flip };
+      });
+      // Where two streets meet at a tight corner the two flanks land within a
+      // container's width of each other — the south approach is wide enough
+      // that its eastern flank all but coincides with the east approach's
+      // southern one. One pier serving both openings is what gets built on a
+      // real corner; crowding a second in beside it is what does not.
+      const served = (p) => this.decor.some((o) => o.name === 'topiary_round' &&
+        Math.hypot(o.x - p.x, o.y - p.y) < 36);
+      // Both sides or neither. A container standing alone beside an opening
+      // reads as one that lost its twin; the pair is the whole idea, so a
+      // half-placed gateway is worse than none.
+      if (!pair.every((p) => served(p) || (!this._nearAnyRoad(p.x, p.y, 6) &&
+                                           fits('topiary_round', p.x, p.y, 0.05)))) continue;
+      for (const p of pair) {
+        if (served(p)) continue;
+        put('topiary_round', p.x, p.y, { flip: p.flip, solid: [17, 8], shadow: 7 });
+      }
+    }
 
     // Grass creeping over the paving's rim, wrapped continuously around the
     // circle rather than wedge by wedge — an unbroken run is what stops the
@@ -1118,6 +1216,118 @@ export class TownScene {
     // The trader's pitch owns its corner of the SE wedge — planting keeps out.
     const pitch = (x, y) => Math.abs(x - TX) < 78 && Math.abs(y - TY) < 52;
 
+    // Canopy goes in before the shrubs and flowers below it, for the same
+    // reason it does on a real site: the big material sets the composition and
+    // everything else is planted into what it leaves. Mechanically it also
+    // gives the trees first claim on the ground, so `fits` bends the understory
+    // around a canopy rather than the canopy failing to find room.
+    //
+    // Massing is graded north to south, which is a sightline decision as much
+    // as a planting one. The square is arrived at and read from the south, so
+    // the two northern wedges carry the tall stock — it gives the fountain a
+    // green wall to be seen against — while the southern wedges step down to
+    // ornamental and understory that never stands between the player and the
+    // water. Grading the massing is what makes that asymmetry read as design
+    // rather than as trees that happened to grow on one side.
+    //
+    // Trees are placed one named species at a time, retrying positions until
+    // one clears, rather than by drawing a pool along an arc like the shrubs
+    // below. With sprites this large a fixed arc is mostly rejections, and a
+    // wedge that happens to reject every oak ends up with no canopy at all —
+    // which is precisely the failure that makes planting look accidental. Here
+    // the position flexes and the species is guaranteed.
+    const plant = (name, base, centre, span, r0, r1, opts = {}) => {
+      for (let t = 0; t < 48; t++) {
+        const k = base + centre * 17 + t * 3;
+        const h1 = hash(k), h2 = hash(k + 1), h3 = hash(k + 2);
+        const [x, y] = at(centre + (h1 - 0.5) * span, r0 + (r1 - r0) * h2);
+        if (this._nearAnyRoad(x, y, opts.road != null ? opts.road : 26)) continue;
+        if (pitch(x, y)) continue;
+        if (!fits(name, x, y, opts.slack != null ? opts.slack : 0.16)) continue;
+        put(name, x, y, { flip: h3 > 0.5 });
+        return true;
+      }
+      return false;
+    };
+    const NORTH = new Set([-45, 225]);
+
+    // The two specimens that carry their own ground treatment go in first, for
+    // the same reason the accents below beat the canopy: they are the two most
+    // deliberate plants on the site, and anything sited after a wedge is full
+    // is really sited by whatever the wedge had left. The flowering skirt takes
+    // the west green, passed at arm's length walking in past the signpost; the
+    // rooted oak anchors the north-east, the longest open sightline out of the
+    // square, where its bulk closes the view. Both are held off the west and
+    // east gateway piers, which stand at R+26 on those same bearings.
+    plant('tree_flowerbed', 17000, 142, 30, R + 30, R + 62, { slack: 0.12 });
+    plant('tree_rooted',    17100, -50, 34, R + 60, R + 104, { slack: 0.12 });
+
+    for (const centre of [-45, 45, 135, 225]) {
+      // Flowering stock is sited BEFORE the canopy in each wedge. It is the one
+      // plant the eye is meant to find, and going in last meant it lost its
+      // spot to the third oak of a mass that would not have missed it — you
+      // site the feature, then build the mass around it, not the reverse.
+      if (NORTH.has(centre)) {
+        // one ornamental let into the mass — read past the fountain it is the
+        // only colour in the backdrop, which is exactly why it is only one
+        plant('tree_blossom_violet', 14300, centre, 44, R + 30, R + 68);
+        // The backdrop, and it has to stand CLOSE. Trees held a couple of
+        // canopy-widths off the kerb leave a bald ring of knee-high planting
+        // around the stone and the square stops being a room — enclosure is
+        // what makes a square feel built rather than paved. Three crown shapes,
+        // so the mass has a silhouette instead of one repeated stamp.
+        plant('tree_oak_round',  14000, centre, 62, R + 34, R + 84);
+        plant('tree_oak_spread', 14100, centre, 62, R + 44, R + 98);
+        plant('tree_oak_broad',  14200, centre, 56, R + 58, R + 112);
+      } else {
+        // South stays lower: ornamental only, and never tall enough that a
+        // crown swallows the paving it stands beside. These wedges are the
+        // diagonals, not the arrival corridor — that stays clear anyway, since
+        // everything here keeps 26 units off the roads. The white is held in
+        // tight against the stone, so it reads as the pair either side of the
+        // arrival road; it also gets the widest sweep of any call here, because
+        // in the south-east the trader's pitch owns the middle of the wedge and
+        // the only ground left is the strip between the pitch and the kerb.
+        plant('tree_blossom_white', 15000, centre, 74, R + 26, R + 76);
+        plant('tree_blossom_blue',  15100, centre, 62, R + 60, R + 112);
+        // one full-height crown allowed, but only well out, where it frames
+        // the approach instead of closing it
+        plant('tree_oak_spread',    15200, centre, 52, R + 132, R + 178);
+      }
+      // Whips bridging shrub mass to canopy. Without an intermediate size the
+      // eye reads a 32-unit bush beside a 62-unit oak as two unrelated sprites
+      // instead of as one planted group.
+      plant('tree_young',   16000, centre, 76, R + 30, R + 78, { slack: 0.3 });
+      plant('tree_sapling', 16100, centre, 84, R + 26, R + 70, { slack: 0.36 });
+    }
+
+    // The structure above still lands unevenly, for the reason the shrub
+    // top-up further down already has to correct: how much of a wedge is road
+    // varies, and the eastern wedges lose far more candidates than the western
+    // ones. Left alone the square ends up with a wooded west side and a bald
+    // east. Top each wedge up to the same canopy count by dart-throwing into
+    // whatever is genuinely free — species still grade by distance, so the
+    // filler obeys the same planting plan as the structure it is topping up.
+    for (const centre of [-45, 45, 135, 225]) {
+      let want = 2;
+      for (let t = 0; t < 240 && want > 0; t++) {
+        const k = 18000 + centre * 53 + t * 3;
+        const h1 = hash(k), h2 = hash(k + 1), h3 = hash(k + 2);
+        const dist = R + 28 + h2 * 128;
+        const [x, y] = at(centre + (h1 - 0.5) * 88, dist);
+        if (this._nearAnyRoad(x, y, 26) || pitch(x, y)) continue;
+        const pool = dist < R + 72
+          ? ['tree_young', 'tree_sapling', 'tree_blossom_white', 'tree_young']
+          : NORTH.has(centre)
+            ? ['tree_oak_round', 'tree_oak_spread', 'tree_oak_broad', 'tree_young']
+            : ['tree_blossom_blue', 'tree_young', 'tree_oak_spread', 'tree_sapling'];
+        const name = pick(pool, h3);
+        if (!fits(name, x, y, 0.18)) continue;
+        put(name, x, y, { flip: h1 > 0.5 });
+        want--;
+      }
+    }
+
     for (const centre of [-45, 45, 135, 225]) {
       const opts = { avoid: pitch };
       // clipped border against the paving — the spans narrow as the radius
@@ -1131,8 +1341,12 @@ export class TownScene {
         'grass_tuft_01', 'fern_clump'], opts);
       arc(4000, centre, 76, 6, R + 60, R + 116, ['grass_tuft_02', 'grass_tuft_03', 'grass_tuft_04',
         'bush_03', 'weeds_01', 'bush_01'], opts);
-      // outer corner: a tree anchor plus a boulder, handing off to open ground
-      arc(5000, centre, 44, 2, R + 130, R + 166, ['tree_small_pine', 'bush_big', 'tree_small_pine'], opts);
+      // outer corner: a tree anchor plus a boulder, handing off to open ground.
+      // Conifer and broadleaf mixed rather than a pine every time — the pines
+      // are the dark evergreen structure the seasonal material is read against,
+      // and a stand of one species is the tell that a wood was generated.
+      arc(5000, centre, 44, 2, R + 130, R + 166, ['tree_small_pine', 'bush_big',
+        'tree_young', 'tree_small_pine'], opts);
       arc(6000, centre, 90, 3, R + 104, R + 158, ['rock_med_01', 'grass_tuft_01', 'bush_big', 'bush_02'], opts);
     }
     // The arcs above lay the design down; how much of it survives depends on
@@ -1156,7 +1370,7 @@ export class TownScene {
           ? ['bush_03', 'bush_04', 'flowers_yellow', 'flowers_white', 'flowers_blue',
              'flowers_red', 'grass_tuft_01', 'bush_low']
           : far
-            ? ['tree_small_pine', 'bush_big', 'rock_med_01', 'bush_01', 'grass_tuft_03', 'bush_02']
+            ? ['tree_small_pine', 'bush_big', 'rock_med_01', 'tree_sapling', 'grass_tuft_03', 'bush_02']
             : ['bush_01', 'bush_02', 'grass_tuft_02', 'grass_tuft_04', 'fern_clump', 'bush_low',
                'flowers_mixed', 'weeds_01'];
         const name = pick(pool, h3);
@@ -1177,8 +1391,8 @@ export class TownScene {
         const h1 = hash(k), h2 = hash(k + 1), h3 = hash(k + 2);
         const [x, y] = at(centre + (h1 - 0.5) * 104, R + 158 + h2 * 118);
         if (this._nearAnyRoad(x, y, 26)) continue;
-        const name = pick(['tree_small_pine', 'bush_big', 'bush_01', 'rock_med_01',
-          'grass_tuft_01', 'grass_tuft_03', 'bush_02', 'bush_low'], h3);
+        const name = pick(['tree_small_pine', 'bush_big', 'tree_young', 'rock_med_01',
+          'grass_tuft_01', 'tree_oak_round', 'bush_02', 'tree_small_pine'], h3);
         if (!fits(name, x, y, 0.12)) continue;   // sparser than the core
         put(name, x, y, { flip: h3 > 0.5 });
       }
@@ -1769,6 +1983,16 @@ export class TownScene {
       // Ducks live on the lake full-time (assets/duck.png) — paddling, looking
       // about, dipping and dabbling.
       drawDucks(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
+
+      // The bridge goes on last, so ducks and fish pass beneath it.
+      if (BRIDGE_ART.ready) {
+        const bw = Math.round((BRIDGE_FX1 - BRIDGE_FX0) * POND_W);
+        const bh = Math.round(bw * BRIDGE_RATIO);
+        g.drawImage(BRIDGE_ART.img,
+          Math.round(this.lakeTopLeft.x + BRIDGE_FX0 * POND_W),
+          Math.round(this.lakeTopLeft.y + BRIDGE_FY * POND_H - bh),
+          bw, bh);
+      }
     }
 
     // wild zones: taller meadow tiles washed over the base grass around the
