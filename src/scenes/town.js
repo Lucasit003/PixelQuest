@@ -114,24 +114,12 @@ const STALL_MERCHANT_W = 50, STALL_MERCHANT_H = 33;
 const POND_ART = loadBuildingArt('assets/pond.png');
 const POND_W = 816, POND_H = 400; // 170% of the original 480x236 pass, aspect preserved (2.040:1, <0.1% off)
 
-// Ornamental gazebo bridge over the lake (assets/bridge.png). The author's
-// source had the transparency checkerboard baked into the pixels with no alpha
-// channel, so it was matted by flood-filling that pattern in from the border —
-// no art pixel was altered, see assets/bridgedock.png for the untouched
-// original. Drawn as a side-elevation sprite bottom-anchored on the map, the
-// same convention the town's buildings use.
-//
-// It spans the eastern basin, the widest stretch of open water. Both deck ends
-// were checked to sit on the true bank: "land" was taken to mean ground joined
-// to the shore, so the little island in the middle can't be mistaken for one.
-const BRIDGE_ART = loadBuildingArt('assets/bridge.png');
-// Position as fractions of the pond, so it follows any future rescale.
-const BRIDGE_FX0 = 310 / 816, BRIDGE_FX1 = 753 / 816;  // deck ends
-const BRIDGE_FY = 255 / 400;                            // deck line
-const BRIDGE_RATIO = 649 / 1372;                        // source h/w
-// The deck the player actually walks along, as a band either side of the
-// deck line — used to open a gap in the lake's collision.
-const BRIDGE_WALK_H = 22;
+// A gazebo bridge over the lake was tried and removed: the art is a
+// side-elevation sprite, and stretching one span from bank to bank meant
+// squashing it well off its own proportions, which read as chopped up rather
+// than as a crossing. assets/bridge.png (matted) and assets/bridgedock.png
+// (the author's untouched original) are kept for a future attempt — that
+// attempt wants art drawn for the span, not this one rescaled to fit it.
 
 // Pond water FX (see gfx/waterfx.js): pixel-dot ripples/shimmer masked to
 // the pond art's own water pixels, same technique as the fountain's FX.
@@ -630,22 +618,9 @@ export class TownScene {
     // the water is solid, so the grass/dirt/rock shoreline stays walkable
     // and the player can approach the water's edge.
     this.lakeTopLeft = { x: D.lake.x - POND_W / 2, y: D.lake.y - POND_H / 2 };
-    // The bridge deck is walkable, so the lake's collision has to open up along
-    // it. Each water rect is a horizontal run; any run crossing the deck band
-    // gets the crossing portion cut out and the remainder kept as up to two
-    // pieces either side, leaving a clear corridor from bank to bank.
-    const bx0 = this.lakeTopLeft.x + BRIDGE_FX0 * POND_W;
-    const bx1 = this.lakeTopLeft.x + BRIDGE_FX1 * POND_W;
-    const by = this.lakeTopLeft.y + BRIDGE_FY * POND_H;
-    const bTop = by - BRIDGE_WALK_H / 2, bBot = by + BRIDGE_WALK_H / 2;
     for (const [fx, fy, fw, fh] of POND_WATER_RECTS) {
       const x = this.lakeTopLeft.x + fx * POND_W, y = this.lakeTopLeft.y + fy * POND_H;
-      const w = fw * POND_W, h = fh * POND_H;
-      const straddles = y < bBot && y + h > bTop;
-      if (!straddles) { this.solids.push({ x, y, w, h }); continue; }
-      // keep whatever lies left and right of the walkway
-      if (x < bx0) this.solids.push({ x, y, w: Math.min(w, bx0 - x), h });
-      if (x + w > bx1) this.solids.push({ x: Math.max(x, bx1), y, w: x + w - Math.max(x, bx1), h });
+      this.solids.push({ x, y, w: fw * POND_W, h: fh * POND_H });
     }
 
     // district entry-banner regions (Player House folded into Residential —
@@ -1983,16 +1958,6 @@ export class TownScene {
       // Ducks live on the lake full-time (assets/duck.png) — paddling, looking
       // about, dipping and dabbling.
       drawDucks(g, POND_MASK_INFO, this.lakeTopLeft.x, this.lakeTopLeft.y, POND_W, POND_H, this.t);
-
-      // The bridge goes on last, so ducks and fish pass beneath it.
-      if (BRIDGE_ART.ready) {
-        const bw = Math.round((BRIDGE_FX1 - BRIDGE_FX0) * POND_W);
-        const bh = Math.round(bw * BRIDGE_RATIO);
-        g.drawImage(BRIDGE_ART.img,
-          Math.round(this.lakeTopLeft.x + BRIDGE_FX0 * POND_W),
-          Math.round(this.lakeTopLeft.y + BRIDGE_FY * POND_H - bh),
-          bw, bh);
-      }
     }
 
     // wild zones: taller meadow tiles washed over the base grass around the
