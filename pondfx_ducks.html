@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Duck check</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+  h3 { color:#8fd8ff; font-size:12px; margin:6px 0 3px; }
+  .ok { color:#8fe08f; } .bad { color:#ff8080; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+const { buildWaterMask, drawDucks, drawFishJump } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const pond = new Image(); pond.src = 'assets/pond.png'; await pond.decode();
+const duck = new Image(); duck.src = 'assets/duck.png'; await duck.decode();
+const info = buildWaterMask(pond);
+const GW = 816, GH = 400;
+const out = document.getElementById('out');
+const say = (h, c) => { const e = document.createElement('h3'); if (c) e.className = c; e.innerHTML = h; out.appendChild(e); };
+
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d', { willReadFrequently: true });
+og.imageSmoothingEnabled = false;
+
+const baseC = document.createElement('canvas');
+baseC.width = GW; baseC.height = GH;
+const bg = baseC.getContext('2d', { willReadFrequently: true });
+bg.imageSmoothingEnabled = false;
+bg.drawImage(pond, 0, 0, GW, GH);
+const base = bg.getImageData(0, 0, GW, GH).data;
+
+const waterAtWorld = (x, y) => {
+  const sx = Math.round(x * (info.w / GW)), sy = Math.round(y * (info.h / GH));
+  if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return false;
+  return info.mask[sy * info.w + sx] === 1;
+};
+
+// --- containment: does any duck pixel land off the water? ---
+let offFrames = 0, worst = 0, worstT = 0, checked = 0;
+for (let t = 0; t < 90; t += 0.25) {
+  og.drawImage(pond, 0, 0, GW, GH);
+  drawDucks(og, info, 0, 0, GW, GH, t);
+  const d = og.getImageData(0, 0, GW, GH).data;
+  let bad = 0;
+  for (let y = 0; y < GH; y += 2) {
+    for (let x = 0; x < GW; x += 2) {
+      const o = (y * GW + x) * 4;
+      if (Math.abs(d[o] - base[o]) + Math.abs(d[o+1] - base[o+1]) + Math.abs(d[o+2] - base[o+2]) <= 18) continue;
+      if (!waterAtWorld(x, y)) bad++;
+    }
+  }
+  checked++;
+  if (bad > 0) { offFrames++; if (bad > worst) { worst = bad; worstT = t; } }
+}
+say('DUCK PIXELS OFF THE WATER over ' + checked + ' frames: ' + (offFrames === 0
+  ? '<span class="ok">0 — the ducks never leave the pond</span>'
+  : '<span class="bad">' + offFrames + ' frames (worst ' + worst + ' at t=' + worstT.toFixed(2) + 's)</span>'));
+
+// --- pace: replicate duckPos to measure speed and the swim/float split ---
+const DUCK_WANDER = 20, DUCK_SWIM_SPEED = 3.5;
+function duckPos(home, n, t) {
+  const p1 = n * 1.7, p2 = n * 2.9, p3 = n * 0.8;
+  return {
+    x: home.x + Math.sin(t * 0.30 + p1) * DUCK_WANDER * 0.7 + Math.sin(t * 0.18 + p3) * DUCK_WANDER * 0.3,
+    y: home.y + Math.cos(t * 0.24 + p2) * DUCK_WANDER * 0.34 + Math.cos(t * 0.15 + p1) * DUCK_WANDER * 0.16,
+  };
+}
+const home = { x: 400, y: 200 };
+let maxS = 0, sum = 0, n2 = 0, swimming = 0;
+let maxDX = 0, maxDY = 0;
+for (let t = 0; t < 200; t += 0.05) {
+  const a = duckPos(home, 0, t), b = duckPos(home, 0, t - 0.12);
+  const vx = (a.x - b.x) / 0.12, vy = (a.y - b.y) / 0.12;
+  const s = Math.hypot(vx, vy);
+  maxS = Math.max(maxS, s); sum += s; n2++;
+  if (s > DUCK_SWIM_SPEED) swimming++;
+  maxDX = Math.max(maxDX, Math.abs(a.x - home.x));
+  maxDY = Math.max(maxDY, Math.abs(a.y - home.y));
+}
+say('PACE: peak ' + maxS.toFixed(2) + ' units/s, average ' + (sum / n2).toFixed(2) +
+    ' &nbsp;|&nbsp; paddling ' + Math.round(swimming / n2 * 100) + '% of the time, floating ' +
+    Math.round((1 - swimming / n2) * 100) + '%');
+say('RANGE (must stay under wander ' + DUCK_WANDER + '): x &plusmn;' + maxDX.toFixed(1) +
+    ', y &plusmn;' + maxDY.toFixed(1) + (maxDX <= DUCK_WANDER && maxDY <= DUCK_WANDER
+      ? ' <span class="ok">— within bounds</span>' : ' <span class="bad">— OUT OF BOUNDS</span>'));
+
+// --- travel: how far a duck actually covers in 10s ---
+let dist = 0;
+for (let t = 0.05; t <= 10; t += 0.05) {
+  const a = duckPos(home, 0, t), b = duckPos(home, 0, t - 0.05);
+  dist += Math.hypot(a.x - b.x, a.y - b.y);
+}
+say('TRAVEL: ' + dist.toFixed(0) + ' world units covered in 10s');
+
+// --- visual: one duck's path traced over 20s ---
+say('PATH TRACE — one duck over 20s (dots every 0.25s), home marked red');
+og.drawImage(pond, 0, 0, GW, GH);
+const trace = document.createElement('canvas');
+trace.width = GW; trace.height = GH;
+const tg = trace.getContext('2d');
+tg.imageSmoothingEnabled = false;
+tg.drawImage(off, 0, 0);
+for (let n = 0; n < 3; n++) {
+  const hs = [{ x: 200, y: 150 }, { x: 430, y: 250 }, { x: 620, y: 180 }][n];
+  tg.fillStyle = ['#ffe066', '#7fe0ff', '#ff9de0'][n];
+  for (let t = 0; t < 20; t += 0.25) {
+    const p = duckPos(hs, n, t);
+    tg.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
+  }
+  tg.fillStyle = '#ff3030';
+  tg.fillRect(hs.x - 2, hs.y - 2, 5, 5);
+}
+out.appendChild(trace);
+
+// --- the ducks in place ---
+say('DUCKS ON THE POND — three moments');
+for (const t of [2, 14, 33]) {
+  og.drawImage(pond, 0, 0, GW, GH);
+  drawFishJump(og, info, 0, 0, GW, GH, t);
+  drawDucks(og, info, 0, 0, GW, GH, t);
+  const c = document.createElement('canvas');
+  c.width = GW; c.height = GH;
+  const cg = c.getContext('2d');
+  cg.imageSmoothingEnabled = false;
+  cg.drawImage(off, 0, 0);
+  out.appendChild(c);
+}
+
+window.__ready = true;
+</script>
+</body>
+</html>

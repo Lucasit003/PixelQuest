@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Pond FX preview</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-start; }
+  .cell { margin:0 0 4px 0; }
+  .lbl { padding:1px 0; color:#ffcc66; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+// cache-busted so edits to waterfx.js show up on a plain reload
+const { buildWaterMask, proceduralRipples } = await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const img = new Image();
+img.src = 'assets/pond.png';
+await img.decode();
+const info = buildWaterMask(img);
+
+const out = document.getElementById('out');
+const GW = 816, GH = 400;
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d');
+og.imageSmoothingEnabled = false;
+
+function renderAt(t) {
+  og.drawImage(img, 0, 0, GW, GH);
+  proceduralRipples(og, info, 0, 0, GW, GH, t);
+}
+
+// --- zoomed insets first (most diagnostic) ---
+const zl = document.createElement('div');
+zl.className = 'lbl'; zl.textContent = 'ZOOM 4x — pixel-level detail';
+out.appendChild(zl);
+const zrow = document.createElement('div');
+zrow.className = 'row';
+out.appendChild(zrow);
+
+// Auto-target: render a frame, diff it against the un-effected pond, and
+// zoom on wherever the effects are actually most active — beats guessing
+// fixed coordinates that may contain nothing at that instant.
+const baseC = document.createElement('canvas');
+baseC.width = GW; baseC.height = GH;
+const bg2 = baseC.getContext('2d');
+bg2.imageSmoothingEnabled = false;
+bg2.drawImage(img, 0, 0, GW, GH);
+const baseData = bg2.getImageData(0, 0, GW, GH).data;
+
+function hotspot(t, sw, sh, excludeXs) {
+  renderAt(t);
+  const d = og.getImageData(0, 0, GW, GH).data;
+  let best = null;
+  const step = 20;
+  for (let y = 0; y + sh < GH; y += step) {
+    for (let x = 0; x + sw < GW; x += step) {
+      if (excludeXs && excludeXs.some(e => Math.abs(e.x - x) < 100 && Math.abs(e.y - y) < 70)) continue;
+      let score = 0;
+      for (let yy = y; yy < y + sh; yy += 3) {
+        for (let xx = x; xx < x + sw; xx += 3) {
+          const i = (yy * GW + xx) * 4;
+          score += Math.abs(d[i] - baseData[i]) + Math.abs(d[i+1] - baseData[i+1]) + Math.abs(d[i+2] - baseData[i+2]);
+        }
+      }
+      if (!best || score > best.score) best = { x, y, score };
+    }
+  }
+  return best;
+}
+
+const SW = 120, SH = 80;
+const picked = [];
+const regions = [{ name: 'BASELINE no-fx', sx: 560, sy: 55, sw: SW, sh: SH, t: 5.0, raw: true }];
+for (const t of [1.2, 3.6, 6.4]) {
+  const h = hotspot(t, SW, SH, picked);
+  if (h) {
+    picked.push(h);
+    regions.push({ name: 'most active', sx: h.x, sy: h.y, sw: SW, sh: SH, t });
+  }
+}
+const Z = 3;
+for (const r of regions) {
+  if (r.raw) { og.drawImage(img, 0, 0, GW, GH); } else renderAt(r.t);
+  const zc = document.createElement('canvas');
+  zc.width = r.sw * Z; zc.height = r.sh * Z;
+  const zg = zc.getContext('2d');
+  zg.imageSmoothingEnabled = false;
+  zg.drawImage(off, r.sx, r.sy, r.sw, r.sh, 0, 0, zc.width, zc.height);
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const l = document.createElement('div');
+  l.className = 'lbl'; l.textContent = r.name + '  t=' + r.t;
+  cell.appendChild(l); cell.appendChild(zc);
+  zrow.appendChild(cell);
+}
+
+// --- surface texture check: high zoom on plain open water ---
+{
+  const tl = document.createElement('div');
+  tl.className = 'lbl'; tl.textContent = 'SURFACE TEXTURE — 6x zoom, open water (left: no FX, then 3 moments)';
+  out.appendChild(tl);
+  const trow = document.createElement('div');
+  trow.className = 'row';
+  out.appendChild(trow);
+  const sw = 90, sh = 58, Z = 6, SX = 330, SY = 150;
+  const shots = [{ raw: true, tag: 'no FX' }, { t: 0.0, tag: 't=0.0' }, { t: 2.0, tag: 't=2.0' }, { t: 4.0, tag: 't=4.0' }];
+  for (const s of shots) {
+    if (s.raw) og.drawImage(img, 0, 0, GW, GH); else renderAt(s.t);
+    const zc = document.createElement('canvas');
+    zc.width = sw * Z; zc.height = sh * Z;
+    const zg = zc.getContext('2d');
+    zg.imageSmoothingEnabled = false;
+    zg.drawImage(off, SX, SY, sw, sh, 0, 0, zc.width, zc.height);
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const l = document.createElement('div');
+    l.className = 'lbl'; l.textContent = s.tag;
+    cell.appendChild(l); cell.appendChild(zc);
+    trow.appendChild(cell);
+  }
+}
+
+// --- whole-pond frames ---
+const wl = document.createElement('div');
+wl.className = 'lbl'; wl.textContent = 'WHOLE POND — single frames';
+out.appendChild(wl);
+const wrow = document.createElement('div');
+wrow.className = 'row';
+out.appendChild(wrow);
+
+const W = 400, H = 196;
+for (const t of [1.2, 2.4, 3.6, 5.0, 6.4, 8.2]) {
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, 0, 0, W, H);
+  proceduralRipples(g, info, 0, 0, W, H, t);
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const l = document.createElement('div');
+  l.className = 'lbl'; l.textContent = 't=' + t.toFixed(1) + 's';
+  cell.appendChild(l); cell.appendChild(c);
+  wrow.appendChild(cell);
+}
+
+window.__ready = true;
+</script>
+</body>
+</html>

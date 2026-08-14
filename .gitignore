@@ -16,6 +16,11 @@ npm-debug.log*
 scratchpad/
 tools/_index/
 
+# Working screenshots from layout/art passes. Useful while iterating, but they
+# are full-resolution map captures running 0.2-3MB each — the harnesses that
+# produce them are committed, the output is not.
+dev/
+
 # Large source art (keep the game-ready versions only)
 assets/*_source.png
 assets/Crystal Plaza Road.png
@@ -50,5 +55,6 @@ assets/plaza/_orig_mix/
 assets/plaza/_pre_seam/
 assets/plaza/_pre_tone/
 assets/0bb1851a-d749-4c1c-acd4-068a0e5e31c1.png
+assets/24ab75c2-5657-4511-912a-65b22794ffe3.png
 assets/Cobble Transistions.png
 assets/Dirt and Grass.png

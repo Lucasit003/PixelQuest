@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>The lake</title>
+<style>
+  body { background:#0d0b10; margin:0; padding:0; }
+  canvas { image-rendering: pixelated; display:block; }
+</style>
+</head>
+<body>
+<script type="module">
+const { buildWaterMask, drawFishJump, drawDucks } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const pond = new Image(); pond.src = 'assets/pond.png'; await pond.decode();
+const fish = new Image(); fish.src = 'assets/fish1.png'; await fish.decode();
+const duck = new Image(); duck.src = 'assets/duck.png'; await duck.decode();
+const bridge = new Image(); bridge.src = 'assets/bridge.png'; await bridge.decode();
+const info = buildWaterMask(pond);
+
+const GW = 816, GH = 400, Z = 2;
+const c = document.createElement('canvas');
+c.width = GW * Z; c.height = GH * Z;
+const g = c.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+// A moment with a fish mid-wake and the ducks spread out.
+const T = 9.9;
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d');
+og.imageSmoothingEnabled = false;
+og.drawImage(pond, 0, 0, GW, GH);
+drawFishJump(og, info, 0, 0, GW, GH, T);
+drawDucks(og, info, 0, 0, GW, GH, T);
+const BX0=310, BX1=753, BY=255;
+const bw=BX1-BX0, bh=Math.round(bw*(649/1372));
+og.drawImage(bridge, BX0, BY-bh, bw, bh);
+
+g.drawImage(off, 0, 0, GW, GH, 0, 0, c.width, c.height);
+document.body.appendChild(c);
+window.__lake = c.toDataURL('image/jpeg', 0.92).split(',')[1];
+window.__ready = true;
+</script>
+</body>
+</html>

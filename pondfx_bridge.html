@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Bridge placement</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; margin-bottom:6px; }
+  h3 { color:#8fd8ff; font-size:12px; margin:6px 0 3px; }
+  .ok { color:#8fe08f; } .bad { color:#ff8080; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+const { buildWaterMask, drawFishJump, drawDucks } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const pond = new Image(); pond.src = 'assets/pond.png'; await pond.decode();
+const bridge = new Image(); bridge.src = 'assets/bridge.png'; await bridge.decode();
+const fish = new Image(); fish.src = 'assets/fish1.png'; await fish.decode();
+const duck = new Image(); duck.src = 'assets/duck.png'; await duck.decode();
+const info = buildWaterMask(pond);
+const GW = 816, GH = 400;
+const out = document.getElementById('out');
+const say = (h, c) => { const e = document.createElement('h3'); if (c) e.className = c; e.innerHTML = h; out.appendChild(e); };
+
+const waterAt = (x, y) => {
+  const sx = Math.round(x * (info.w / GW)), sy = Math.round(y * (info.h / GH));
+  if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return false;
+  return info.mask[sy * info.w + sx] === 1;
+};
+// "real land" = not water, and sitting in a big solid mass (not a lily pad)
+const land = (x, y) => {
+  if (waterAt(x, y)) return false;
+  let solid = 0, n = 0;
+  for (let dy = -14; dy <= 14; dy += 4)
+    for (let dx = -14; dx <= 14; dx += 4) { n++; if (!waterAt(x + dx, y + dy)) solid++; }
+  return solid / n > 0.7;
+};
+
+say('bridge art ' + bridge.naturalWidth + 'x' + bridge.naturalHeight +
+    ' (ratio ' + (bridge.naturalWidth / bridge.naturalHeight).toFixed(2) + ':1)');
+
+// candidate crossings: [x0, x1, deckY, label]
+const cands = [
+  [62, 776, 230, 'whole lake (714 wide)'],
+  [310, 753, 255, 'east basin (443 wide)'],
+  [308, 723, 280, 'east basin lower (415 wide)'],
+];
+say('CANDIDATE CROSSINGS — ends must be land, middle mostly water');
+for (const [x0, x1, dy, label] of cands) {
+  const w = x1 - x0;
+  const endL = land(x0 + 4, dy), endR = land(x1 - 4, dy);
+  let wet = 0, n = 0;
+  for (let x = x0 + 10; x < x1 - 10; x += 2) { n++; if (waterAt(x, dy)) wet++; }
+  const pct = Math.round(wet / n * 100);
+  const scale = w / bridge.naturalWidth;
+  const h = Math.round(bridge.naturalHeight * scale);
+  const good = endL && endR && pct > 70;
+  say('&nbsp;&nbsp;' + label + ': x ' + x0 + '..' + x1 + ' (' + w + ' wide) at y=' + dy +
+      ' — left end ' + (endL ? 'land' : '<span class="bad">WATER</span>') +
+      ', right end ' + (endR ? 'land' : '<span class="bad">WATER</span>') +
+      ', ' + pct + '% water between, sprite would be ' + w + 'x' + h +
+      (good ? ' <span class="ok">usable</span>' : ' <span class="bad">no</span>'));
+}
+
+// render each candidate over the lake
+function render(x0, x1, deckY, label) {
+  const c = document.createElement('canvas');
+  c.width = GW; c.height = GH;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.drawImage(pond, 0, 0, GW, GH);
+  drawFishJump(g, info, 0, 0, GW, GH, 9.9);
+  drawDucks(g, info, 0, 0, GW, GH, 9.9);
+  const w = x1 - x0, h = Math.round(bridge.naturalHeight * (w / bridge.naturalWidth));
+  g.drawImage(bridge, x0, deckY - h, w, h);
+  const lbl = document.createElement('h3');
+  lbl.textContent = label + '  (' + w + 'x' + h + ' at ' + x0 + ',' + (deckY - h) + ')';
+  out.appendChild(lbl);
+  out.appendChild(c);
+}
+for (const [x0, x1, dy, label] of cands) render(x0, x1, dy, label);
+
+window.__ready = true;
+</script>
+</body>
+</html>

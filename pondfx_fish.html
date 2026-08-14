@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Fish jump</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .row { display:flex; gap:4px; flex-wrap:wrap; align-items:flex-start; }
+  .cell { margin:0 0 5px 0; }
+  .lbl { padding:1px 0; color:#ffcc66; }
+  h3 { color:#8fd8ff; font-size:12px; margin:6px 0 3px; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+const { buildWaterMask, proceduralRipples, drawFishJump } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const img = new Image(); img.src = 'assets/pond.png'; await img.decode();
+const fish = new Image(); fish.src = 'assets/fish1.png'; await fish.decode();
+const info = buildWaterMask(img);
+
+const GW = 816, GH = 400;
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d');
+og.imageSmoothingEnabled = false;
+
+const out = document.getElementById('out');
+const PERIOD = 13;
+
+// perf readout, printed into the page so it survives a screenshot
+{
+  const t0 = performance.now();
+  const inf2 = buildWaterMask(img);
+  const buildMs = performance.now() - t0;
+  const t1 = performance.now();
+  const N = 40;
+  for (let i = 0; i < N; i++) {
+    og.drawImage(img, 0, 0, GW, GH);
+    proceduralRipples(og, inf2, 0, 0, GW, GH, i / N * 8);
+    drawFishJump(og, inf2, 0, 0, GW, GH, (i / N) * 1.7, PERIOD);
+  }
+  const per = (performance.now() - t1) / N;
+  const p = document.createElement('h3');
+  p.style.color = per < 8 ? '#8fe08f' : '#ffcc66';
+  p.textContent = `PERF: ${per.toFixed(2)} ms/frame (${(per / 16 * 100).toFixed(0)}% of a 16ms budget) · mask build ${buildMs.toFixed(0)}ms once · shore ${inf2.shore.length} · padEdge ${inf2.padEdge.length}`;
+  out.appendChild(p);
+}
+
+function renderAt(t) {
+  og.drawImage(img, 0, 0, GW, GH);
+  proceduralRipples(og, info, 0, 0, GW, GH, t);
+  drawFishJump(og, info, 0, 0, GW, GH, t, PERIOD);
+}
+
+// Find where this cycle's jump happens, so the zoom can follow it.
+function jumpSpot(cycle) {
+  const hash = (x) => { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); };
+  const inW = (dx, dy) => {
+    const sx = Math.round(dx * (info.w / GW)), sy = Math.round(dy * (info.h / GH));
+    if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return false;
+    return info.mask[sy * info.w + sx] === 1;
+  };
+  for (let tries = 0; tries < 14; tries++) {
+    const sa = hash(cycle * 7.7 + tries * 3.1 + 200);
+    const sb = hash(cycle * 4.3 + tries * 5.9 + 201);
+    const jx = 40 + sa * (GW - 80), jy = 40 + sb * (GH - 80);
+    let ok = true;
+    for (let dx = -26; dx <= 26 && ok; dx += 13) {
+      for (let dy = -16; dy <= 16 && ok; dy += 8) if (!inW(jx + dx, jy + dy)) ok = false;
+    }
+    if (ok) return { x: jx, y: jy };
+  }
+  return null;
+}
+
+// Full frame-by-frame walk of one jump, zoomed, centred on the jump point.
+const spot = jumpSpot(0);
+const h = document.createElement('h3');
+h.textContent = spot ? 'FISH JUMP — every frame (5x zoom), jump at ' +
+  Math.round(spot.x) + ',' + Math.round(spot.y) : 'no valid jump spot found';
+out.appendChild(h);
+const row = document.createElement('div');
+row.className = 'row';
+out.appendChild(row);
+
+if (spot) {
+  // One composite strip: 11 frames in two rows, so a single screenshot shows
+  // the whole jump.
+  const SW = 62, SH = 54, Z = 4, PAD = 3, LBL = 11;
+  const cols = 6;
+  const cw = SW * Z, ch = SH * Z;
+  const rows = Math.ceil(11 / cols);
+  const strip = document.createElement('canvas');
+  strip.width = cols * cw + PAD * (cols + 1);
+  strip.height = rows * (ch + LBL + PAD) + PAD;
+  const sg = strip.getContext('2d');
+  sg.imageSmoothingEnabled = false;
+  sg.fillStyle = '#14100f'; sg.fillRect(0, 0, strip.width, strip.height);
+  const durs = [240,200,110,100,100,100,120,100,150,220,300];
+  let accMs = 0;
+  durs.forEach((d, i) => {
+    const tMid = (accMs + d / 2) / 1000;
+    accMs += d;
+    renderAt(tMid);
+    const sx = Math.max(0, Math.min(GW - SW, Math.round(spot.x - SW / 2)));
+    const sy = Math.max(0, Math.min(GH - SH, Math.round(spot.y - SH + 16)));
+    const cx = i % cols, cy = Math.floor(i / cols);
+    const ox = PAD + cx * (cw + PAD), oy = PAD + cy * (ch + LBL + PAD);
+    sg.fillStyle = '#ffcc66'; sg.font = '10px monospace';
+    sg.fillText('f' + i, ox, oy + 9);
+    sg.drawImage(off, sx, sy, SW, SH, ox, oy + LBL, cw, ch);
+  });
+  row.appendChild(strip);
+}
+
+// whole pond during the jump, for scale
+const h2 = document.createElement('h3');
+h2.textContent = 'WHOLE POND during the jump (game scale)';
+out.appendChild(h2);
+const row2 = document.createElement('div');
+row2.className = 'row';
+out.appendChild(row2);
+for (const tt of [0.55, 0.95, 1.25]) {
+  renderAt(tt);
+  const c = document.createElement('canvas');
+  c.width = GW; c.height = GH;
+  const cg = c.getContext('2d');
+  cg.imageSmoothingEnabled = false;
+  cg.drawImage(off, 0, 0);
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const l = document.createElement('div');
+  l.className = 'lbl'; l.textContent = 't=' + tt + 's';
+  cell.appendChild(l); cell.appendChild(c);
+  row2.appendChild(cell);
+}
+
+window.__ready = true;
+</script>
+</body>
+</html>

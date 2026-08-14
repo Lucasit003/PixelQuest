@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Pond FX check</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+  h3 { color:#8fd8ff; font-size:12px; margin:6px 0 3px; }
+  .ok { color:#8fe08f; } .bad { color:#ff8080; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+const { buildWaterMask, drawFishJump } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const img = new Image(); img.src = 'assets/pond.png'; await img.decode();
+const fish = new Image(); fish.src = 'assets/fish1.png'; await fish.decode();
+const info = buildWaterMask(img);
+const GW = 816, GH = 400;
+const out = document.getElementById('out');
+const say = (html, cls) => { const h = document.createElement('h3'); if (cls) h.className = cls; h.innerHTML = html; out.appendChild(h); };
+
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d', { willReadFrequently: true });
+og.imageSmoothingEnabled = false;
+
+const baseC = document.createElement('canvas');
+baseC.width = GW; baseC.height = GH;
+const bgx = baseC.getContext('2d', { willReadFrequently: true });
+bgx.imageSmoothingEnabled = false;
+bgx.drawImage(img, 0, 0, GW, GH);
+const base = bgx.getImageData(0, 0, GW, GH).data;
+
+const waterAtWorld = (x, y) => {
+  const sx = Math.round(x * (info.w / GW)), sy = Math.round(y * (info.h / GH));
+  if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return false;
+  return info.mask[sy * info.w + sx] === 1;
+};
+
+// Scan a frame: returns drawn-pixel count, how many landed off water, bbox.
+// Strided sampling keeps this fast enough to run over a long stretch of time.
+function scan(t, stride = 2) {
+  og.drawImage(img, 0, 0, GW, GH);
+  drawFishJump(og, info, 0, 0, GW, GH, t);
+  const d = og.getImageData(0, 0, GW, GH).data;
+  let n = 0, off = 0, minx = 1e9, maxx = -1, miny = 1e9, maxy = -1;
+  for (let y = 0; y < GH; y += stride) {
+    for (let x = 0; x < GW; x += stride) {
+      const o = (y * GW + x) * 4;
+      if (Math.abs(d[o] - base[o]) + Math.abs(d[o+1] - base[o+1]) + Math.abs(d[o+2] - base[o+2]) <= 18) continue;
+      n++;
+      if (!waterAtWorld(x, y)) off++;
+      if (x < minx) minx = x; if (x > maxx) maxx = x;
+      if (y < miny) miny = y; if (y > maxy) maxy = y;
+    }
+  }
+  return { n, off, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 };
+}
+
+// --- pass 1: is the water still when no fish is up, and is every fish on water?
+let quiet = 0, active = 0, offFrames = 0, worstOff = 0, worstT = 0;
+const centres = [];
+for (let t = 0; t < 60; t += 0.15) {
+  const r = scan(t);
+  if (r.n === 0) { quiet++; continue; }
+  active++;
+  centres.push({ t, cx: r.cx, cy: r.cy });
+  if (r.off > 0) { offFrames++; if (r.off > worstOff) { worstOff = r.off; worstT = t; } }
+}
+say('STILL FRAMES (nothing drawn — ambient ripples & waves gone): <span class="ok">' + quiet + '</span>' +
+    ' &nbsp;|&nbsp; FRAMES WITH A FISH: ' + active);
+say('FISH PIXELS LANDING OFF THE WATER: ' + (offFrames === 0
+  ? '<span class="ok">0 — every jump stays over water</span>'
+  : '<span class="bad">' + offFrames + ' frames (worst ' + worstOff + ' samples at t=' + worstT.toFixed(2) + 's)</span>'));
+
+// --- pass 2: cluster the jump centres to count distinct locations
+const clusters = [];
+for (const c of centres) {
+  const hit = clusters.find(k => Math.hypot(k.cx - c.cx, k.cy - c.cy) < 60);
+  if (hit) { hit.n++; } else { clusters.push({ cx: c.cx, cy: c.cy, n: 1, t: c.t }); }
+}
+say('DISTINCT JUMP LOCATIONS in 60s: <span class="ok">' + clusters.length + '</span> &nbsp; ' +
+    clusters.map(c => Math.round(c.cx) + ',' + Math.round(c.cy)).join(' · '));
+
+// --- visual: six jumps caught mid-air, zoomed
+const SW = 110, SH = 66, Z = 4, PAD = 4, LBL = 12;
+const cw = SW * Z, ch = SH * Z;
+const grid = document.createElement('canvas');
+grid.width = 3 * cw + PAD * 4;
+grid.height = 2 * (ch + LBL + PAD) + PAD;
+const gg = grid.getContext('2d');
+gg.imageSmoothingEnabled = false;
+gg.fillStyle = '#14100f'; gg.fillRect(0, 0, grid.width, grid.height);
+say('SIX JUMPS — two consecutive jumps from each of the three fish (4x zoom)');
+// Replicates the per-fish spot maths in waterfx.js so each crop is centred on
+// that fish, not on the bounding box of everything on screen (with three fish,
+// two can be airborne at once and the midpoint between them is empty water).
+const hash = (x) => { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); };
+const PERIOD = 8, COUNT = 3, CLEAR = 17;
+function spotOf(salt, cycle) {
+  const kx = info.w / GW;
+  for (let tries = 0; tries < 20; tries++) {
+    const sa = hash(cycle * 7.7 + tries * 3.1 + salt * 137.7 + 200);
+    const sb = hash(cycle * 4.3 + tries * 5.9 + salt * 91.3 + 201);
+    const jx = 40 + sa * (GW - 80), jy = 40 + sb * (GH - 80);
+    const sx = Math.round(jx * kx), sy = Math.round(jy * (info.h / GH));
+    if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) continue;
+    if (info.clearance[sy * info.w + sx] >= (CLEAR + 2) * kx) return { x: jx, y: jy };
+  }
+  return null;
+}
+let cell = 0;
+for (let cyc = 0; cyc < 2 && cell < 6; cyc++) {
+  for (let n = 0; n < COUNT && cell < 6; n++) {
+    const p = PERIOD + n * 0.9;
+    // global t at which fish n is ~0.95s into cycle `cyc`
+    const t = cyc * p + 0.95 - (PERIOD / COUNT) * n;
+    if (t < 0) continue;
+    const sp = spotOf(n, cyc);
+    og.drawImage(img, 0, 0, GW, GH);
+    drawFishJump(og, info, 0, 0, GW, GH, t);
+    const col = cell % 3, row = Math.floor(cell / 3);
+    const ox = PAD + col * (cw + PAD), oy = PAD + row * (ch + LBL + PAD);
+    gg.fillStyle = '#ffcc66'; gg.font = '11px monospace';
+    gg.fillText('fish ' + (n + 1) + ' jump ' + (cyc + 1) +
+      (sp ? ' @ ' + Math.round(sp.x) + ',' + Math.round(sp.y) : ' (no spot)'), ox, oy + 9);
+    if (sp) {
+      const sx = Math.max(0, Math.min(GW - SW, Math.round(sp.x - SW / 2)));
+      const sy = Math.max(0, Math.min(GH - SH, Math.round(sp.y - SH + 20)));
+      gg.drawImage(off, sx, sy, SW, SH, ox, oy + LBL, cw, ch);
+    }
+    cell++;
+  }
+}
+out.appendChild(grid);
+
+// --- whole pond with nothing in flight: should be plain, still water
+say('WHOLE POND, no fish in flight — should be completely still');
+let qt = 0;
+for (let t = 0; t < 60; t += 0.15) { if (scan(t, 4).n === 0) { qt = t; break; } }
+og.drawImage(img, 0, 0, GW, GH);
+drawFishJump(og, info, 0, 0, GW, GH, qt);
+const q = document.createElement('canvas');
+q.width = GW; q.height = GH;
+const qg = q.getContext('2d');
+qg.imageSmoothingEnabled = false;
+qg.drawImage(off, 0, 0);
+out.appendChild(q);
+
+window.__ready = true;
+</script>
+</body>
+</html>

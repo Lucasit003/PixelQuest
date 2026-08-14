@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Fish wake</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+  h3 { color:#8fd8ff; font-size:12px; margin:6px 0 3px; }
+  .ok { color:#8fe08f; } .bad { color:#ff8080; }
+  .row { display:flex; gap:4px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+const { buildWaterMask, drawFishJump } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const pond = new Image(); pond.src = 'assets/pond.png'; await pond.decode();
+const fish = new Image(); fish.src = 'assets/fish1.png'; await fish.decode();
+const info = buildWaterMask(pond);
+const GW = 816, GH = 400;
+const out = document.getElementById('out');
+const say = (h, c) => { const e = document.createElement('h3'); if (c) e.className = c; e.innerHTML = h; out.appendChild(e); };
+
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d', { willReadFrequently: true });
+og.imageSmoothingEnabled = false;
+
+const baseC = document.createElement('canvas');
+baseC.width = GW; baseC.height = GH;
+const bg = baseC.getContext('2d', { willReadFrequently: true });
+bg.imageSmoothingEnabled = false;
+bg.drawImage(pond, 0, 0, GW, GH);
+const base = bg.getImageData(0, 0, GW, GH).data;
+
+const waterAtWorld = (x, y) => {
+  const sx = Math.round(x * (info.w / GW)), sy = Math.round(y * (info.h / GH));
+  if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return false;
+  return info.mask[sy * info.w + sx] === 1;
+};
+
+const hash = (x) => { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); };
+const CLEAR = 17;
+function spotOf(salt, cycle) {
+  const kx = info.w / GW;
+  for (let tries = 0; tries < 20; tries++) {
+    const sa = hash(cycle * 7.7 + tries * 3.1 + salt * 137.7 + 200);
+    const sb = hash(cycle * 4.3 + tries * 5.9 + salt * 91.3 + 201);
+    const jx = 40 + sa * (GW - 80), jy = 40 + sb * (GH - 80);
+    const sx = Math.round(jx * kx), sy = Math.round(jy * (info.h / GH));
+    if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) continue;
+    if (info.clearance[sy * info.w + sx] >= (CLEAR + 2) * kx) {
+      return { x: jx, y: jy, room: info.clearance[sy * info.w + sx] / kx };
+    }
+  }
+  return null;
+}
+
+// Fish 0 uses period 8 with no offset, so its cycle-1 jump begins at t=8.
+const sp = spotOf(0, 1);
+say('fish 0, cycle 1 — entry at ' + Math.round(sp.x) + ',' + Math.round(sp.y) +
+    ' with ' + sp.room.toFixed(0) + ' units of clear water');
+
+// --- the wake through time, zoomed on the entry point ---
+say('WAKE AFTER LANDING — entry is at 1.07s; frames from just before to fully faded (3x)');
+const SW = 118, SH = 78, Z = 4, PAD = 4, LBL = 12;
+const cw = SW * Z, ch = SH * Z;
+const marks = [1.10, 1.30, 1.50, 1.70, 1.95, 2.20, 2.50, 2.85, 3.20, 3.60, 3.90, 4.10];
+const cols = 4;
+const grid = document.createElement('canvas');
+grid.width = cols * cw + PAD * (cols + 1);
+grid.height = Math.ceil(marks.length / cols) * (ch + LBL + PAD) + PAD;
+const gg = grid.getContext('2d');
+gg.imageSmoothingEnabled = false;
+gg.fillStyle = '#14100f'; gg.fillRect(0, 0, grid.width, grid.height);
+marks.forEach((localT, i) => {
+  const t = 8 + localT;                    // fish 0's cycle-1 jump starts at t=8
+  og.drawImage(pond, 0, 0, GW, GH);
+  drawFishJump(og, info, 0, 0, GW, GH, t);
+  const c = i % cols, r = Math.floor(i / cols);
+  const ox = PAD + c * (cw + PAD), oy = PAD + r * (ch + LBL + PAD);
+  const sx = Math.max(0, Math.min(GW - SW, Math.round(sp.x - SW / 2)));
+  const sy = Math.max(0, Math.min(GH - SH, Math.round(sp.y - SH / 2)));
+  gg.fillStyle = localT < 1.07 ? '#9aa' : '#ffcc66';
+  gg.font = '11px monospace';
+  gg.fillText('t+' + localT.toFixed(2) + 's' + (localT < 1.07 ? ' (in air)' : ''), ox, oy + 9);
+  gg.drawImage(off, sx, sy, SW, SH, ox, oy + LBL, cw, ch);
+});
+out.appendChild(grid);
+
+// --- containment: does the wake ever paint on land? ---
+let offFrames = 0, worst = 0, worstT = 0, checked = 0, litFrames = 0;
+for (let t = 0; t < 80; t += 0.1) {
+  og.drawImage(pond, 0, 0, GW, GH);
+  drawFishJump(og, info, 0, 0, GW, GH, t);
+  const d = og.getImageData(0, 0, GW, GH).data;
+  let bad = 0, lit = 0;
+  for (let y = 0; y < GH; y += 2) {
+    for (let x = 0; x < GW; x += 2) {
+      const o = (y * GW + x) * 4;
+      if (Math.abs(d[o] - base[o]) + Math.abs(d[o+1] - base[o+1]) + Math.abs(d[o+2] - base[o+2]) <= 18) continue;
+      lit++;
+      if (!waterAtWorld(x, y)) bad++;
+    }
+  }
+  checked++;
+  if (lit > 0) litFrames++;
+  if (bad > 0) { offFrames++; if (bad > worst) { worst = bad; worstT = t; } }
+}
+say('FISH + WAKE PIXELS OFF THE WATER over ' + checked + ' frames: ' + (offFrames === 0
+  ? '<span class="ok">0 — nothing spills onto the bank</span>'
+  : '<span class="bad">' + offFrames + ' frames (worst ' + worst + ' at t=' + worstT.toFixed(2) + 's)</span>'));
+say('frames showing something: ' + litFrames + ' of ' + checked +
+    ' (' + Math.round(litFrames / checked * 100) + '% — the pond is otherwise still)');
+
+// --- whole pond mid-wake ---
+say('WHOLE POND, mid-wake');
+og.drawImage(pond, 0, 0, GW, GH);
+drawFishJump(og, info, 0, 0, GW, GH, 8 + 1.9);
+const whole = document.createElement('canvas');
+whole.width = GW; whole.height = GH;
+const wg = whole.getContext('2d');
+wg.imageSmoothingEnabled = false;
+wg.drawImage(off, 0, 0);
+out.appendChild(whole);
+
+window.__ready = true;
+</script>
+</body>
+</html>

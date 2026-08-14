@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Wake alignment</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+  h3 { color:#8fd8ff; font-size:12px; margin:6px 0 3px; }
+  .ok { color:#8fe08f; } .bad { color:#ff8080; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+const { buildWaterMask, drawFishJump } =
+  await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const pond = new Image(); pond.src = 'assets/pond.png'; await pond.decode();
+const fish = new Image(); fish.src = 'assets/fish1.png'; await fish.decode();
+const info = buildWaterMask(pond);
+const GW = 816, GH = 400;
+const out = document.getElementById('out');
+const say = (h, c) => { const e = document.createElement('h3'); if (c) e.className = c; e.innerHTML = h; out.appendChild(e); };
+
+const off = document.createElement('canvas');
+off.width = GW; off.height = GH;
+const og = off.getContext('2d', { willReadFrequently: true });
+og.imageSmoothingEnabled = false;
+
+const baseC = document.createElement('canvas');
+baseC.width = GW; baseC.height = GH;
+const bgx = baseC.getContext('2d', { willReadFrequently: true });
+bgx.imageSmoothingEnabled = false;
+bgx.drawImage(pond, 0, 0, GW, GH);
+const base = bgx.getImageData(0, 0, GW, GH).data;
+
+// --- replicate the renderer's own numbers so we can mark the entry point ---
+const hash = (x) => { const s = Math.sin(x * 12.9898) * 43758.5453; return s - Math.floor(s); };
+const FISH_TOTAL_MS = 1740, FISH_ENTRY_S = 1.07, FISH_TRAVEL = 17, CLEAR = 17;
+function spotOf(salt, cycle) {
+  const kx = info.w / GW;
+  for (let tries = 0; tries < 20; tries++) {
+    const sa = hash(cycle * 7.7 + tries * 3.1 + salt * 137.7 + 200);
+    const sb = hash(cycle * 4.3 + tries * 5.9 + salt * 91.3 + 201);
+    const jx = 40 + sa * (GW - 80), jy = 40 + sb * (GH - 80);
+    const sx = Math.round(jx * kx), sy = Math.round(jy * (info.h / GH));
+    if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) continue;
+    if (info.clearance[sy * info.w + sx] >= (CLEAR + 2) * kx) return { x: jx, y: jy };
+  }
+  return null;
+}
+const sp = spotOf(0, 1);                       // fish 0, cycle 1 -> jump starts at t=8
+const entryX = sp.x + (FISH_ENTRY_S * 1000 / FISH_TOTAL_MS - 0.5) * FISH_TRAVEL;
+const entryY = sp.y;
+say('jump spot ' + sp.x.toFixed(1) + ',' + sp.y.toFixed(1) +
+    ' &nbsp; computed entry point <b>' + entryX.toFixed(1) + ',' + entryY.toFixed(1) + '</b> (red cross)');
+
+// Measures the centre of whatever is drawn, restricted to a window round the
+// entry point, so we can compare it against the marker.
+function drawnCentre(t, win) {
+  og.drawImage(pond, 0, 0, GW, GH);
+  drawFishJump(og, info, 0, 0, GW, GH, t, 8, 1);
+  const d = og.getImageData(0, 0, GW, GH).data;
+  let sx = 0, sy = 0, n = 0;
+  const x0 = Math.max(0, Math.round(entryX - win)), x1 = Math.min(GW, Math.round(entryX + win));
+  const y0 = Math.max(0, Math.round(entryY - win)), y1 = Math.min(GH, Math.round(entryY + win));
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const o = (y * GW + x) * 4;
+      if (Math.abs(d[o] - base[o]) + Math.abs(d[o+1] - base[o+1]) + Math.abs(d[o+2] - base[o+2]) <= 18) continue;
+      sx += x; sy += y; n++;
+    }
+  }
+  return n ? { x: sx / n, y: sy / n, n } : null;
+}
+
+// --- the moments that matter: sheet splash, sheet rings, procedural rings ---
+const marks = [
+  { t: 1.14, tag: 'sheet frame 8 (splash)' },
+  { t: 1.32, tag: 'sheet frame 9 (ring)' },
+  { t: 1.60, tag: 'sheet frame 10 (ring)' },
+  { t: 1.90, tag: 'procedural rings only' },
+  { t: 2.40, tag: 'procedural rings only' },
+];
+say('ENTRY ALIGNMENT — single fish, no neighbouring wakes (6x)');
+const SW = 96, SH = 62, Z = 6, PAD = 4, LBL = 12;
+const cw = SW * Z, ch = SH * Z;
+const grid = document.createElement('canvas');
+grid.width = 3 * cw + PAD * 4;
+grid.height = 2 * (ch + LBL + PAD) + PAD;
+const gg = grid.getContext('2d');
+gg.imageSmoothingEnabled = false;
+gg.fillStyle = '#14100f'; gg.fillRect(0, 0, grid.width, grid.height);
+
+const report = [];
+marks.forEach((m, i) => {
+  const c = drawnCentre(8 + m.t, 20);
+  const col = i % 3, row = Math.floor(i / 3);
+  const ox = PAD + col * (cw + PAD), oy = PAD + row * (ch + LBL + PAD);
+  const sx = Math.max(0, Math.min(GW - SW, Math.round(entryX - SW / 2)));
+  const sy = Math.max(0, Math.min(GH - SH, Math.round(entryY - SH / 2)));
+  gg.fillStyle = '#ffcc66'; gg.font = '11px monospace';
+  gg.fillText('t+' + m.t.toFixed(2) + '  ' + m.tag, ox, oy + 9);
+  gg.drawImage(off, sx, sy, SW, SH, ox, oy + LBL, cw, ch);
+  // red cross at the computed entry point
+  gg.fillStyle = '#ff3b3b';
+  const mx = ox + (entryX - sx) * Z, my = oy + LBL + (entryY - sy) * Z;
+  gg.fillRect(mx - 14, my - 1, 29, 3);
+  gg.fillRect(mx - 1, my - 14, 3, 29);
+  if (c) {
+    // cyan cross at the actual centre of what was drawn
+    gg.fillStyle = '#42e8ff';
+    const ax = ox + (c.x - sx) * Z, ay = oy + LBL + (c.y - sy) * Z;
+    gg.fillRect(ax - 9, ay - 1, 19, 2);
+    gg.fillRect(ax - 1, ay - 9, 2, 19);
+    report.push({ tag: m.tag, t: m.t, dx: c.x - entryX, dy: c.y - entryY });
+  }
+});
+out.appendChild(grid);
+
+say('OFFSET of what is actually drawn (cyan) from the computed entry point (red):');
+let worst = 0;
+for (const r of report) {
+  worst = Math.max(worst, Math.hypot(r.dx, r.dy));
+  const bad = Math.hypot(r.dx, r.dy) > 4;
+  say('&nbsp;&nbsp;t+' + r.t.toFixed(2) + ' ' + r.tag + ': dx ' + r.dx.toFixed(1) +
+      ', dy ' + r.dy.toFixed(1) + (bad ? ' <span class="bad">&larr; drifted</span>' : ' <span class="ok">ok</span>'));
+}
+say('worst offset ' + worst.toFixed(1) + ' world units', worst > 4 ? 'bad' : 'ok');
+
+window.__ready = true;
+</script>
+</body>
+</html>
