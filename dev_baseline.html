@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Town render baseline</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:8px; }
+  canvas { image-rendering: pixelated; display:block; margin-bottom:6px; }
+  .lbl { padding:3px 0; color:#ffcc66; }
+  .ok { color:#8df0a0; } .bad { color:#ff8080; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+// Render-equivalence harness for the town.js decomposition. Draws a fixed set
+// of cameras and prints a pixel hash of each, so "the refactor changed nothing
+// visually" becomes a checkable claim instead of an eyeball judgement.
+//
+// Determinism is the whole point, so three sources of drift are pinned before
+// the scene is built:
+//   * Math.random  — town uses it for chimney smoke, sparkles, dust and NPC
+//                    wander targets. Layout never touches it.
+//   * performance.now — the HUD blink and the selection wobble read it.
+//   * scene.t      — every other animation is driven off this.
+//
+//   ?shots=all|plaza,lake,...   which cameras to render
+//   &canvas=0                   hash only, don't paint (faster)
+const q = new URLSearchParams(location.search);
+
+// --- pin randomness (mulberry32, reseeded per shot) -------------------------
+let __seed = 0x9e3779b9;
+function reseed(s) { __seed = s >>> 0; }
+Math.random = function () {
+  __seed |= 0; __seed = (__seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(__seed ^ (__seed >>> 15), 1 | __seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+// --- pin the wall clock -----------------------------------------------------
+performance.now = () => 1234.5;
+
+const bust = '?v=' + Date.now();
+const { TownScene } = await import('./src/scenes/town.js' + bust);
+const { Hero } = await import('./src/game/state.js' + bust);
+
+const W = 480, H = 270, SCALE = 1;
+const hero = Hero.create('warrior');
+const scene = new TownScene(hero, {});
+scene.enter({ width: W, height: H });
+
+// Chrome silently skips a drawImage whose decoded texture isn't resident, and
+// at the 0.55 whole-plaza zoom the frame touches nearly every prop at once —
+// which is exactly where that bites. The prop Images live in module scope and
+// never enter the DOM, so they can't be awaited; instead every camera is drawn
+// once in a throwaway warm-up pass below, which forces residency through the
+// scene's own textures. Without it the two wide shots hash differently on a
+// cold cache than on a warm one.
+await new Promise((r) => setTimeout(r, 2200));
+
+const D = scene.districts, FC = scene.plazaFocus, PZ = scene.plazaCenter;
+const loc = (id) => scene.locations.find((l) => l.id === id);
+
+// Cameras. dy nudges account for the scene deriving its camera from the player.
+const SHOTS = [
+  { id: 'plaza_day',    x: FC.x,            y: FC.y,               zoom: 0.55, night: false },
+  { id: 'plaza_play',   x: PZ.x,            y: PZ.y + 60,          zoom: 1.60, night: false },
+  { id: 'plaza_night',  x: FC.x,            y: FC.y,               zoom: 0.55, night: true  },
+  { id: 'plaza_n_play', x: PZ.x,            y: PZ.y + 60,          zoom: 1.60, night: true  },
+  { id: 'lake',         x: D.lake.x,        y: D.lake.y + 40,      zoom: 1.10, night: false },
+  { id: 'lake_night',   x: D.lake.x,        y: D.lake.y + 40,      zoom: 1.10, night: true  },
+  { id: 'eldertree',    x: loc('eldertree').dx, y: loc('eldertree').dy, zoom: 1.10, night: false },
+  { id: 'residential',  x: D.residential.x, y: D.residential.y,    zoom: 1.10, night: false },
+  { id: 'market',       x: D.market.x,      y: D.market.y,         zoom: 1.10, night: false },
+  { id: 'forge',        x: loc('weapon').dx, y: loc('weapon').dy,  zoom: 1.60, night: false },
+  { id: 'archive',      x: D.archive.x,     y: D.archive.y + 60,   zoom: 1.60, night: false },
+  { id: 'watch',        x: D.watch.x,       y: D.watch.y + 80,     zoom: 1.30, night: false },
+  { id: 'gate',         x: D.gate.x,        y: D.gate.y + 60,      zoom: 1.30, night: false },
+  { id: 'training',     x: D.training.x,    y: D.training.y,       zoom: 1.10, night: false },
+  { id: 'guild',        x: D.guild.x,       y: D.guild.y + 70,     zoom: 1.60, night: false },
+  { id: 'home',         x: loc('home').dx,  y: loc('home').dy,     zoom: 1.60, night: false },
+  { id: 'potion',       x: loc('potion').dx, y: loc('potion').dy,  zoom: 1.60, night: false },
+  { id: 'sanctuary',    x: D.sanctuary.x,   y: D.sanctuary.y + 55, zoom: 1.30, night: false },
+  { id: 'worldwide',    x: 1800,            y: 2400,               zoom: 0.16, night: false },
+];
+
+const want = (q.get('shots') || 'all');
+const list = want === 'all' ? SHOTS : SHOTS.filter((s) => want.split(',').includes(s.id));
+const paint = q.get('canvas') !== '0';
+
+// FNV-1a over the raw RGBA bytes. Cheap, and any single changed pixel moves it.
+function hashPixels(data) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < data.length; i++) {
+    h ^= data[i];
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+const out = document.getElementById('out');
+const results = {};
+window.__baseline = results;
+window.__progress = 'start';
+
+for (let pass = 0; pass < 2; pass++) {
+const measuring = pass === 1;
+for (const s of list) {
+  window.__progress = (measuring ? '' : 'warm:') + s.id;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = (W * SCALE) + 'px';
+  canvas.style.height = (H * SCALE) + 'px';
+  const g = canvas.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingEnabled = false;
+
+  scene.px = s.x;
+  scene.py = s.y + (H / s.zoom) * 0.12;
+  scene.t = 3.2;                 // fixed animation phase
+  scene.introHintT = 0;
+  scene.districtBannerT = 0;
+  scene.animTime = 1.0;
+  window.__townZoom = s.zoom;
+  window.__townNight = s.night;
+
+  // Chrome silently skips a drawImage whose texture isn't resident, so a shot
+  // is only trusted once three consecutive draws agree byte for byte.
+  let hash = null, stable = 0, draws = 0;
+  while (stable < 3 && draws < 24) {
+    reseed(0x9e3779b9);          // identical random stream every draw
+    g.clearRect(0, 0, W, H);
+    scene.draw(g, { width: W, height: H, shake: 0 });
+    const h = hashPixels(g.getImageData(0, 0, W, H).data);
+    stable = (h === hash) ? stable + 1 : 0;
+    hash = h;
+    draws++;
+    if (draws % 4 === 0) await new Promise((r) => setTimeout(r, 0));
+  }
+
+  if (!measuring) continue;
+  results[s.id] = { hash, draws, stable: stable >= 3 };
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl';
+  lbl.innerHTML = `<span class="${stable >= 3 ? 'ok' : 'bad'}">${s.id}</span> `
+    + `hash=${hash} draws=${draws} zoom=${s.zoom} night=${s.night ? 1 : 0} `
+    + `cam=(${Math.round(scene.camX)},${Math.round(scene.camY)})`;
+  out.appendChild(lbl);
+  if (paint) out.appendChild(canvas);
+}
+}
+
+window.__townNight = false;
+window.__ready = true;
+console.log('[baseline]', JSON.stringify(results));
+</script>
+</body>
+</html>
