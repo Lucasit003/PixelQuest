@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Ducklings</title>
+<style>
+  body { background:#0d0b10; color:#ddd; font:11px monospace; margin:0; padding:6px; }
+  canvas { image-rendering: pixelated; display:block; }
+</style>
+</head>
+<body>
+<script type="module">
+// Ducklings iteration harness. A single frame is a bad way to judge a brood —
+// it cannot show whether the line holds together, whether the catch-up cycle
+// fires when it should, or whether anyone drifts onto the bank. So this
+// renders a GRID of time samples of the same lake and reports, per sample,
+// where every bird is and which cycle it is playing.
+//
+//   ?cols=N &rows=N   grid shape
+//   &t0=..&dt=..      first sample and the gap between them, in seconds
+//   &zoom=N           on-screen pixel scale
+const { buildWaterMask, drawDucks } = await import('./src/gfx/waterfx.js?v=' + Date.now());
+
+const q = new URLSearchParams(location.search);
+const COLS = +(q.get('cols') || 3), ROWS = +(q.get('rows') || 3);
+const T0 = +(q.get('t0') || 4), DT = +(q.get('dt') || 3.5);
+const Z = +(q.get('zoom') || 1);
+
+// onload, not decode(): decode() needs a rasterisation pass and never settles
+// while this pane is backgrounded, which hangs the whole harness before it can
+// draw anything. Plain loading is unaffected.
+const loadImg = (src) => new Promise((res, rej) => {
+  const im = new Image();
+  im.onload = () => res(im);
+  im.onerror = () => rej(new Error('failed to load ' + src));
+  im.src = src;
+});
+
+let pond, duck, dkl, info;
+try {
+  [pond, duck, dkl] = await Promise.all([
+    loadImg('assets/pond.png'), loadImg('assets/duck.png'), loadImg('assets/fduckling.png'),
+  ]);
+  info = buildWaterMask(pond);
+} catch (e) {
+  window.__err = String(e);
+  document.body.textContent = 'ERROR: ' + e;
+  throw e;
+}
+
+const GW = 816, GH = 400;
+const c = document.createElement('canvas');
+c.width = GW * COLS * Z; c.height = GH * ROWS * Z;
+const g = c.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+// waterfx loads its own Image objects; give them a moment to be ready
+await new Promise((r) => setTimeout(r, 600));
+
+const cell = document.createElement('canvas');
+cell.width = GW; cell.height = GH;
+const cg = cell.getContext('2d');
+cg.imageSmoothingEnabled = false;
+
+for (let r = 0; r < ROWS; r++) {
+  for (let col = 0; col < COLS; col++) {
+    const t = T0 + (r * COLS + col) * DT;
+    cg.clearRect(0, 0, GW, GH);
+    cg.drawImage(pond, 0, 0, GW, GH);
+    drawDucks(cg, info, 0, 0, GW, GH, t);
+    cg.fillStyle = '#000'; cg.fillRect(0, 0, 42, 11);
+    cg.fillStyle = '#ffcc66'; cg.font = '9px monospace';
+    cg.fillText('t=' + t.toFixed(1), 2, 8);
+    g.drawImage(cell, 0, 0, GW, GH, col * GW * Z, r * GH * Z, GW * Z, GH * Z);
+  }
+}
+document.body.appendChild(c);
+
+// Report the geometry the picture cannot be trusted for: exact spacing, and
+// whether any bird is standing on water it should not be.
+const probe = [];
+{
+  const trace = [];
+  const orig = CanvasRenderingContext2D.prototype.drawImage;
+  CanvasRenderingContext2D.prototype.drawImage = function (img, ...a) {
+    // Match on src, not identity: waterfx owns its own Image objects, and the
+    // ones loaded up top in this harness are different objects entirely.
+    const src = (img && img.src) || '';
+    const kind = src.includes('fduckling.png') ? 'duckling'
+      : src.includes('duck.png') ? 'duck' : null;
+    if (kind && a.length === 8) {
+      // A left-facing bird is drawn at 0,0 under a mirroring transform, so its
+      // real position has to be read back off the matrix rather than the args.
+      const m = this.getTransform();
+      const flip = m.a < 0;
+      trace.push({ kind, flip, sy: a[1],
+                   x: flip ? m.e - a[6] : a[4] + m.e,
+                   y: (flip ? m.f : a[5] + m.f), dw: a[6], dh: a[7] });
+    }
+    return orig.call(this, img, ...a);
+  };
+  for (let k = 0; k < 6; k++) {
+    const t = T0 + k * DT;
+    trace.length = 0;
+    cg.clearRect(0, 0, GW, GH);
+    drawDucks(cg, info, 0, 0, GW, GH, t);
+    probe.push({ t, birds: trace.slice() });
+  }
+  CanvasRenderingContext2D.prototype.drawImage = orig;
+}
+window.__probe = probe;
+window.__ready = true;
+</script>
+</body>
+</html>

@@ -18,8 +18,9 @@ tools/_index/
 
 # Working screenshots from layout/art passes. Useful while iterating, but they
 # are full-resolution map captures running 0.2-3MB each — the harnesses that
-# produce them are committed, the output is not.
-dev/
+# produce them are committed, the output is not. Leading slash matters: an
+# unanchored `dev/` also swallowed src/dev/.
+/dev/
 
 # Large source art (keep the game-ready versions only)
 assets/*_source.png

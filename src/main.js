@@ -12,6 +12,8 @@ import { CombatScene } from './scenes/combat.js';
 import { HouseScene } from './scenes/house.js';
 import { PotionShopScene } from './scenes/potionshop.js';
 import { WeaponShopScene } from './scenes/weaponshop.js';
+import { LibraryScene } from './scenes/library.js';
+import { installDevConsole } from './dev/console.js';
 
 const canvas = document.getElementById('game');
 const BASE_W = canvas.width;   // 480
@@ -56,6 +58,7 @@ function goTown(hero, outcome) {
     toHouse: () => goHouse(hero),
     toPotionShop: () => goPotionShop(hero),
     toWeaponShop: () => goWeaponShop(hero),
+    toLibrary: () => goLibrary(hero),
   });
   game.transition(() => town);
   if (outcome) setTimeout(() => town.setOutcome && town.setOutcome(outcome), 400);
@@ -71,6 +74,10 @@ function goPotionShop(hero) {
 
 function goWeaponShop(hero) {
   game.transition(() => new WeaponShopScene(hero, () => goTown(hero)));
+}
+
+function goLibrary(hero) {
+  game.transition(() => new LibraryScene(hero, () => goTown(hero)));
 }
 
 function goTraining(hero) {
@@ -89,3 +96,7 @@ game.start(new TitleScene(startGame));
 
 // expose for debugging in the console
 window.__game = game;
+
+// Development console. Self-disables unless served from localhost or ?dev=1,
+// and reuses the scene routes above rather than duplicating them.
+installDevConsole(game, { town: goTown, dungeon: goDungeon, training: goTraining });

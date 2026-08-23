@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>PixelQuest — lakeside</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="480" height="270"></canvas>
+  </div>
+  <div id="rotate">Rotate your device or widen the window.</div>
+<script type="module">
+// A PLAYABLE boot straight to the lake — the real game loop, real input, real
+// TownScene, just skipping the title and the walk out from Crystal Plaza. This
+// is for looking at the water without playing through to it; index.html is
+// still the actual game.
+//
+//   ?px=..&py=..   stand somewhere else (world units)
+//   ?class=mage    pick a different hero class
+//   ?zoom=N        override the camera (1.6 is what the game uses)
+import { Game } from './src/core/loop.js';
+import { Input } from './src/core/input.js';
+import { Audio } from './src/core/audio.js';
+import { TouchControls } from './src/core/touch.js';
+import { TownScene } from './src/scenes/town.js';
+import { TrainingScene } from './src/scenes/training.js';
+import { CombatScene } from './src/scenes/combat.js';
+import { HouseScene } from './src/scenes/house.js';
+import { PotionShopScene } from './src/scenes/potionshop.js';
+import { WeaponShopScene } from './src/scenes/weaponshop.js';
+import { Hero } from './src/game/state.js';
+
+const q = new URLSearchParams(location.search);
+const canvas = document.getElementById('game');
+const BASE_W = canvas.width, BASE_H = canvas.height;
+
+// same integer-scale fit as main.js
+function resize() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const scale = Math.max(1, Math.floor(Math.min(vw / BASE_W, vh / BASE_H)));
+  const s = BASE_W * scale <= vw && BASE_H * scale <= vh
+    ? scale : Math.min(vw / BASE_W, vh / BASE_H);
+  canvas.style.width = Math.floor(BASE_W * s) + 'px';
+  canvas.style.height = Math.floor(BASE_H * s) + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+const game = new Game(canvas);
+Input.install(window);
+TouchControls.install();
+window.addEventListener('load', () => TouchControls.install());
+window.addEventListener('pointerdown', () => TouchControls.install(), { once: true });
+
+const unlock = () => { Audio.unlock(); window.removeEventListener('keydown', unlock); window.removeEventListener('pointerdown', unlock); };
+window.addEventListener('keydown', unlock);
+window.addEventListener('pointerdown', unlock);
+
+const hero = Hero.create(q.get('class') || 'warrior');
+
+function goTown(outcome) {
+  const town = new TownScene(hero, {
+    toTraining: () => game.transition(() => new TrainingScene(hero, () => goTown())),
+    toDungeon: () => game.transition(() => new CombatScene(hero, (r) => goTown(r))),
+    toHouse: () => game.transition(() => new HouseScene(hero, () => goTown())),
+    toPotionShop: () => game.transition(() => new PotionShopScene(hero, () => goTown())),
+    toWeaponShop: () => game.transition(() => new WeaponShopScene(hero, () => goTown())),
+  });
+  return town;
+}
+
+const town = goTown();
+game.start(town);
+
+// enter() puts the player at the plaza spawn, so move them afterwards. Read
+// off the scene's own collision rather than guessed: the water's south edge at
+// x=1300 is y=2482, and the camera holds the player 62% down the view, so
+// standing at 2500 is on the shore with the lake filling everything above.
+town.px = +(q.get('px') || 1300);
+town.py = +(q.get('py') || 2500);
+town.introHintT = 0;
+town.districtBannerT = 0;
+if (q.has('zoom')) window.__townZoom = +q.get('zoom');
+
+window.__game = game;
+window.__town = town;
+</script>
+</body>
+</html>

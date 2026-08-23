@@ -140,7 +140,7 @@ def index(sheet):
         print(f"  {b['i']:>3}  {b['w']}x{b['h']} at ({b['x']},{b['y']})")
 
 
-def matte(a, box, bg, keep_shadow=False, tol=26):
+def matte(a, box, bg, keep_shadow=False, tol=26, reach=False):
     """Crop `box` and turn the flat panel tone (plus its soft drop shadow) into
     real alpha. The shadow test asks whether a pixel is the background colour
     simply scaled darker — true for a cast shadow, false for coloured art."""
@@ -151,8 +151,42 @@ def matte(a, box, bg, keep_shadow=False, tol=26):
     sub = a[y0:y1, x0:x1].astype(float)
     bg = np.asarray(bg, dtype=float)
 
+    # Straight colour test, applied everywhere. Connectivity was tried here and
+    # is wrong for this art: the page shows THROUGH the gaps in a fence, and
+    # those gaps are enclosed by the sprite, so a flood from the border leaves
+    # them as solid white bands. Measured, the page and the wood are 133 apart
+    # while the page and its own JPEG rim are 3-19 apart, so one threshold
+    # separates them — the rim that a global test used to bite off the art is
+    # now handled properly by the de-fringe pass below instead.
     dist = np.abs(sub - bg).max(axis=2)
-    is_bg = dist <= tol
+    near_bg = dist <= tol
+    if reach:
+        # Reachability mode, for art whose own colour IS the page: the well's
+        # masonry is the same grey as the paper it was drawn on, so no threshold
+        # can separate them. What separates them is that the page runs out to
+        # the crop border and the masonry is walled in by the well's own outline.
+        # Only correct where the page does NOT show through the sprite — use the
+        # plain test for anything with real gaps in it, like a fence, or the page
+        # trapped inside those gaps survives as solid bands.
+        seed = np.zeros(near_bg.shape, dtype=bool)
+        seed[0, :] = seed[-1, :] = True
+        seed[:, 0] = seed[:, -1] = True
+        is_bg = ndimage.binary_propagation(seed & near_bg, mask=near_bg)
+        # Reachability keeps everything walled in — including page that the art
+        # has trapped, like the gap under a bucket's handle. Such a pocket is
+        # FLAT page colour; the masonry this mode exists to rescue is textured
+        # with mortar lines. Flatness is what tells them apart, so drop enclosed
+        # pockets that are both very close to the page and almost variance-free.
+        trapped = near_bg & ~is_bg
+        tl, tn = ndimage.label(trapped)
+        for i in range(1, tn + 1):
+            m = tl == i
+            if m.sum() < 8:
+                continue
+            if np.percentile(dist[m], 90) <= 10 and sub[m].std(axis=0).max() < 6:
+                is_bg |= m
+    else:
+        is_bg = near_bg
 
     # A cast shadow is just the panel colour scaled darker, so ask how well the
     # pixel is explained by bg * k: shadows leave almost no colour behind, art
@@ -161,7 +195,13 @@ def matte(a, box, bg, keep_shadow=False, tol=26):
     # saturated to pass, so it walls the flood off at the silhouette.
     k = (sub @ bg) / float(bg @ bg)
     resid = np.abs(sub - k[..., None] * bg).max(axis=2)
-    shadowish = (~is_bg) & (resid <= 10) & (k > 0.45) & (k < 0.985)
+    # Reachability mode is chosen precisely for art whose own colour matches the
+    # page, and on such art the shadow test cannot work: grey masonry on a grey
+    # page IS the page scaled darker by every measure this test has, so it
+    # strips the stonework as if it were a cast shadow. These sheets show no
+    # baked drop shadow anyway, so in that mode the test is switched off.
+    shadowish = np.zeros(is_bg.shape, dtype=bool) if reach else (
+        (~is_bg) & (resid <= 10) & (k > 0.45) & (k < 0.985))
     is_shadow = shadowish & ndimage.binary_propagation(is_bg, mask=is_bg | shadowish)
 
     rgba = np.zeros(sub.shape[:2] + (4,), dtype=np.uint8)
@@ -180,6 +220,50 @@ def matte(a, box, bg, keep_shadow=False, tol=26):
     else:
         rgba[is_shadow] = (0, 0, 0, 0)
 
+    # Close pinholes. Shading inside a sprite can match the paper closely enough
+    # to be matted away — a mushroom's shaded underside, a fold in a shirt —
+    # leaving transparent specks in the middle of solid art. Anything FULLY
+    # enclosed by opaque pixels is such a mistake, since none of this art has a
+    # real interior window; a fence's gaps stay open because they connect to the
+    # outside and so are never counted as holes.
+    solid = rgba[..., 3] > 40
+    holes = ndimage.binary_fill_holes(solid) & ~solid
+    # Size-limit it. A pinhole is a handful of pixels; the gap between two fence
+    # rails, or the space framed by a clothes line and its two posts, is also
+    # "enclosed" and filling those paints the sheet's own paper back in as a
+    # solid band. Only specks are mistakes.
+    if holes.any():
+        hl, hn = ndimage.label(holes)
+        if hn:
+            big = [i + 1 for i, sz in enumerate(ndimage.sum(holes, hl, range(1, hn + 1))) if sz > 14]
+            holes &= ~np.isin(hl, big)
+    if holes.any():
+        rgba[..., :3][holes] = np.clip(sub, 0, 255).astype(np.uint8)[holes]
+        rgba[..., 3][holes] = 255
+
+    # De-fringe. JPEG blurs each sprite's outline into the paper, leaving a rim
+    # of intermediate pixels the flood fill cannot reach — invisible on grass,
+    # glaring against anything pale. A rim pixel is ringing if it sits markedly
+    # CLOSER to the paper colour than the art immediately behind it does; that
+    # comparison is what protects genuinely pale art, because a white shirt's
+    # rim and its interior are equally white and the test comes out flat.
+    for _ in range(0 if reach else 2):
+        al = rgba[..., 3] > 40
+        if not al.any():
+            break
+        rim = al & ~ndimage.binary_erosion(al, np.ones((3, 3)))
+        dist = np.abs(rgba[..., :3].astype(float) - bg).max(axis=2)
+        inner = (al & ~rim).astype(float)
+        dsum = ndimage.uniform_filter(np.where(al & ~rim, dist, 0.0), 3)
+        dcnt = ndimage.uniform_filter(inner, 3)
+        # Where a pixel has NO opaque interior behind it the sprite is only a
+        # few pixels thick there — a shirt on a line, a mushroom stem — and the
+        # comparison has nothing to say. Default that case to keep. Defaulting
+        # it to remove (a large sentinel) strips exactly the thin pale art the
+        # test was supposed to protect, which is what shredded the clothes line.
+        behind = np.where(dcnt > 1e-6, dsum / np.maximum(dcnt, 1e-6), 0.0)
+        rgba[rim & (dist + 10 < behind)] = 0
+
     img = Image.fromarray(rgba, "RGBA")
     # Drop JPEG-ringing specks, and anything touching the crop border — that is
     # always a neighbouring panel's gridline caught by the padding, never part
@@ -191,8 +275,18 @@ def matte(a, box, bg, keep_shadow=False, tol=26):
              | set(lab[:, 0].tolist()) | set(lab[:, -1].tolist())
         sizes = ndimage.sum(al, lab, range(1, n + 1))
         main = int(np.argmax(sizes)) + 1   # the sprite itself, border-touching or not
+        # Also drop hairline fragments: a surviving scrap of the sheet's own cell
+        # gridline lands inside the padded crop without touching its border, so
+        # the border test misses it. Nothing in this art is a two-pixel-tall
+        # isolated rule, so thinness identifies them exactly.
+        boxes = ndimage.find_objects(lab)
+        def hairline(i):
+            sl = boxes[i]
+            h, w = sl[0].stop - sl[0].start, sl[1].stop - sl[1].start
+            return min(h, w) <= 3 and max(h, w) >= 10
         keep = [main] + [i + 1 for i, s in enumerate(sizes)
-                         if i + 1 != main and s >= 10 and (i + 1) not in edge]
+                         if i + 1 != main and s >= 10 and (i + 1) not in edge
+                         and not hairline(i)]
         arr = np.asarray(img).copy()
         arr[~np.isin(lab, keep)] = 0
         img = Image.fromarray(arr, "RGBA")
@@ -210,14 +304,23 @@ def cut(sheet, specs):
     a = load(sheet)
     blobs = json.load(open(os.path.join(WORK, f"blobs_{sheet}.json")))
     bg = sheet_bg(a, sheet)
-    tol = CUT_TOL.get(sheet, 20)
     os.makedirs(OUT, exist_ok=True)
     for spec in specs:
         idx, name = spec.split(":", 1)
         keep_shadow = name.endswith("!")
         name = name.rstrip("!")
+        # name~N overrides the sheet tolerance for one sprite. The fence sheet's
+        # background is nearly white, so its default has to run tight or pale art
+        # dissolves — but that same tightness leaves a bright halo on the few
+        # sprites whose own edges are light. Per-sprite is the right grain here.
+        tol = CUT_TOL.get(sheet, 20)
+        reach = name.endswith("^")     # flood from the border instead of keying
+        name = name.rstrip("^")
+        if "~" in name:
+            name, t = name.split("~", 1)
+            tol = int(t)
         b = blobs[int(idx)]
-        img = matte(a, (b["x"], b["y"], b["w"], b["h"]), bg, keep_shadow, tol)
+        img = matte(a, (b["x"], b["y"], b["w"], b["h"]), bg, keep_shadow, tol, reach)
         img.save(os.path.join(OUT, name + ".png"))
         print(f"  {name}.png  {img.width}x{img.height}")
 

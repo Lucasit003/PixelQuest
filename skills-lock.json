@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "game-development": {
+      "source": "miles990/claude-software-skills",
+      "sourceType": "github",
+      "skillPath": "domain-applications/game-development/SKILL.md",
+      "computedHash": "1508f3010c65c7ca9e5354b36ad0f593f8ff556900ec27552f514ea55d1e263c"
+    }
+  }
+}

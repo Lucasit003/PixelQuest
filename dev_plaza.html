@@ -22,6 +22,8 @@
 //   &hud=0                       hide the HUD panel
 //   &hero=0                      hide the player sprite
 //   &guide=1                     overlay plaza radius + road corridors
+//   &only=nw|ne|sw|yard|belt|plaza|lamps|mid|micro   build ONE composition
+//   &stage=bare|macro|mid|final  how much detail to lay on
 const q = new URLSearchParams(location.search);
 const bust = '?v=' + Date.now();
 const { TownScene } = await import('./src/scenes/town.js' + bust);
@@ -39,10 +41,14 @@ const PRESETS = {
 const P = PRESETS[shot] || PRESETS.play;
 const zoom = +(q.get('zoom') || P.zoom);
 
+// w/h override the render size for whole-map shots — the game canvas is only
+// 480x270, far too small to read the road network on. The scene takes its
+// dimensions from the game object, so a bigger one just renders more world.
+const OUT_W = +(q.get('w') || BASE_W), OUT_H = +(q.get('h') || BASE_H);
 const canvas = document.createElement('canvas');
-canvas.width = BASE_W; canvas.height = BASE_H;
-canvas.style.width = (BASE_W * scale) + 'px';
-canvas.style.height = (BASE_H * scale) + 'px';
+canvas.width = OUT_W; canvas.height = OUT_H;
+canvas.style.width = (OUT_W * scale) + 'px';
+canvas.style.height = (OUT_H * scale) + 'px';
 const g = canvas.getContext('2d');
 g.imageSmoothingEnabled = false;
 
@@ -51,12 +57,22 @@ lbl.className = 'lbl';
 document.getElementById('out').appendChild(lbl);
 document.getElementById('out').appendChild(canvas);
 
+// Piece-by-piece review. `only=` builds a single composition and nothing
+// else; `stage=` sets how much detail is laid on. Both must be set BEFORE the
+// scene is constructed, because the layout is built in the constructor.
+//   ?only=yard   ?only=nw   ?only=nw,ne   ?stage=macro
+if (q.get('only')) {
+  const v = q.get('only').split(',').map((t) => t.trim()).filter(Boolean);
+  window.__plazaOnly = v.length > 1 ? v : v[0];
+}
+if (q.get('stage')) window.__plazaStage = q.get('stage');
+
 const hero = Hero.create('warrior');
 const scene = new TownScene(hero, {});
-scene.enter({ width: BASE_W, height: BASE_H });
+scene.enter({ width: OUT_W, height: OUT_H });
 
 const PZ = scene.plazaCenter, FC = scene.plazaFocus, R = scene.plazaRadius;
-const visW = BASE_W / zoom, visH = BASE_H / zoom;
+const visW = OUT_W / zoom, visH = OUT_H / zoom;
 
 // The scene derives its camera from the player, so "centre the camera on X"
 // is expressed by solving that relation for the player position.
@@ -84,7 +100,11 @@ const T = +(q.get('t') || 3.2);
 scene.t = T;
 scene.introHintT = 0;       // no control hint over the shot
 scene.districtBannerT = 0;  // no district banner over the shot
-scene.draw(g, { width: BASE_W, height: BASE_H, shake: 0 });
+// debug=1 turns on the scene's own development overlay: district tags and
+// the road centrelines, which is what makes a whole-map render readable.
+if (q.get('debug') === '1') window.__townDebug = true;
+scene.draw(g, { width: OUT_W, height: OUT_H, shake: 0 });
+window.__townDebug = false;
 
 // Placement guides: the plaza circle, the road corridors it must keep clear,
 // and a world-unit ruler — so prop coordinates can be read straight off the
