@@ -148,6 +148,23 @@ for (const s of list) {
 }
 
 window.__townNight = false;
+// World-data fingerprint. Rendering equivalence is necessary but not
+// sufficient — a refactor could preserve every pixel in these 19 frames while
+// quietly dropping a collision rect or an interactable. These counts are cheap
+// and catch that.
+window.__fingerprint = {
+  props: scene.decor.length,
+  groundProps: scene.groundDecor.length,
+  solids: scene.solids.length,
+  roads: scene.roads.length,
+  roadCov: scene.roadCov ? scene.roadCov.size : 0,
+  locations: scene.locations.length,
+  districts: Object.keys(scene.districts).length,
+  trees: scene.trees ? scene.trees.length : 0,
+  lamps: scene.lamps ? scene.lamps.length : 0,
+  actions: scene.locations.filter((l) => l.action).map((l) => l.id + ':' + l.action).join(' '),
+};
+console.log('[fingerprint]', JSON.stringify(window.__fingerprint));
 window.__ready = true;
 console.log('[baseline]', JSON.stringify(results));
 </script>
