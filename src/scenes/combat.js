@@ -18,6 +18,11 @@ import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
 import {
   ENEMIES, BOSS, WEAPONS, ABILITIES, RARITY, PETS,
 } from '../game/data.js';
+import {
+  meleeBaseDamage, meleeKnockback, finalHitDamage, abilityBaseDamage,
+  enemyDamageAfterDefense, playerDamageAfterDefense, absorbWithShield,
+  bossPhaseIndex, CHAIN_FALLOFF,
+} from '../game/combatMath.js';
 
 // Arena depth band (the "floor" the actors walk on).
 const DEPTH_MIN = 150;
@@ -407,9 +412,9 @@ export class CombatScene {
     const cls = this.hero.cls();
     const heavy = p.state === 'heavy';
     const reach = cls.reach + (heavy ? 10 : 0);
-    let dmg = heavy ? this.hero.attack * 1.7 : this.hero.attack * (0.7 + p.comboStep * 0.18);
-    const w = this.hero.weapon();
-    if (p.buffs.rage) dmg *= p.buffs.rage.mult;
+    const dmg = meleeBaseDamage(this.hero.attack, {
+      heavy, comboStep: p.comboStep, rageMult: p.buffs.rage ? p.buffs.rage.mult : 1,
+    });
 
     for (const e of this.enemies) {
       if (e.hp <= 0 || p.hitList.has(e)) continue;
@@ -421,8 +426,8 @@ export class CombatScene {
 
       p.hitList.add(e);
       const crit = Math.random() < this.hero.crit;
-      const finalDmg = Math.round(dmg * (crit ? 1.8 : 1) * rand(0.9, 1.1));
-      const kb = (heavy ? 150 : 60 + p.comboStep * 12);
+      const finalDmg = finalHitDamage(dmg, { crit, variance: rand(0.9, 1.1) });
+      const kb = meleeKnockback({ heavy, comboStep: p.comboStep });
       this._damageEnemy(e, finalDmg, p.facing, kb, {
         crit, launch: heavy, air: e.z > 0 || heavy,
       });
@@ -460,8 +465,7 @@ export class CombatScene {
 
   _castProjectile(ab, power) {
     const p = this.p;
-    let dmg = ab.dmg + power * 0.6;
-    if (ab.element === 'fire') dmg *= 1 + this.hero.petBonus('fireDmg');
+    const dmg = abilityBaseDamage(ab, power, { fireBonus: this.hero.petBonus('fireDmg') });
     this.projectiles.push({
       x: p.x + p.facing * 12, depth: p.depth, z: 14,
       vx: p.facing * ab.speed, life: ab.range / ab.speed,
@@ -474,7 +478,7 @@ export class CombatScene {
 
   _castAoe(ab, power) {
     const p = this.p;
-    let dmg = ab.dmg + power * 0.5;
+    const dmg = abilityBaseDamage(ab, power);
     this.particles.ring(p.x, p.depth, ab.element === 'ice' ? '#9fd0ff' : '#ffd76a', ab.range);
     this.particles.magicBurst(p.x, p.depth - 8, ab.element === 'ice' ? '#9fd0ff' : '#ffa040', 18);
     this.game.addShake(4); this.hitStop = 0.06;
@@ -491,7 +495,7 @@ export class CombatScene {
 
   _castMeleeAbility(ab, power) {
     const p = this.p;
-    const dmg = ab.dmg + power * 0.7;
+    const dmg = abilityBaseDamage(ab, power);
     this.game.addShake(3);
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
@@ -506,7 +510,7 @@ export class CombatScene {
 
   _castChain(ab, power) {
     const p = this.p;
-    let dmg = ab.dmg + power * 0.5;
+    let dmg = abilityBaseDamage(ab, power);
     // find nearest, then chain to nearest others
     const targets = this.enemies.filter((e) => e.hp > 0)
       .sort((a, b) => Math.hypot(a.x - p.x, a.depth - p.depth) - Math.hypot(b.x - p.x, b.depth - p.depth))
@@ -518,7 +522,7 @@ export class CombatScene {
       this._lightning = this._lightning || [];
       this._lightning.push({ x1: prev.x, y1: prev.depth, x2: e.x, y2: e.depth - 12, t: 0 });
       prev = { x: e.x, depth: e.depth - 12 };
-      dmg *= 0.8;
+      dmg *= CHAIN_FALLOFF;
     }
     this.game.addShake(3);
   }
@@ -541,7 +545,7 @@ export class CombatScene {
   }
 
   _damageEnemy(e, dmg, dir, kb, opts = {}) {
-    const reduced = Math.max(1, dmg - (e.def.defense || 0));
+    const reduced = enemyDamageAfterDefense(dmg, e.def.defense);
     e.hp -= reduced;
     e.flash = 1; e.hurtTimer = 0.2; e.state = 'hurt'; e.animTime = 0;
     e.knockVx = dir * kb;
@@ -710,8 +714,7 @@ export class CombatScene {
     const frac = b.hp / b.maxHp;
 
     // phase transitions
-    let idx = 0;
-    for (let i = 0; i < def.phases.length; i++) if (frac <= def.phases[i].at) idx = i;
+    const idx = bossPhaseIndex(def.phases, frac);
     b.phaseIdx = idx;
     const phase = def.phases[idx];
     if (b.phaseAnnounced !== idx) {
@@ -775,15 +778,15 @@ export class CombatScene {
     if (p.invuln > 0) return;
     // shield absorbs first
     if (p.buffs.shield && p.shieldHp > 0) {
-      const absorbed = Math.min(p.shieldHp, amount);
-      p.shieldHp -= absorbed; amount -= absorbed;
+      const { shieldLeft, remaining } = absorbWithShield(p.shieldHp, amount);
+      p.shieldHp = shieldLeft; amount = remaining;
       this.particles.ring(p.x, p.depth, '#9d8bff', 16);
       if (p.shieldHp <= 0) delete p.buffs.shield;
       if (amount <= 0) return;
     }
-    let dmg = Math.max(1, amount - this.hero.defense * 0.5);
-    if (p.buffs.defense) dmg *= 0.5;
-    dmg = Math.round(dmg);
+    const dmg = playerDamageAfterDefense(amount, this.hero.defense, {
+      defenseBuff: !!p.buffs.defense,
+    });
     p.hp -= dmg;
     p.flash = 1; p.invuln = 0.6; p.state = 'hurt'; p.animTime = 0; p.attackTimer = 0;
     p.knockVx = dir * 40; p.x += dir * 6;

@@ -1,0 +1,11 @@
+{
+  "name": "pixelquest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Educational pixel-art action RPG. No build step — the browser loads src/main.js directly. This manifest exists only so the tests have a runner.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "test:watch": "node --test --watch tests/"
+  }
+}
