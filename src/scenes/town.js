@@ -19,7 +19,7 @@ import { clamp, lerp } from '../gfx/pixel.js';
 import { drawCharacter, drawActor, drawPet } from '../gfx/actors.js';
 import { Particles } from '../gfx/particles.js';
 import { InventoryMenu } from './menus.js';
-import { hash, contactShadow, drawPropArt } from './town/primitives.js';
+import { hash, contactShadow, drawPropArt, propVisible } from './town/primitives.js';
 import { DECOR_ART, drawButterfly, crystalGlow, lamp, brazier, bigTree } from './town/props.js';
 import { MAP_W, MAP_H, ZOOM } from './town/dimensions.js';
 import { buildTown } from './town/layout.js';
@@ -191,8 +191,18 @@ export class TownScene {
     const ents = [];
     for (const loc of this.locations) ents.push({ y: loc.sortY != null ? loc.sortY : (loc.solid ? loc.solid.y + loc.solid.h : loc.dy), draw: (gg) => this._drawLocation(gg, loc) });
     for (const tr of this.trees) ents.push({ y: tr.y, draw: (gg) => bigTree(gg, tr.x, tr.y, tr.kind === 'pine' ? 'pine' : 'oak', this.t) });
-    for (const d of this.decor) ents.push({ y: d.sortY, draw: (gg) => drawPropArt(gg, DECOR_ART[d.name], d.x, d.y, d.w, d.h, d.shadow, d.flip) });
-    for (const n of this.npcs) ents.push({ y: n.y, draw: (gg) => { contactShadow(gg, n.x, n.y, 6, 2); drawActor(gg, { x: n.x, y: n.y, facing: n.facing, sprite: n.sprite, weapon: n.sprite === 'warrior' ? 'sword' : (n.sprite === 'mage' ? 'staff' : 'none'), state: 'idle', animTime: this.t + n.x }); } });
+    // Reject offscreen props before they become entities. This is the same
+    // propVisible test drawPropArt already runs, given the same g and the same
+    // camera transform — nothing between here and the draw loop touches the
+    // transform — so it can only drop entities that would have rasterised
+    // nothing. What it saves beyond the draw-call cull is the ~2.2k closure
+    // allocations and sorting a list ~20x longer than the visible scene.
+    for (const d of this.decor) if (propVisible(g, d.x, d.y, d.w, d.h, d.shadow)) ents.push({ y: d.sortY, draw: (gg) => drawPropArt(gg, DECOR_ART[d.name], d.x, d.y, d.w, d.h, d.shadow, d.flip) });
+    // drawCharacter, not drawActor: it routes an npc whose sprite id is
+    // registered in gfx/spriteCatalog.js to its sheet, and falls straight back
+    // to the procedural renderer for every id that is not. villager and sage
+    // are unregistered, so they draw exactly as they did before.
+    for (const n of this.npcs) ents.push({ y: n.y, draw: (gg) => { contactShadow(gg, n.x, n.y, 6, 2); drawCharacter(gg, { x: n.x, y: n.y, facing: n.facing, sprite: n.sprite, weapon: n.sprite === 'warrior' ? 'sword' : (n.sprite === 'mage' ? 'staff' : 'none'), state: 'idle', animTime: this.t + n.x }); } });
     for (const p of this.sanctuaryPets) ents.push({ y: p.y, draw: (gg) => drawPet(gg, p, p.x, p.y, this.t) });
     ents.push({ y: this.py, draw: (gg) => this._drawPlayer(gg) });
     ents.sort((a, b) => a.y - b.y);

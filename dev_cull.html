@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Entity-list cull check</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre}</style>
+</head>
+<body><div id="out">running…</div>
+<script type="module">
+// Entity-level cull verification + workload measurement.
+//
+// Two questions, and they need different rigs:
+//   1. Does culling change a single pixel?  -> hash the framebuffer with the
+//      cull on and off and compare. Everything non-deterministic must be pinned
+//      first, or the comparison is meaningless.
+//   2. What does it save?  -> count entity-list length and sort comparisons.
+//      Wall-clock on this machine has a ~20% noise floor, so counts are the
+//      trustworthy signal and timing is reported only as corroboration.
+
+// ---- pin every source of drift --------------------------------------------
+let __seed = 0x9e3779b9;
+const reseed = (s) => { __seed = s >>> 0; };
+Math.random = function () {
+  __seed |= 0; __seed = (__seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(__seed ^ (__seed >>> 15), 1 | __seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const realNow = performance.now.bind(performance);
+performance.now = () => 1234.5;   // pins wind phase, HUD blink, sway
+
+// Chrome caches ES modules per URL, and only the two entry modules below carry
+// a cache-buster — everything they import transitively is served from cache.
+// A stale ancientcity.js silently invalidated an entire verification round
+// here (every camera still reported the pre-fix result), so force-revalidate
+// the whole tree first, walking python http.server's directory index.
+async function purge(dir) {
+  const html = await (await fetch(dir + '?v=' + Date.now(), { cache: 'reload' })).text();
+  const names = [...html.matchAll(/href="([^"?]+)"/g)].map((m) => decodeURIComponent(m[1]));
+  await Promise.all(names.map((n) => {
+    if (n.startsWith('/') || n.startsWith('.')) return null;
+    if (n.endsWith('/')) return purge(dir + n);
+    return n.endsWith('.js') ? fetch(dir + n, { cache: 'reload' }) : null;
+  }));
+}
+await purge('./src/');
+const bust = '?v=' + Date.now();
+const { TownScene } = await import('./src/scenes/town.js' + bust);
+const { Hero } = await import('./src/game/state.js' + bust);
+
+const W = 480, H = 270;
+const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+const g = cv.getContext('2d', { willReadFrequently: true });
+
+const hero = Hero.create('warrior');
+const scene = new TownScene(hero, {});
+scene.enter({ width: W, height: H });
+await new Promise((r) => setTimeout(r, 2200));   // let prop Images decode
+
+// ---- sort instrumentation --------------------------------------------------
+// Wrap Array.prototype.sort so a draw reports the length of every array it
+// sorts and how many comparisons that cost. The entity list is identifiable as
+// the sort whose comparator is (a,b)=>a.y-b.y over the largest array.
+let sortLog = [];
+const realSort = Array.prototype.sort;
+Array.prototype.sort = function (cmp) {
+  if (typeof cmp === 'function' && sortLog) {
+    let n = 0;
+    const wrapped = (a, b) => { n++; return cmp(a, b); };
+    const len = this.length;
+    const r = realSort.call(this, wrapped);
+    sortLog.push({ len, cmps: n });
+    return r;
+  }
+  return realSort.call(this, cmp);
+};
+
+// ---- draw-call instrumentation --------------------------------------------
+let drawCalls = 0;
+for (const m of ['drawImage', 'fill', 'stroke', 'fillRect', 'ellipse']) {
+  const real = CanvasRenderingContext2D.prototype[m];
+  CanvasRenderingContext2D.prototype[m] = function (...a) { drawCalls++; return real.apply(this, a); };
+}
+
+const D = scene.districts, FC = scene.plazaFocus, PZ = scene.plazaCenter;
+const loc = (id) => scene.locations.find((l) => l.id === id);
+const SHOTS = [
+  ['plaza',       PZ.x,               PZ.y + 60,              1.60, false],
+  ['plaza_wide',  FC.x,               FC.y,                   0.55, false],
+  ['eldertree',   loc('eldertree').dx, loc('eldertree').dy,   1.10, false],
+  ['lake',        D.lake.x,           D.lake.y + 40,          1.10, false],
+  ['market',      D.market.x,         D.market.y + 40,        1.10, false],
+  ['residential', D.residential.x,    D.residential.y + 40,   1.10, false],
+  ['watch',       loc('watch') ? loc('watch').dx : D.market.x, loc('watch') ? loc('watch').dy : D.market.y, 1.10, false],
+  ['mapEdgeTL',   40,                 40,                     1.10, false],
+  ['mapEdgeBR',   9999,               9999,                   1.10, false],
+  ['zoom_wide',   FC.x,               FC.y,                   0.35, false],
+  ['zoom_close',  PZ.x,               PZ.y,                   3.00, false],
+  ['night_plaza', PZ.x,               PZ.y + 60,              1.60, true ],
+  ['night_glade', loc('eldertree').dx, loc('eldertree').dy,   1.10, true ],
+];
+
+function draw(shot, noCull) {
+  const [id, x, y, zoom, night] = shot;
+  reseed(0x1234);
+  window.__noCull = noCull;
+  window.__townZoom = zoom;
+  window.__townNight = night;
+  scene.px = x; scene.py = y; scene.t = 7.5;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, W, H);
+  sortLog = []; drawCalls = 0;
+  scene.draw(g);
+  return { sortLog, drawCalls };
+}
+
+function hash(px) {                       // FNV-1a over the framebuffer
+  let h = 0x811c9dc5;
+  for (let i = 0; i < px.length; i++) { h ^= px[i]; h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+const grab = () => hash(g.getImageData(0, 0, W, H).data);
+
+const out = [];
+const say = (s) => { out.push(s); document.getElementById('out').textContent = out.join('\n'); };
+
+// Cold textures make the FIRST no-cull draw of a never-seen prop unstable, so
+// warm every camera in both modes and throw the result away before measuring.
+for (const s of SHOTS) { draw(s, true); draw(s, false); }
+
+say('camera            ents(no-cull)  ents(cull)   sort cmps    draws        pixels');
+say('─'.repeat(88));
+let totNo = 0, totCu = 0, totCNo = 0, totCCu = 0;
+for (const s of SHOTS) {
+  // Classify every mismatch. Chrome drops a drawImage whose decoded texture is
+  // not resident, and the NO-CULL path is the one that touches ~2.2k sprites at
+  // once, so it can disagree with ITSELF on prop-dense wide shots. Redrawing the
+  // same mode twice separates "culling changed the image" from "this camera is
+  // not reproducible even without culling" — without it a flake reads as a bug.
+  draw(s, true);  const s1 = grab();
+  draw(s, true);  const s2 = grab();
+  const stable = s1 === s2;
+  const A = draw(s, true),  hA = grab();
+  const B = draw(s, false), hB = grab();
+  const big = (l) => l.reduce((m, e) => e.len > m.len ? e : m, { len: 0, cmps: 0 });
+  const eA = big(A.sortLog), eB = big(B.sortLog);
+  totNo += eA.len; totCu += eB.len; totCNo += eA.cmps; totCCu += eB.cmps;
+  const pct = eA.len ? (100 * (1 - eB.len / eA.len)).toFixed(1) : '0';
+  say(`${s[0].padEnd(16)} ${String(eA.len).padStart(6)} -> ${String(eB.len).padStart(5)} (${pct.padStart(5)}%)  ` +
+      `${String(eA.cmps).padStart(5)}->${String(eB.cmps).padStart(5)}  ` +
+      `${String(A.drawCalls).padStart(5)}->${String(B.drawCalls).padStart(5)}  ` +
+      (hA === hB ? 'IDENTICAL' : (stable ? `DIFFER ${hA}/${hB}` : 'no-cull UNREPRODUCIBLE')));
+}
+say('─'.repeat(88));
+say(`TOTAL ents ${totNo} -> ${totCu}  (${(100*(1-totCu/totNo)).toFixed(1)}% fewer)`);
+say(`TOTAL sort comparisons ${totCNo} -> ${totCCu}  (${(100*(1-totCCu/totCNo)).toFixed(1)}% fewer)`);
+
+// ---- continuous sweep: where pop-in would show ----------------------------
+say('');
+let bad = 0, n = 0, minE = 1e9, maxE = 0;
+for (let i = 0; i < 62; i++) {
+  const shot = ['sweep', 120 + i * 62, 140 + Math.sin(i * 0.4) * 420 + i * 24, 1.1, i % 7 === 0];
+  const A = draw(shot, true),  hA = grab();
+  const B = draw(shot, false), hB = grab();
+  const big = (l) => l.reduce((m, e) => e.len > m.len ? e : m, { len: 0 });
+  minE = Math.min(minE, big(B.sortLog).len); maxE = Math.max(maxE, big(B.sortLog).len);
+  n++; if (hA !== hB) bad++;
+}
+say(`sweep: ${n} camera positions, ${bad} differing  (culled ents ranged ${minE}-${maxE})`);
+
+// ---- timing, reported with its noise floor --------------------------------
+performance.now = realNow;
+say('');
+say('camera            ms no-cull   ms cull    delta');
+for (const s of SHOTS.slice(0, 7)) {
+  const time = (noCull) => {
+    for (let i = 0; i < 10; i++) draw(s, noCull);
+    const t0 = realNow(); for (let i = 0; i < 40; i++) draw(s, noCull);
+    return (realNow() - t0) / 40;
+  };
+  const a = time(true), b = time(false);
+  say(`${s[0].padEnd(16)} ${a.toFixed(2).padStart(8)} ${b.toFixed(2).padStart(10)}   ${(100*(1-b/a)).toFixed(1)}% faster`);
+}
+say('');
+say('DONE');
+window.__cullReport = out.join('\n');
+</script></body></html>
