@@ -174,6 +174,12 @@ export class Hero {
   }
 
   // Returns array of ability ids unlocked by current mastery that weren't before.
+  //
+  // Learning makes an ability KNOWN. It does not equip it — that choice is made
+  // at the Eldertree, and it is the whole reason the tree is a place you walk to.
+  // This used to auto-slot into the first empty slot, which was harmless while a
+  // class had exactly four abilities for exactly four slots, but it means the
+  // player never chooses. With more abilities than slots, choosing is the build.
   checkUnlocks() {
     const found = [];
     for (const [id, ab] of Object.entries(ABILITIES)) {
@@ -183,12 +189,14 @@ export class Hero {
       if (m >= ab.gate.mastery) {
         this.s.unlocked.push(id);
         found.push(id);
-        // auto-slot into first empty ability slot
-        const slot = this.s.equippedAbilities.indexOf(null);
-        if (slot >= 0) this.s.equippedAbilities[slot] = id;
       }
     }
     return found;
+  }
+
+  /** Known abilities that are not currently in a slot — what the tree offers. */
+  unequippedAbilityDefs() {
+    return this.unlockedAbilityDefs().filter((ab) => !this.s.equippedAbilities.includes(ab.id));
   }
 
   // --- progression --------------------------------------------------------

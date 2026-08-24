@@ -166,12 +166,39 @@ test('ability names are unique so the UI cannot show two the same', () => {
   assert.equal(new Set(names).size, names.length, 'two abilities share a name');
 });
 
-test('every class has a full four-ability kit that fits its slots', () => {
+test('every class has more abilities than slots, so equipping is a choice', () => {
+  // The four slots are deliberately fewer than the kit. When they matched, the
+  // player never chose anything and the Eldertree had nothing to offer.
+  const SLOTS = 4;
   for (const id of Object.keys(CLASSES)) {
     const kit = abilitiesForClass(id);
-    assert.equal(kit.length, 4, `class ${id} has ${kit.length} abilities, not 4`);
+    assert.ok(kit.length > SLOTS, `class ${id} has ${kit.length} abilities, needs more than ${SLOTS}`);
     const starters = kit.filter((a) => a.gate.mastery === 0);
     assert.equal(starters.length, 1, `class ${id} has ${starters.length} free starter abilities`);
+  }
+});
+
+test('every class kit is the same size, so no class is short-changed', () => {
+  const sizes = Object.keys(CLASSES).map((id) => abilitiesForClass(id).length);
+  assert.equal(new Set(sizes).size, 1, `kit sizes differ: ${sizes.join(', ')}`);
+});
+
+test('a gate is never set above the mastery its question bank can produce', () => {
+  // A question retires after two correct answers, so a subject's reachable
+  // mastery is bounded by its bank. A gate above that ceiling is unreachable
+  // content — the ability would be authored and never obtainable.
+  const BANKS = { math: [10, 10, 10], cs: [6, 8, 8], science: [6, 7, 8], geo: [6, 6, 6],
+                  history: [5, 6, 5], lang: [5, 6, 5], finance: [5, 6, 6] };
+  const SCALE = [1.0, 1.15, 1.4];
+  for (const [cat, bank] of Object.entries(BANKS)) {
+    const ceiling = bank
+      .map((n, i) => Math.min(100, 2 * n * 6 * SCALE[i]))
+      .reduce((a, b) => a + b, 0) / 3;
+    for (const ab of Object.values(ABILITIES)) {
+      if (ab.gate.cat !== cat) continue;
+      assert.ok(ab.gate.mastery <= ceiling,
+        `${ab.name} gates ${cat} at ${ab.gate.mastery} but ${cat} tops out near ${Math.round(ceiling)}`);
+    }
   }
 });
 

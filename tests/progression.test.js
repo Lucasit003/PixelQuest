@@ -127,12 +127,27 @@ test('abilities unlock by mastery, never by purchase', () => {
   assert.ok(hero.s.unlocked.includes('shield_bash'));
 });
 
-test('a newly unlocked ability takes the first free slot', () => {
+test('learning an ability makes it known but does NOT equip it', () => {
+  // Equipping is a choice made at the Eldertree. Auto-slotting would make that
+  // choice for the player, which is exactly what the tree exists to hand back.
   const hero = Hero.create('warrior');
   assert.deepEqual(hero.s.equippedAbilities, ['heavy_strike', null, null, null]);
   hero.addMastery('history', 'middle', 100);
   hero.addMastery('history', 'high', 100);
-  assert.equal(hero.s.equippedAbilities[1], 'shield_bash');
+  assert.ok(hero.s.unlocked.includes('shield_bash'), 'it should be known');
+  assert.deepEqual(hero.s.equippedAbilities, ['heavy_strike', null, null, null],
+    'slots must be untouched until the player assigns one');
+});
+
+test('the tree offers exactly the known abilities that are not slotted', () => {
+  const hero = Hero.create('warrior');
+  hero.addMastery('history', 'middle', 100);
+  hero.addMastery('history', 'high', 100);
+  const offered = hero.unequippedAbilityDefs().map((a) => a.id);
+  assert.ok(offered.includes('shield_bash'), 'newly learned and unslotted');
+  assert.ok(!offered.includes('heavy_strike'), 'already in a slot');
+  hero.setAbilitySlot(1, 'shield_bash');
+  assert.ok(!hero.unequippedAbilityDefs().map((a) => a.id).includes('shield_bash'));
 });
 
 test('an ability is never unlocked twice', () => {

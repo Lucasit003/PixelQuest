@@ -214,6 +214,202 @@ export const ABILITIES = {
     mana: 24, cd: 15, kind: 'buff', dur: 7, atkMult: 1.35, speedMult: 1.25,
     desc: 'Nature answers your call: +35% damage and quicker feet for 7 seconds.',
   },
+
+  // ======================================================================
+  // Second tier. Four more per class, so eight abilities compete for four
+  // slots and equipping at the Eldertree becomes a real build decision
+  // instead of a formality. Every one of these resolves through a kind
+  // combat.js already dispatches — no new engine behaviour was added.
+  //
+  // Gates interleave with the first tier (0 / 25-30 / 45 / 55-60) at
+  // 15 / 35 / 50 / 65, and were checked against each subject's reachable
+  // mastery ceiling: the bank sizes cap math at ~100 and history/lang at
+  // ~76, so the 65 gates sit on subjects with headroom.
+  // ======================================================================
+
+  // ---- Warrior ----
+  rallying_cry: {
+    name: 'Rallying Cry', cls: 'warrior', branch: 'Guard', icon: 'star',
+    gate: { cat: 'lang', mastery: 15 },
+    mana: 12, cd: 11, kind: 'buff', dur: 7, shield: 45,
+    desc: 'A battle shout that steels you against the next 45 damage.',
+  },
+  sundering_blow: {
+    name: 'Sundering Blow', cls: 'warrior', branch: 'Might', icon: 'sword',
+    gate: { cat: 'cs', mastery: 35 },
+    mana: 10, cd: 5, dmg: 30, kind: 'melee', range: 32, kb: 60, stun: 0.8,
+    desc: 'A shattering swing that leaves the target reeling.',
+  },
+  iron_bulwark: {
+    name: 'Iron Bulwark', cls: 'warrior', branch: 'Guard', icon: 'shield',
+    gate: { cat: 'history', mastery: 50 },
+    mana: 20, cd: 15, kind: 'buff', dur: 9, shield: 95,
+    desc: 'Plant your feet behind a wall of iron for nine seconds.',
+  },
+  earthshatter: {
+    name: 'Earthshatter', cls: 'warrior', branch: 'Might', icon: 'axe',
+    gate: { cat: 'math', mastery: 65 },
+    mana: 26, cd: 12, dmg: 52, kind: 'aoe', range: 54, kb: 150, stun: 1.2,
+    desc: 'Split the ground open; everything nearby is thrown and stunned.',
+  },
+
+  // ---- Mage ----
+  ember_dart: {
+    name: 'Ember Dart', cls: 'mage', branch: 'Fire', icon: 'staff',
+    gate: { cat: 'math', mastery: 15 },
+    mana: 4, cd: 0.9, dmg: 14, kind: 'projectile', speed: 190, range: 200, element: 'fire',
+    desc: 'A quick cheap spark for keeping pressure on.',
+  },
+  ice_lance: {
+    name: 'Ice Lance', cls: 'mage', branch: 'Ice', icon: 'staff',
+    gate: { cat: 'science', mastery: 35 },
+    mana: 12, cd: 3.2, dmg: 28, kind: 'projectile', speed: 165, range: 230,
+    element: 'ice', freeze: 1.4,
+    desc: 'A spear of ice that pins whatever it strikes.',
+  },
+  static_field: {
+    name: 'Static Field', cls: 'mage', branch: 'Storm', icon: 'star',
+    gate: { cat: 'cs', mastery: 50 },
+    mana: 20, cd: 8, dmg: 26, kind: 'aoe', range: 50, element: 'storm', stun: 1.0,
+    desc: 'Charge the air around you until it cracks.',
+  },
+  arcane_barrage: {
+    name: 'Arcane Barrage', cls: 'mage', branch: 'Arcane', icon: 'staff',
+    gate: { cat: 'math', mastery: 65 },
+    mana: 28, cd: 7, dmg: 34, kind: 'chain', chains: 4, range: 230,
+    desc: 'Raw arcane force ricochets between up to four enemies.',
+  },
+
+  // ---- Rogue ----
+  throwing_knife: {
+    name: 'Throwing Knife', cls: 'rogue', branch: 'Speed', icon: 'sword',
+    gate: { cat: 'cs', mastery: 15 },
+    mana: 5, cd: 1.1, dmg: 16, kind: 'projectile', speed: 210, range: 190,
+    desc: 'Off the belt and away before they see your hand move.',
+  },
+  venom_cloud: {
+    name: 'Venom Cloud', cls: 'rogue', branch: 'Poison', icon: 'star',
+    gate: { cat: 'science', mastery: 35 },
+    mana: 16, cd: 8, dmg: 24, kind: 'aoe', range: 46, freeze: 1.2,
+    desc: 'A burst of green fog that leaves everything choking.',
+  },
+  vanish: {
+    name: 'Vanish', cls: 'rogue', branch: 'Shadow', icon: 'star',
+    gate: { cat: 'lang', mastery: 50 },
+    mana: 18, cd: 14, kind: 'buff', dur: 5, speedMult: 1.6, atkMult: 1.25,
+    desc: 'Slip out of sight and come back faster and sharper.',
+  },
+  assassinate: {
+    name: 'Assassinate', cls: 'rogue', branch: 'Shadow', icon: 'sword',
+    gate: { cat: 'geo', mastery: 65 },
+    mana: 24, cd: 13, dmg: 70, kind: 'melee', range: 28, kb: 40,
+    desc: 'One strike, placed exactly where it ends things.',
+  },
+
+  // ---- Ranger ----
+  quick_shot: {
+    name: 'Quick Shot', cls: 'ranger', branch: 'Precision', icon: 'star',
+    gate: { cat: 'cs', mastery: 15 },
+    mana: 4, cd: 0.8, dmg: 13, kind: 'projectile', speed: 220, range: 210,
+    desc: 'Nocked, loosed and nocked again in one motion.',
+  },
+  bear_trap: {
+    name: 'Bear Trap', cls: 'ranger', branch: 'Traps', icon: 'shield',
+    gate: { cat: 'geo', mastery: 35 },
+    mana: 14, cd: 9, dmg: 26, kind: 'aoe', range: 38, freeze: 2.6,
+    desc: 'Iron jaws that hold whatever wanders into them.',
+  },
+  thornvine: {
+    name: 'Thornvine', cls: 'ranger', branch: 'Nature', icon: 'star',
+    gate: { cat: 'science', mastery: 50 },
+    mana: 20, cd: 7, dmg: 28, kind: 'chain', chains: 3, range: 210,
+    desc: 'A living vine whips from one enemy to the next.',
+  },
+  rain_of_arrows: {
+    name: 'Rain of Arrows', cls: 'ranger', branch: 'Precision', icon: 'star',
+    gate: { cat: 'math', mastery: 65 },
+    mana: 26, cd: 11, dmg: 46, kind: 'aoe', range: 60, kb: 60,
+    desc: 'Blot out the sky over everything in front of you.',
+  },
+
+  // ---- Paladin ----
+  lay_on_hands: {
+    name: 'Lay on Hands', cls: 'paladin', branch: 'Holy', icon: 'shield',
+    gate: { cat: 'lang', mastery: 15 },
+    mana: 10, cd: 10, kind: 'buff', dur: 6, shield: 50,
+    desc: 'A steadying light that turns aside the next 50 damage.',
+  },
+  hammer_of_light: {
+    name: 'Hammer of Light', cls: 'paladin', branch: 'Light', icon: 'staff',
+    gate: { cat: 'history', mastery: 35 },
+    mana: 13, cd: 3.4, dmg: 30, kind: 'projectile', speed: 150, range: 200,
+    desc: 'A thrown hammer wreathed in daylight.',
+  },
+  sanctuary: {
+    name: 'Sanctuary', cls: 'paladin', branch: 'Guard', icon: 'shield',
+    gate: { cat: 'geo', mastery: 50 },
+    mana: 22, cd: 16, kind: 'buff', dur: 10, shield: 110, speedMult: 0.9,
+    desc: 'Hallowed ground: enormous protection, slightly slower going.',
+  },
+  wrath_of_dawn: {
+    name: 'Wrath of Dawn', cls: 'paladin', branch: 'Light', icon: 'star',
+    gate: { cat: 'math', mastery: 65 },
+    mana: 30, cd: 14, dmg: 54, kind: 'aoe', range: 58, stun: 1.0,
+    desc: 'Sunrise breaks over the field and everything unholy reels.',
+  },
+
+  // ---- Berserker ----
+  cleave: {
+    name: 'Cleave', cls: 'berserker', branch: 'Onslaught', icon: 'axe',
+    gate: { cat: 'cs', mastery: 15 },
+    mana: 6, cd: 2.2, dmg: 24, kind: 'melee', range: 38, kb: 70,
+    desc: 'A wide horizontal swing that catches everything in front.',
+  },
+  bloodletting: {
+    name: 'Bloodletting', cls: 'berserker', branch: 'Bloodlust', icon: 'star',
+    gate: { cat: 'science', mastery: 35 },
+    mana: 12, cd: 12, kind: 'buff', dur: 8, atkMult: 1.35,
+    desc: 'Trade caution for eight seconds of pure aggression.',
+  },
+  rampage: {
+    name: 'Rampage', cls: 'berserker', branch: 'Fury', icon: 'axe',
+    gate: { cat: 'history', mastery: 50 },
+    mana: 22, cd: 10, dmg: 44, kind: 'aoe', range: 52, kb: 130,
+    desc: 'Spin through the whole crowd and send it flying.',
+  },
+  undying_wrath: {
+    name: 'Undying Wrath', cls: 'berserker', branch: 'Bloodlust', icon: 'star',
+    gate: { cat: 'finance', mastery: 65 },
+    mana: 32, cd: 20, kind: 'buff', dur: 9, atkMult: 1.7, speedMult: 1.4, shield: 60,
+    desc: 'Nine seconds where nothing you meet gets to finish its swing.',
+  },
+
+  // ---- Summoner ----
+  spirit_wisp: {
+    name: 'Spirit Wisp', cls: 'summoner', branch: 'Spirits', icon: 'staff',
+    gate: { cat: 'lang', mastery: 15 },
+    mana: 5, cd: 1.0, dmg: 15, kind: 'projectile', speed: 175, range: 205,
+    desc: 'A small drifting light that finds its own way to a target.',
+  },
+  stone_totem: {
+    name: 'Stone Totem', cls: 'summoner', branch: 'Totems', icon: 'shield',
+    gate: { cat: 'geo', mastery: 35 },
+    mana: 15, cd: 12, kind: 'buff', dur: 9, shield: 65,
+    desc: 'Set a stone guardian at your feet and let it take the hits.',
+  },
+  thorn_grove: {
+    name: 'Thorn Grove', cls: 'summoner', branch: 'Wild', icon: 'star',
+    gate: { cat: 'science', mastery: 50 },
+    mana: 21, cd: 9, dmg: 32, kind: 'aoe', range: 54, freeze: 1.5,
+    desc: 'Briars erupt from the ground and hold the field.',
+  },
+  ancestral_chorus: {
+    name: 'Ancestral Chorus', cls: 'summoner', branch: 'Spirits', icon: 'staff',
+    gate: { cat: 'finance', mastery: 65 },
+    mana: 30, cd: 8, dmg: 36, kind: 'chain', chains: 4, range: 225,
+    desc: 'Four voices answer at once, each finding its own throat.',
+  },
+
 };
 
 export function abilitiesForClass(cls) {
