@@ -99,7 +99,7 @@ export const ABILITIES = {
   poison_dagger: {
     name: 'Poison Dagger', cls: 'rogue', branch: 'Poison', icon: 'sword',
     gate: { cat: 'science', mastery: 25 },
-    mana: 10, cd: 3.5, dmg: 20, kind: 'projectile', speed: 190, range: 190,
+    mana: 10, cd: 3.5, dmg: 20, kind: 'projectile', speed: 190, range: 190, element: 'poison',
     desc: 'A thrown blade coated in something unpleasant.',
   },
   smoke_bomb: {
@@ -130,7 +130,7 @@ export const ABILITIES = {
   snare_trap: {
     name: 'Snare Trap', cls: 'ranger', branch: 'Traps', icon: 'shield',
     gate: { cat: 'science', mastery: 45 },
-    mana: 18, cd: 9, dmg: 14, kind: 'aoe', range: 42, freeze: 2.0,
+    mana: 18, cd: 9, dmg: 14, kind: 'aoe', range: 42, freeze: 2.0, element: 'nature',
     desc: 'Roots every nearby enemy in place.',
   },
   hunters_mark: {
@@ -143,7 +143,7 @@ export const ABILITIES = {
   holy_strike: {
     name: 'Holy Strike', cls: 'paladin', branch: 'Holy', icon: 'sword',
     gate: { cat: 'history', mastery: 0 }, // starter
-    mana: 0, cd: 3, dmg: 30, kind: 'melee', range: 30, kb: 80,
+    mana: 0, cd: 3, dmg: 30, kind: 'melee', range: 30, kb: 80, element: 'holy',
     desc: 'A radiant blow that smites the wicked.',
   },
   divine_shield: {
@@ -155,7 +155,7 @@ export const ABILITIES = {
   consecration: {
     name: 'Consecration', cls: 'paladin', branch: 'Light', icon: 'star',
     gate: { cat: 'finance', mastery: 45 },
-    mana: 20, cd: 8, dmg: 34, kind: 'aoe', range: 44, kb: 100,
+    mana: 20, cd: 8, dmg: 34, kind: 'aoe', range: 44, kb: 100, element: 'holy',
     desc: 'Holy fire erupts around you, scattering foes.',
   },
   judgement: {
@@ -211,7 +211,7 @@ export const ABILITIES = {
   wild_growth: {
     name: 'Wild Growth', cls: 'summoner', branch: 'Wild', icon: 'star',
     gate: { cat: 'finance', mastery: 60 },
-    mana: 24, cd: 15, kind: 'buff', dur: 7, atkMult: 1.35, speedMult: 1.25,
+    mana: 24, cd: 15, kind: 'buff', dur: 7, atkMult: 1.35, speedMult: 1.25, element: 'nature',
     desc: 'Nature answers your call: +35% damage and quicker feet for 7 seconds.',
   },
 
@@ -290,7 +290,7 @@ export const ABILITIES = {
   venom_cloud: {
     name: 'Venom Cloud', cls: 'rogue', branch: 'Poison', icon: 'star',
     gate: { cat: 'science', mastery: 35 },
-    mana: 16, cd: 8, dmg: 24, kind: 'aoe', range: 46, freeze: 1.2,
+    mana: 16, cd: 8, dmg: 24, kind: 'aoe', range: 46, freeze: 1.2, element: 'poison',
     desc: 'A burst of green fog that leaves everything choking.',
   },
   vanish: {
@@ -322,7 +322,7 @@ export const ABILITIES = {
   thornvine: {
     name: 'Thornvine', cls: 'ranger', branch: 'Nature', icon: 'star',
     gate: { cat: 'science', mastery: 50 },
-    mana: 20, cd: 7, dmg: 28, kind: 'chain', chains: 3, range: 210,
+    mana: 20, cd: 7, dmg: 28, kind: 'chain', chains: 3, range: 210, element: 'nature',
     desc: 'A living vine whips from one enemy to the next.',
   },
   rain_of_arrows: {
@@ -342,7 +342,7 @@ export const ABILITIES = {
   hammer_of_light: {
     name: 'Hammer of Light', cls: 'paladin', branch: 'Light', icon: 'staff',
     gate: { cat: 'history', mastery: 35 },
-    mana: 13, cd: 3.4, dmg: 30, kind: 'projectile', speed: 150, range: 200,
+    mana: 13, cd: 3.4, dmg: 30, kind: 'projectile', speed: 150, range: 200, element: 'holy',
     desc: 'A thrown hammer wreathed in daylight.',
   },
   sanctuary: {
@@ -354,7 +354,7 @@ export const ABILITIES = {
   wrath_of_dawn: {
     name: 'Wrath of Dawn', cls: 'paladin', branch: 'Light', icon: 'star',
     gate: { cat: 'math', mastery: 65 },
-    mana: 30, cd: 14, dmg: 54, kind: 'aoe', range: 58, stun: 1.0,
+    mana: 30, cd: 14, dmg: 54, kind: 'aoe', range: 58, stun: 1.0, element: 'holy',
     desc: 'Sunrise breaks over the field and everything unholy reels.',
   },
 
@@ -400,7 +400,7 @@ export const ABILITIES = {
   thorn_grove: {
     name: 'Thorn Grove', cls: 'summoner', branch: 'Wild', icon: 'star',
     gate: { cat: 'science', mastery: 50 },
-    mana: 21, cd: 9, dmg: 32, kind: 'aoe', range: 54, freeze: 1.5,
+    mana: 21, cd: 9, dmg: 32, kind: 'aoe', range: 54, freeze: 1.5, element: 'nature',
     desc: 'Briars erupt from the ground and hold the field.',
   },
   ancestral_chorus: {

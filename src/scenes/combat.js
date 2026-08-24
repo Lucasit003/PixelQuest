@@ -14,6 +14,7 @@ import { rect, rectOutline, clamp, clamp01, lerp, disc, shadow } from '../gfx/pi
 import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
+import { resolveFx, playAbilityFx, CLASS_FX } from '../gfx/abilityFx.js';
 import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
 import {
   ENEMIES, BOSS, WEAPONS, ABILITIES, RARITY, PETS,
@@ -409,15 +410,23 @@ export class CombatScene {
   _startAttack(kind) {
     const p = this.p;
     const cls = this.hero.cls();
+    // The swing itself is drawn, not just its impact. Before this, a miss was
+    // visually silent — the only feedback was the hit spark on an enemy — and
+    // every class swung in the same colourless way.
+    const look = CLASS_FX[this.hero.s.class] || CLASS_FX.warrior;
     if (kind === 'attack') {
       p.comboStep = (p.comboStep % cls.combo.length) + 1;
       p.comboTimer = 0.55;
       p.state = 'attack';
       p.animDuration = 0.28;
+      this.particles.slash(p.x + p.facing * 16, p.depth - 12, p.facing, look.color);
       Audio.swing();
     } else {
       p.state = 'heavy';
       p.animDuration = 0.5;
+      this.particles.slash(p.x + p.facing * 14, p.depth - 15, p.facing, look.color);
+      this.particles.slash(p.x + p.facing * 20, p.depth - 10, p.facing, look.color2);
+      this.particles.dust(p.x + p.facing * 16, p.depth, 4);
       Audio.swing();
       p.sta = Math.max(0, p.sta - 16);
     }
@@ -491,18 +500,17 @@ export class CombatScene {
       x: p.x + p.facing * 12, depth: p.depth, z: 14,
       vx: p.facing * ab.speed, life: ab.range / ab.speed,
       dmg: Math.round(dmg), owner: 'player', element: ab.element,
-      color: ab.element === 'ice' ? '#9fd0ff' : ab.element === 'storm' ? '#ffe066' : '#ff7a2b',
+      color: this._abilityFx(ab).color, color2: this._abilityFx(ab).color2,
       pierce: 1, hit: new Set(), r: 4,
     });
-    this.particles.magicBurst(p.x + p.facing * 12, p.depth - 14, this.projectiles[this.projectiles.length - 1].color, 6);
+    this._playFx(ab, p.x, p.depth, ab.range || 40);
   }
 
   _castAoe(ab, power) {
     const p = this.p;
     const dmg = abilityBaseDamage(ab, power);
-    this.particles.ring(p.x, p.depth, ab.element === 'ice' ? '#9fd0ff' : '#ffd76a', ab.range);
-    this.particles.magicBurst(p.x, p.depth - 8, ab.element === 'ice' ? '#9fd0ff' : '#ffa040', 18);
-    this.game.addShake(4); this.hitStop = 0.06;
+    this._playFx(ab, p.x, p.depth, ab.range);
+    this.hitStop = 0.06;
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
       const d = Math.hypot(e.x - p.x, e.depth - p.depth);
@@ -514,10 +522,18 @@ export class CombatScene {
     }
   }
 
+  /** The look of an ability, resolved from its own vfx, its element, then its class. */
+  _abilityFx(ab) { return resolveFx(ab, this.hero.s.class); }
+
+  _playFx(ab, x, y, range) {
+    playAbilityFx(this._abilityFx(ab), this.particles, (n) => this.game.addShake(n),
+                  x, y, this.p.facing, range);
+  }
+
   _castMeleeAbility(ab, power) {
     const p = this.p;
     const dmg = abilityBaseDamage(ab, power);
-    this.game.addShake(3);
+    this._playFx(ab, p.x, p.depth, ab.range || 40);
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
       const dx = e.x - p.x;
@@ -526,7 +542,6 @@ export class CombatScene {
       this._damageEnemy(e, Math.round(dmg), p.facing, ab.kb || 120, { launch: true });
       if (ab.stun) e.stunned = ab.stun;
     }
-    this.particles.slash(p.x + p.facing * 16, p.depth - 12, p.facing, '#dfe6f2');
   }
 
   _castChain(ab, power) {
@@ -541,7 +556,9 @@ export class CombatScene {
       this._damageEnemy(e, Math.round(dmg), e.x >= p.x ? 1 : -1, 40, {});
       e.stunned = Math.max(e.stunned, 0.4);
       this._lightning = this._lightning || [];
-      this._lightning.push({ x1: prev.x, y1: prev.depth, x2: e.x, y2: e.depth - 12, t: 0 });
+      const cfx = this._abilityFx(ab);
+      this._lightning.push({ x1: prev.x, y1: prev.depth, x2: e.x, y2: e.depth - 12, t: 0,
+                             color: cfx.color, color2: cfx.color2, shape: cfx.shape });
       prev = { x: e.x, depth: e.depth - 12 };
       dmg *= CHAIN_FALLOFF;
     }
@@ -552,8 +569,9 @@ export class CombatScene {
     const p = this.p;
     if (ab.atkMult) { p.buffs.rage = { t: ab.dur, mult: ab.atkMult }; if (ab.speedMult) p.buffs.speed = { t: ab.dur }; }
     if (ab.shield) { p.buffs.shield = { t: ab.dur, amount: ab.shield }; p.shieldHp = ab.shield; }
-    this.particles.ring(p.x, p.depth, ab.shield ? '#9d8bff' : '#ff6a3c', 18);
-    this.toasts.push(ab.name + '!', p.x, p.depth - 34, ab.shield ? '#9d8bff' : '#ff6a3c');
+    const fx = this._abilityFx(ab);
+    this._playFx(ab, p.x, p.depth, 20);
+    this.toasts.push(ab.name + '!', p.x, p.depth - 34, fx.color);
   }
 
   _quaffHealth() {
@@ -576,7 +594,8 @@ export class CombatScene {
 
     // impact particles: normal 3-5, heavy 5-8, crit gold spark
     const n = opts.crit ? 8 : (opts.air ? 6 : 4);
-    this.particles.hitSpark(e.x, e.depth - 14, dir, opts.crit ? '#ffd76a' : '#ffffff', n);
+    const look = CLASS_FX[this.hero.s.class] || CLASS_FX.warrior;
+    this.particles.hitSpark(e.x, e.depth - 14, dir, opts.crit ? '#ffd76a' : look.color, n);
     this.particles.blood(e.x, e.depth, dir, e.def.bloodColor || '#c23b3b');
     // damage number: off-white normal, gold + "!" for crits, short life w/ drift
     this.toasts.push(opts.crit ? `${reduced}!` : `${reduced}`, e.x + rand(-3, 3), e.depth - 24,
@@ -1157,6 +1176,11 @@ export class CombatScene {
   _drawProjectiles(g) {
     for (const pr of this.projectiles) {
       const y = pr.depth - pr.z;
+      // A trailing tail behind the head reads as travel; a bare disc reads as a
+      // dot that teleports. Three shrinking discs is enough at this resolution.
+      const dir = Math.sign(pr.vx) || 1;
+      disc(g, pr.x - dir * pr.r * 2.0, y, Math.max(1, pr.r - 3), pr.color2 || pr.color);
+      disc(g, pr.x - dir * pr.r * 1.1, y, Math.max(1, pr.r - 2), pr.color);
       disc(g, pr.x, y, pr.r, pr.color);
       disc(g, pr.x, y, Math.max(1, pr.r - 2), '#ffffff');
     }
@@ -1165,15 +1189,21 @@ export class CombatScene {
   _drawLightning(g) {
     if (!this._lightning) return;
     for (const l of this._lightning) {
-      g.strokeStyle = '#ffe066';
-      const steps = 6;
+      const core = l.color2 || '#ffe066';
+      const hot = l.color || '#fff2a0';
+      // A vine creeps in a smooth arc; lightning forks. Same geometry, different
+      // jitter — enough to tell a Ranger's Thornvine from Chain Lightning.
+      const vine = l.shape === 'vine' || l.shape === 'chorus';
+      const steps = vine ? 8 : 6;
+      const jit = vine ? 1.2 : 3;
       let px = l.x1, py = l.y1;
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
-        const nx = lerp(l.x1, l.x2, t) + rand(-3, 3);
-        const ny = lerp(l.y1, l.y2, t) + rand(-3, 3);
-        rect(g, px, py, Math.max(1, Math.abs(nx - px)), 1, '#ffe066');
-        rect(g, nx, Math.min(py, ny), 1, Math.max(1, Math.abs(ny - py)), '#fff2a0');
+        const bow = vine ? Math.sin(t * Math.PI) * -7 : 0;
+        const nx = lerp(l.x1, l.x2, t) + rand(-jit, jit);
+        const ny = lerp(l.y1, l.y2, t) + bow + rand(-jit, jit);
+        rect(g, px, py, Math.max(1, Math.abs(nx - px)), 1, core);
+        rect(g, nx, Math.min(py, ny), 1, Math.max(1, Math.abs(ny - py)), hot);
         px = nx; py = ny;
       }
     }
