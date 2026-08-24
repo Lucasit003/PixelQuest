@@ -29,6 +29,9 @@ export function enterLocation(scene, loc) {
     case 'quest': case 'guild': openQuest(scene, loc.action === 'guild'); break;
     case 'dungeon': enterGate(scene); break;
     case 'rest': rest(scene); break;
+    // The Eldertree is where mastery is spent. Tab 1 is ABILITIES; resting moved
+    // to the plaza fountain, which is also action 'rest'.
+    case 'tree': scene.overlay = new InventoryMenu(scene.hero, () => { scene.overlay = null; }, 1); break;
     case 'house': scene.hero.save(); if (scene.hooks.toHouse) scene.hooks.toHouse(); break;
   }
 }

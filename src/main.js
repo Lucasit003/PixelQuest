@@ -14,6 +14,9 @@ import { PotionShopScene } from './scenes/potionshop.js';
 import { WeaponShopScene } from './scenes/weaponshop.js';
 import { LibraryScene } from './scenes/library.js';
 import { installDevConsole } from './dev/console.js';
+// Registers any sheet-backed actors. Actors not listed there stay procedural,
+// and the sheets themselves only load if something draws one.
+import './gfx/spriteCatalog.js';
 
 const canvas = document.getElementById('game');
 const BASE_W = canvas.width;   // 480
@@ -77,7 +80,13 @@ function goWeaponShop(hero) {
 }
 
 function goLibrary(hero) {
-  game.transition(() => new LibraryScene(hero, () => goTown(hero)));
+  game.transition(() => new LibraryScene(hero, () => goTown(hero), () => goStudy(hero)));
+}
+
+// Studying is entered FROM the Archive and returns to it, so a session reads as
+// sitting down at the table rather than teleporting out of the building.
+function goStudy(hero) {
+  game.transition(() => new TrainingScene(hero, () => goLibrary(hero)));
 }
 
 function goTraining(hero) {

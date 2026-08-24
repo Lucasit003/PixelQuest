@@ -3,6 +3,10 @@
 // Player House / Potion Shop / Weapon Shop: the player walks the hall floor in
 // front of the art, the front door (bottom centre) takes you back to town.
 //
+// This is the game's LEARNING venue: the study table opens the adaptive question
+// session. Learning happens here and nowhere else — combat never asks a
+// question, and the Eldertree is where what you learn gets spent.
+//
 // The backdrop is drawn 1:1 from assets/library_interior.png, which is the
 // source art baked offline to exactly 480x262 (premultiplied LANCZOS) — the
 // project rule is to never let the canvas downscale pixel art at draw time.
@@ -29,9 +33,10 @@ const IMG_W = 480, IMG_H = 262;
 const IMG_Y = 4; // centred on the 270-tall canvas
 
 export class LibraryScene {
-  constructor(hero, onExit) {
+  constructor(hero, onExit, onStudy) {
     this.hero = hero;
     this.onExit = onExit;
+    this.onStudy = onStudy;
   }
 
   enter(game) {
@@ -51,6 +56,10 @@ export class LibraryScene {
 
     this.spots = [
       { id: 'door', x: 240, y: 250, label: 'Leave' },
+      // The left study table. This is where the game is actually LEARNED —
+      // the only place questions are asked. Valorhall used to host the quiz,
+      // which put algebra in a building whose art is a sparring yard.
+      { id: 'study', x: 200, y: 162, label: 'Study' },
     ];
 
     // Collision, traced from 4x gridded crops of the art (tools: see the
@@ -151,6 +160,13 @@ export class LibraryScene {
 
   _use(spot) {
     if (spot.id === 'door') { this._leave(); return; }
+    if (spot.id === 'study') {
+      if (!this.onStudy) return;
+      Audio.confirm();
+      this.hero.save();
+      this.onStudy();
+      return;
+    }
     Audio.confirm();
   }
 

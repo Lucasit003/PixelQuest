@@ -161,7 +161,7 @@ export function buildTown(scene) {
     // Collision is three boxes stepping in toward the ellipse's tips
     // (the rest are appended to scene.solids below), so the player can walk
     // right up to the stone beside the dais and never bumps into air.
-    { id: 'eldertree', name: 'The Eldertree', dx: ET.x, dy: ET.y + 26, action: 'rest', label: 'Rest beneath the Eldertree', district: 'Eldertree Glade',
+    { id: 'eldertree', name: 'The Eldertree', dx: ET.x, dy: ET.y + 26, action: 'tree', label: 'Upgrade skills at the Eldertree', district: 'Eldertree Glade',
       sortY: ET.y - 2,
       draw: (g) => drawEldertree(g, ET.x, ET.y, scene.t),
       solid: { x: ET.x - 82, y: ET.y - 46, w: 164, h: 32 } },
@@ -172,7 +172,10 @@ export function buildTown(scene) {
       solid: { x: D.sanctuary.x - SANCTUARY_W / 2, y: D.sanctuary.y + 55 - SANCTUARY_H, w: SANCTUARY_W, h: SANCTUARY_H } },
 
     // ---- Valorhall: large dedicated compound ----
-    { id: 'training', name: 'Valorhall Training Grounds', dx: D.training.x, dy: D.training.y, action: 'training', district: 'Valorhall Training Grounds', zone: true,
+    { id: 'training', name: 'Valorhall Training Grounds', dx: D.training.x, dy: D.training.y, // Valorhall is a sparring yard, not a classroom — the quiz it used to host
+      // now lives at the Archive. Left as a walk-in zone until practice combat
+      // gives it something to do.
+      action: null, district: 'Valorhall Training Grounds', zone: true,
       draw: (g) => drawTrainingGround(g, D.training.x, D.training.y, scene.t),
       solid: { x: D.training.x - 75, y: D.training.y - 60, w: 150, h: 24 } },
 
