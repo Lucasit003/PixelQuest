@@ -252,6 +252,14 @@ function acgTrees(scene, put, flat, X, Y) {
   // the gap beside each, keyed to the stored layout so it lands on real ruins.
   const H = (scene._acgL && scene._acgL.houses) || [];
   H.forEach((a, i) => {
+    // houses[14] and [15] are plaza markers, not footprints: they carry x/y
+    // but no w/h. Reading a width off them produced NaN coordinates, and a
+    // single NaN prop poisons the whole scene's depth sort — every compare
+    // against it returns NaN, so town.js's (a,b)=>a.y-b.y stops being a
+    // consistent ordering and V8 arranges UNRELATED props arbitrarily, by
+    // an order that shifts whenever the decor count changes. Skip in place
+    // rather than filtering, so every later index and seed stays put.
+    if (!Number.isFinite(a.w) || !Number.isFinite(a.h)) return;
     const pool = a.d === 'north' || a.d === 'temple' ? MYST : (a.big ? MED : SMALL);
     if (i % 2 === 0) {  // grows THROUGH the building
       put(pool[i % pool.length], Math.round(a.x - a.w * 0.18), Math.round(a.y - a.h * 0.1),
@@ -299,7 +307,10 @@ function acgUnderstory(scene, put, flat, X, Y) {
 
   // between-building overgrowth: a clump at each footprint's edge (alley side)
   const H = (scene._acgL && scene._acgL.houses) || [];
-  H.forEach((a, i) => scatter(Math.round(a.x + a.w * 0.55), Math.round(a.y + a.h * 0.15), 6, 34, [BUSH, GRASS, GRASS], 320 + i * 9));
+  H.forEach((a, i) => {
+    if (!Number.isFinite(a.w) || !Number.isFinite(a.h)) return;   // marker, not a footprint — see acgTrees
+    scatter(Math.round(a.x + a.w * 0.55), Math.round(a.y + a.h * 0.15), 6, 34, [BUSH, GRASS, GRASS], 320 + i * 9);
+  });
 
   // crystal-altered blue grass in the magical zones
   scatter(X - 96, Y + 24, 5, 46, [DARK], 401); scatter(X + 96, Y + 28, 5, 46, [DARK], 407);
