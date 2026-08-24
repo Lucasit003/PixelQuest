@@ -104,21 +104,57 @@ const SWAY_RULES = [
                                                                      3.2, 2.60, 6],
 ];
 
-// The town's decor loop is not camera-culled — it draws all ~2,100 props every
-// frame and lets the browser clip the ones outside the canvas. That is cheap for
-// a single blit and NOT cheap for a banded one, and ~1,500 of those props are
-// flexible while only a couple of dozen are ever on screen.
+// ---- camera culling ---------------------------------------------------------
+// The town's decor loop hands every prop to the renderer each frame — about
+// 2,100 of them — and lets the browser clip whatever lands outside the canvas.
+// At a typical camera roughly 26 are actually on screen, so ~99% of the
+// rasterisation work is spent on sprites nobody can see.
 //
-// So the sway path asks whether a prop is actually visible before paying for it.
-// The canvas transform IS the camera, and it is identical for every prop in a
-// frame, so it is read once per frame and cached rather than per prop.
-let _tf = null, _tfAt = -1;
-function visible(g, x, y, w, h, t) {
-  if (_tf === null || t - _tfAt > 0.004 || t < _tfAt) { _tf = g.getTransform(); _tfAt = t; }
-  const m = _tf;
-  const sx = m.a * x + m.e, sy = m.d * y + m.f;
-  const hw = (w / 2) * m.a + 8, hh = h * m.d + 8;
-  return sx + hw > 0 && sx - hw < g.canvas.width && sy + hh > 0 && sy - h * m.d - hh < g.canvas.height;
+// The test has to use the prop's REAL visual box, not its anchor. Props are
+// bottom-centre anchored, so the art extends a full sprite height ABOVE y —
+// mystic_tree_grand reaches 200 units up — and contactShadow pushes the box
+// right and down past the anchor as well. Culling on the anchor point alone
+// would pop the tallest trees out while they were still half on screen.
+//
+//   left   x - w/2
+//   right  x + max(w/2, shadowRx * 1.28)      shadow is offset +0.28rx and ±rx
+//   top    y - h
+//   bottom y + 1 + max(2, shadowRx * 0.4)     shadow ry
+//
+// SWAY_MARGIN covers the few pixels the wind moves a sprite's top, so foliage
+// leaning at the edge of the screen cannot be clipped mid-lean. EDGE_MARGIN is
+// deliberate slack on top of exact bounds — this is an optimisation, and being
+// generous costs a handful of extra draws while being tight costs correctness.
+const SWAY_MARGIN = 8;
+const EDGE_MARGIN = 16;
+
+// The transform is read fresh for every prop, deliberately. Caching it on a
+// short timer was measurably wrong: the night pass installs its own transform
+// with setTransform, and a cached entry could survive into the next frame and
+// be used to cull against the WRONG camera — 384 stale pixels at the plaza at
+// night, invisible by day. getTransform is cheap next to the thousands of
+// rasterisations this test removes.
+function camera(g) {
+  return g.getTransform ? g.getTransform() : null;
+}
+
+/** True if any part of this prop's art or shadow can land on the canvas. */
+export function propVisible(g, x, y, w, h, shadowRx = 0) {
+  // Dev hook, same family as __townDebug / __townZoom / __townNight: turning
+  // culling off must produce a pixel-identical frame, which is how the bounds
+  // maths above is actually verified rather than assumed.
+  if (typeof window !== 'undefined' && window.__noCull) return true;
+  const m = camera(g);
+  if (!m || !m.a) return true;                 // unknown transform: never cull
+  const shR = shadowRx > 0 ? shadowRx : 0;
+  const left   = x - w / 2 - SWAY_MARGIN - EDGE_MARGIN;
+  const right  = x + Math.max(w / 2, shR * 1.28) + SWAY_MARGIN + EDGE_MARGIN;
+  const top    = y - h - SWAY_MARGIN - EDGE_MARGIN;
+  const bottom = y + 1 + Math.max(2, shR * 0.4) + EDGE_MARGIN;
+  // world -> screen. The camera is scale + translate only, so this is exact.
+  const sl = m.a * left + m.e, sr = m.a * right + m.e;
+  const st = m.d * top + m.f,  sb = m.d * bottom + m.f;
+  return sr > 0 && sl < g.canvas.width && sb > 0 && st < g.canvas.height;
 }
 
 /** The sway profile for a prop name, or null if it must stay rigid. */
@@ -168,6 +204,11 @@ export function contactShadow(g, cx, by, rx, ry, alpha = 0.32) {
 // horizontally so a prop on the right of a path reads as facing inward
 // (toward the centerline) the same way its left-side twin naturally does.
 export function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false, t = null) {
+  // Off-camera props cost nothing beyond this test. The shadow is inside the
+  // same test as the sprite so the two can never be culled independently and
+  // leave a shadow floating without its object.
+  if (!propVisible(g, x, y, w, h, shadowRx)) return;
+
   // shadowRx 0 skips the shadow entirely — used by compound-style art
   // (Watch, Sanctuary, Cottage, Gate) whose PNGs include their own ground.
   if (shadowRx > 0) contactShadow(g, x, y, shadowRx, Math.max(2, shadowRx * 0.4), 0.22);
@@ -176,11 +217,7 @@ export function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false, t = null
   // Flexible props bend; everything else takes the original single-blit path
   // unchanged. `t` is only supplied by the scene's per-frame draw, so any caller
   // that does not pass it also stays on the fast path.
-  if (art.sway) {
-    const now = t === null ? worldTime() : t;
-    if (visible(g, x, y, w, h, now)) { drawSwayed(g, art, x, y, w, h, flip, now); return; }
-    // off screen: fall through to the ordinary blit, which the browser clips
-  }
+  if (art.sway) { drawSwayed(g, art, x, y, w, h, flip, t === null ? worldTime() : t); return; }
 
   if (flip) {
     g.save();
