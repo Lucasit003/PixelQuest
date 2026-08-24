@@ -23,39 +23,23 @@ tools/_index/
 /dev/
 
 # Large source art (keep the game-ready versions only)
-assets/*_source.png
-assets/Crystal Plaza Road.png
 
-# Raw reference sheets (already sliced into assets/props/ via tools/). Kept on
+# Raw reference sheets and superseded masters. Everything the game does NOT load
+# at runtime lives in assets/_src/ and is ignored as a folder — this used to be a
+# hand-maintained list of individual filenames that had to be extended every time
+# a sheet was added, and a missed entry meant megabytes of source art in the repo.
+assets/_src/
+
+# (old note) Raw reference sheets (already sliced into assets/props/ via tools/). Kept on
 # disk so the cuts can be re-made, but never committed — the game only ever
 # loads the sliced/baked versions, and these run 150KB-2MB each.
-assets/*.jpeg
-assets/*.jpg
-assets/treee.png
-assets/34057d6f-688b-4e63-92c2-60a35f851792.png
-assets/Duengon Gate.png
-assets/Libary.png
-assets/Market.png
-assets/Meadow.png
-assets/Pet Sanctuary.png
-assets/Roads.png
-assets/Town Grass.png
-assets/Training Grounds.png
-assets/Wayferers Cottage.png
-assets/Wayferers Watch.png
-assets/butterfly.png
-assets/farm assets.png
-assets/fountain surrounding.png
-assets/new road.png
-assets/pond_cut.png
-assets/pond_cut2.png
-assets/water.png
 
 # Pre-edit backups of the plaza tiles
 assets/plaza/_orig_mix/
 assets/plaza/_pre_seam/
 assets/plaza/_pre_tone/
-assets/0bb1851a-d749-4c1c-acd4-068a0e5e31c1.png
-assets/24ab75c2-5657-4511-912a-65b22794ffe3.png
-assets/Cobble Transistions.png
-assets/Dirt and Grass.png
+
+# Secrets — never commit API keys
+.env
+.env.*
+!.env.example

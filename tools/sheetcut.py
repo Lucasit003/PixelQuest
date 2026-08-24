@@ -20,12 +20,12 @@ OUT = os.path.join(ROOT, "assets/props/_src")
 WORK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_index")
 
 SHEETS = {
-    "village":  "assets/village decor.jpg",
-    "fence":    "assets/fences and property decor.jpeg",
-    "veg":      "assets/Natural Vegatiation.jpeg",
-    "rock":     "assets/rocks and forest floor.jpeg",
-    "farm":     "assets/farm assets.png",
-    "water":    "assets/river and water decor.jpeg",
+    "village":  "assets/_src/village decor.jpg",
+    "fence":    "assets/_src/fences and property decor.jpeg",
+    "veg":      "assets/_src/Natural Vegatiation.jpeg",
+    "rock":     "assets/_src/rocks and forest floor.jpeg",
+    "farm":     "assets/_src/farm assets.png",
+    "water":    "assets/_src/river and water decor.jpeg",
 }
 # Rows of the sheet occupied by the page title, which is never a sprite.
 TITLE_H = {"village": 40, "fence": 48, "veg": 40, "rock": 46, "farm": 46, "water": 46}

@@ -1,4 +1,4 @@
-"""Slice the tree sheet (assets/treee.png) into individual prop cuts.
+"""Slice the tree sheet (assets/_src/treee.png) into individual prop cuts.
 
 Unlike the asset-library sheets that sheetcut.py handles, this one arrives with
 a real alpha channel and no panel chrome, so there is nothing to matte — the
@@ -21,7 +21,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SHEET = os.path.join(ROOT, "assets/treee.png")
+SHEET = os.path.join(ROOT, "assets/_src/treee.png")
 OUT = os.path.join(ROOT, "assets/props/_src")
 WORK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_index")
 
