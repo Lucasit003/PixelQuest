@@ -391,6 +391,24 @@ export const POTIONS = {
 };
 
 // ------------------------------------------------------------------ enemies
+//
+// An enemy is pure data — combat.js reads these fields and never branches on the
+// enemy's id. To add one, copy an entry and pick a `behavior`; no combat code
+// needs to change.
+//
+// Required by every enemy:
+//   name sprite hp attack defense speed w gold xp behavior attackCd
+//   reach     melee stopping distance ('chase' and 'hop' only — 'ranged' ignores it)
+//   projSpeed arrow speed ('ranged' only)
+//
+// Optional, all defaulted in game/enemyBehaviors.js — set one only to make this
+// enemy feel different from others sharing its behavior:
+//   chase   depthArc depthChase windup
+//   hop     depthArc depthChase windup hopRange hopPower hopLunge
+//   ranged  keepMin keepMax approachRate depthChase fireArc
+//           projLife projColor projRadius
+//
+// Cosmetic/optional anywhere: tint tintDark tintLite bloodColor launchImmune
 
 export const ENEMIES = {
   goblin: {
@@ -401,11 +419,13 @@ export const ENEMIES = {
     name: 'Slime', sprite: 'slime', hp: 26, attack: 6, speed: 30, defense: 0,
     reach: 16, gold: [2, 6], xp: 4, behavior: 'hop', attackCd: 1.8, w: 14,
     tint: '#3fb872', tintDark: '#2a8a52', tintLite: '#7fe8a8',
+    bloodColor: '#2a8a52',
   },
   slime_blue: {
     name: 'Frost Slime', sprite: 'slime', hp: 40, attack: 9, speed: 26, defense: 3,
     reach: 16, gold: [4, 8], xp: 7, behavior: 'hop', attackCd: 1.6, w: 14,
     tint: '#4f9fe0', tintDark: '#2f6fb0', tintLite: '#9fd0ff',
+    bloodColor: '#2f6fb0',
   },
   skeleton: {
     name: 'Skeleton', sprite: 'skeleton', hp: 30, attack: 10, speed: 40, defense: 4,

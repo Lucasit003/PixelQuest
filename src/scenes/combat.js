@@ -23,6 +23,7 @@ import {
   enemyDamageAfterDefense, playerDamageAfterDefense, absorbWithShield,
   bossPhaseIndex, CHAIN_FALLOFF,
 } from '../game/combatMath.js';
+import { resolveBehavior, tuningFor } from '../game/enemyBehaviors.js';
 
 // Arena depth band (the "floor" the actors walk on).
 const DEPTH_MIN = 150;
@@ -96,6 +97,17 @@ export class CombatScene {
       isPlayer: true,
     };
 
+    // Handed to every enemy behavior each frame. The vector fields are refilled
+    // per enemy in _updateEnemies; the rest are the world actions a behavior is
+    // allowed to take, so archetypes never reach into the scene themselves.
+    this._aiContext = {
+      dt: 0, dx: 0, ddepth: 0, dist: 0,
+      p: this.p,
+      clampDepth: (d) => clamp(d, DEPTH_MIN, DEPTH_MAX),
+      tryMelee: (e) => this._enemyTryMelee(e, this._aiContext.dt),
+      shoot: (e) => this._enemyShoot(e),
+    };
+
     // Gate progression: each gate spawns a wave; clearing it scrolls the camera.
     this._buildGates();
     this.currentGate = 0;
@@ -150,6 +162,8 @@ export class CombatScene {
       scale: 1, w: def.w,
       tint: def.tint, tintDark: def.tintDark, tintLite: def.tintLite,
       isBoss: false,
+      // AI resolved once here; a bad `behavior` throws now, not mid-fight.
+      behavior: resolveBehavior(def, type), tuning: tuningFor(def),
     };
     this.enemies.push(e);
     return e;
@@ -550,13 +564,13 @@ export class CombatScene {
     e.flash = 1; e.hurtTimer = 0.2; e.state = 'hurt'; e.animTime = 0;
     e.knockVx = dir * kb;
     e.showHp = 3.5; // reveal this enemy's name+health, then fade
-    if (opts.launch && e.type !== 'king') { e.vz = Math.max(e.vz, 120); e.z = Math.max(e.z, 1); }
+    if (opts.launch && !e.def.launchImmune) { e.vz = Math.max(e.vz, 120); e.z = Math.max(e.z, 1); }
     e.stunned = Math.max(e.stunned, 0.25);
 
     // impact particles: normal 3-5, heavy 5-8, crit gold spark
     const n = opts.crit ? 8 : (opts.air ? 6 : 4);
     this.particles.hitSpark(e.x, e.depth - 14, dir, opts.crit ? '#ffd76a' : '#ffffff', n);
-    this.particles.blood(e.x, e.depth, dir, e.type.includes('slime') ? (e.tintDark || '#2a8a52') : '#c23b3b');
+    this.particles.blood(e.x, e.depth, dir, e.def.bloodColor || '#c23b3b');
     // damage number: off-white normal, gold + "!" for crits, short life w/ drift
     this.toasts.push(opts.crit ? `${reduced}!` : `${reduced}`, e.x + rand(-3, 3), e.depth - 24,
       opts.crit ? '#ffd76a' : '#f4f0ff', { crit: opts.crit, vy: -34, vx: rand(-10, 10), life: opts.crit ? 0.8 : 0.6 });
@@ -626,46 +640,17 @@ export class CombatScene {
 
       if (e.isBoss) { this._updateBoss(e, dt); continue; }
 
-      // AI
+      // AI: the scene supplies the frame's context, the archetype decides.
       const dx = p.x - e.x;
-      const ddepth = p.depth - e.depth;
-      const dist = Math.abs(dx);
+      const c = this._aiContext;
+      c.dt = dt;
+      c.dx = dx;
+      c.ddepth = p.depth - e.depth;
+      c.dist = Math.abs(dx);
       e.facing = dx >= 0 ? 1 : -1;
-      const spd = e.def.speed;
 
       e.attackTimer -= dt;
-
-      if (e.def.behavior === 'ranged') {
-        // keep distance, shoot
-        if (dist < 90) { e.x -= e.facing * spd * dt; e.state = 'walk'; }
-        else if (dist > 150) { e.x += e.facing * spd * 0.6 * dt; e.state = 'walk'; }
-        else e.state = 'idle';
-        e.depth += Math.sign(ddepth) * Math.min(Math.abs(ddepth), spd * 0.4 * dt);
-        if (e.attackTimer <= 0 && Math.abs(ddepth) < 30) {
-          e.attackTimer = e.def.attackCd; e.state = 'attack'; e.animTime = 0;
-          this._enemyShoot(e);
-        }
-      } else if (e.def.behavior === 'hop') {
-        // slimes lunge in hops
-        if (e.z === 0 && e.attackTimer <= 0 && dist < 60) {
-          e.vz = 90; e.z = 1; e.knockVx = e.facing * 80; e.state = 'jump';
-          e.attackTimer = e.def.attackCd; e.animTime = 0;
-        } else if (e.z === 0) {
-          if (dist > e.def.reach) { e.x += e.facing * spd * dt; e.depth += Math.sign(ddepth) * spd * 0.5 * dt; e.state = 'walk'; }
-          else e.state = 'idle';
-        }
-        if (dist < e.def.reach && Math.abs(ddepth) < 16) this._enemyTryMelee(e, dt);
-      } else {
-        // chase + melee
-        if (dist > e.def.reach || Math.abs(ddepth) > 14) {
-          e.x += e.facing * spd * dt;
-          e.depth += Math.sign(ddepth) * Math.min(Math.abs(ddepth), spd * 0.55 * dt);
-          e.depth = clamp(e.depth, DEPTH_MIN, DEPTH_MAX);
-          e.state = 'walk';
-        } else {
-          this._enemyTryMelee(e, dt);
-        }
-      }
+      e.behavior.update(e, c);
     }
 
     // cull fully-dead
@@ -678,10 +663,7 @@ export class CombatScene {
     if (e.attackTimer <= 0) {
       e.attackTimer = e.def.attackCd;
       e.state = 'attack'; e.animTime = 0;
-      // telegraph then hit
-      setTimeout(() => {}, 0);
-      this._enemyMeleeHit = this._enemyMeleeHit || [];
-      e._swing = 0.18;
+      e._swing = e.tuning.windup ?? 0.18; // telegraph, then the hit lands
     }
     if (e._swing > 0) {
       e._swing -= dt;
@@ -698,13 +680,14 @@ export class CombatScene {
 
   _enemyShoot(e) {
     const p = this.p;
+    const t = e.tuning;
     const dx = p.x - e.x, dy = (p.depth) - (e.depth);
     const d = Math.hypot(dx, dy) || 1;
     const spd = e.def.projSpeed;
     this.projectiles.push({
       x: e.x, depth: e.depth, z: 12,
-      vx: (dx / d) * spd, vdepth: (dy / d) * spd, life: 2.5,
-      dmg: e.def.attack, owner: 'enemy', color: '#d9d2c0', r: 3, hit: new Set(),
+      vx: (dx / d) * spd, vdepth: (dy / d) * spd, life: t.projLife,
+      dmg: e.def.attack, owner: 'enemy', color: t.projColor, r: t.projRadius, hit: new Set(),
     });
   }
 
