@@ -10,7 +10,7 @@ then blits 1:1 with no scaling at all.
 Alpha is premultiplied around the resize so transparent pixels cannot bleed
 their (arbitrary) colour into the sprite's edge.
 
-Source of truth for the sizes is DECOR_SIZE in src/scenes/town.js, so the table
+Source of truth for the sizes is DECOR_SIZE in src/scenes/town/props.js, so the table
 never drifts from what the scene actually asks for.
 
   python3 tools/bake_props.py            # bake every entry
@@ -26,7 +26,7 @@ OUT = os.path.join(ROOT, "assets/props")
 
 
 def sizes():
-    js = open(os.path.join(ROOT, "src/scenes/town.js")).read()
+    js = open(os.path.join(ROOT, "src/scenes/town/props.js")).read()
     block = re.search(r"const DECOR_SIZE = \{(.*?)\n\};", js, re.S).group(1)
     return {m[0]: (int(m[1]), int(m[2]))
             for m in re.findall(r"(\w+):\s*\[(\d+),\s*(\d+)\]", block)}

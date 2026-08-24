@@ -10,19 +10,31 @@ Run with `python3 -m http.server` and open `index.html`. Internal resolution is
 PIXEL QUEST
 │
 ├── PLAYER
-│   ├── movement       scenes/town.js  (_move, camera clamp)   · scenes/combat.js (_updatePlayer)
+│   ├── movement       scenes/town.js  (_tryMove, camera clamp) · scenes/combat.js (_updatePlayer)
 │   ├── animation      gfx/actors.js   drawCharacter / drawActor / SPECS / PALETTES
 │   ├── combat         scenes/combat.js  _startAttack, _useAbility, _cast{Projectile,Aoe,Chain,Buff}
 │   └── progression    game/state.js   Hero class · game/data.js  xpForLevel, masteryGain
 │
-├── WORLD
-│   ├── maps           scenes/town.js  _buildTown()  — 3600×4400 world units, all districts
-│   │                                   derived from PZ = {x:2050, y:2750}
-│   ├── roads          scenes/town.js  _buildRoadCoverage() → roadCov (4-unit cells)
-│   ├── props          scenes/town.js  _buildPlazaDecor()  — authored level, ~300 lines
-│   ├── collisions     scenes/town.js  this.solids (axis-aligned rects)
+├── WORLD  — scenes/town.js is the scene; scenes/town/* are its systems
+│   ├── maps           town/layout.js   buildTown() — 3600×4400 units, all districts
+│   │                                    derived from PZ = {x:2050, y:2750}
+│   ├── roads          town/roads.js    buildRoadCoverage() → roadCov (4-unit cells)
+│   │                                    + the five material families
+│   ├── ground         town/ground.js   grass, plaza floor, flares, corruption
+│   ├── tiles          town/tiles.js    ground/paving art registry (shared: roads
+│   │                                    and the plaza sample the same stone pack)
+│   ├── props          town/props.js    DECOR_SIZE/DECOR_ART registry + procedural
+│   │                                    street furniture, trees, the Eldertree
+│   ├── dressing       town/plaza.js        Crystal Plaza — an AUTHORED level
+│   │                  town/lake.js         pond art, water collision, shoreline
+│   │                  town/ancientcity.js  Eldertree glade, four outside-in passes
+│   ├── buildings      town/buildings.js  authored PNGs + procedural structures
+│   ├── fountain       town/fountain.js   the plaza centrepiece and its water FX
+│   ├── collisions     scene.solids (axis-aligned rects), filled by layout.js
 │   ├── interiors      scenes/{house,library,potionshop,weaponshop}.js
-│   ├── lighting       scenes/town.js  _drawNight() + NIGHT table  (multiply buffer + light holes)
+│   ├── lighting       town/lighting.js drawNight() + NIGHT (multiply + light holes)
+│   ├── town UI        town/hud.js          composes gfx/ui.js — not a second one
+│   ├── interactions   town/interactions.js what [E] does + the dialogue box
 │   └── water/wildlife gfx/waterfx.js  ducks, ducklings, frogs, fish, lily pads
 │
 ├── ENTITIES
@@ -78,7 +90,12 @@ debug menu and no debug key bindings.
 
 | File | Lines | Methods |
 |---|---|---|
-| `scenes/town.js` | 4,916 | 198 |
 | `scenes/combat.js` | 1,568 | 94 |
 | `gfx/waterfx.js` | 1,491 | — |
+| `scenes/town.js` + `scenes/town/*` | 5,266 across 16 files | — |
 | everything else | 5,398 | — |
+
+`town.js` itself is 256 lines: construct, enter, update, draw, movement and two
+spatial queries. It coordinates the sixteen modules above rather than
+implementing them. The largest single town module is `town/plaza.js` (738),
+which is authored level content and is *meant* to be long.

@@ -20,6 +20,7 @@ ESM so Node reads `src/*.js` the same way the browser does.
 | Area | File | Notes |
 | --- | --- | --- |
 | Damage arithmetic | `tests/combat-math.test.js` | Swings, combos, crits, armour, shields, boss phases |
+| Enemy archetypes | `tests/enemies.test.js` | Behavior resolution, tuning overrides, per-archetype AI decisions |
 | XP and progression | `tests/progression.test.js` | Level curve, mastery, ability unlocks, gold, inventory |
 | Save / load | `tests/save.test.js` | Round trip, missing saves, malformed data, version handling |
 | Academics | `tests/academics.test.js` | Question bank integrity, adaptive tier ladder, grading |
@@ -45,6 +46,9 @@ Workflow: make the change → `npm test` → run the game → visual/gameplay QA
 
 ## Notes for future sessions
 
+- `src/game/enemyBehaviors.js` holds the enemy AI archetypes. A new enemy is an
+  entry in `ENEMIES` with a `behavior` — combat.js never branches on enemy id.
+  Bosses are the deliberate exception and stay scripted in `_updateBoss`.
 - `src/game/combatMath.js` holds the damage formulas as pure functions. The
   combat scene imports them, so tuning a number there changes the game and the
   tests together. Randomness stays in the scene and is passed in, which is what
