@@ -14,32 +14,19 @@
 
 import { Input } from '../core/input.js';
 import { Audio } from '../core/audio.js';
-import { drawText, textWidth } from '../gfx/font.js';
-import { panel, bar, dialogue, UI, Toasts } from '../gfx/ui.js';
-import { rect, rectOutline, disc, shadow, clamp, lerp, clamp01 } from '../gfx/pixel.js';
+import { dialogue, UI, Toasts } from '../gfx/ui.js';
+import { clamp, lerp } from '../gfx/pixel.js';
 import { drawCharacter, drawActor, drawPet } from '../gfx/actors.js';
-import { drawTree, drawPineTree, drawBush, drawRock, drawTorch, drawIcon, drawDummy } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
-import { WeaponShop, PotionShop, InventoryMenu } from './menus.js';
-import { hash, rand2, fillEllipse, loadBuildingArt, contactShadow, drawPropArt } from './town/primitives.js';
-import {
-  COTTAGE_ART, COTTAGE_H, COTTAGE_W, DUNGEON_ART, DUNGEON_H, DUNGEON_W, HOUSE_H, HOUSE_W,
-  SANCTUARY_ART, SANCTUARY_H, SANCTUARY_W, WATCH_ART, WATCH_H, WATCH_W,
-  drawBlacksmith, drawLibrary, drawMarker, drawMarket, drawPlayerHouse, drawPotionShop,
-  drawQuestBoard, drawSignpost, drawTavern, drawTrainingGround,
-} from './town/buildings.js';
-import { FOUNTAIN_H, FOUNTAIN_W, MOTE_COLORS, drawFountainSprite } from './town/fountain.js';
-import {
-  DECOR_ART,
-  drawButterfly, crystalGlow, lamp, brazier, fenceRun, bigTree,
-} from './town/props.js';
+import { InventoryMenu } from './menus.js';
+import { hash, contactShadow, drawPropArt } from './town/primitives.js';
+import { DECOR_ART, drawButterfly, crystalGlow, lamp, brazier, bigTree } from './town/props.js';
 import { MAP_W, MAP_H, ZOOM } from './town/dimensions.js';
 import { buildTown } from './town/layout.js';
-import { drawGround, buildFlare } from './town/ground.js';
-import { POND_W, POND_H, POND_WATER_RECTS } from './town/lake.js';
+import { drawHUD, drawNearPrompt, drawDebugOverview } from './town/hud.js';
+import { enterLocation, updateDialogue } from './town/interactions.js';
+import { drawGround } from './town/ground.js';
 import { drawNight } from './town/lighting.js';
-import { ROAD_TILE, GRASS_TILES, GRASS_TILE, PLAZA_TILES } from './town/tiles.js';
-import { ROAD_CELL, buildRoadCoverage, drawRoads, roadPath, strokeRoundedPath } from './town/roads.js';
 
 // Master Town Layout v5 (final spacing polish — coordinates LOCKED once
 // approved): a landscape settlement around Crystal Plaza with a compressed
@@ -78,27 +65,6 @@ export class TownScene {
   }
 
   // ---- town definition ----------------------------------------------------
-
-  // ---- Step 24: temporary development overview ----------------------------
-  // Toggled from the console via `window.__townDebug = true` (paired with a
-  // small `window.__townZoom` for whole-map screenshots). Draws the planned
-  // road centerlines and district tags scaled to stay readable at any zoom.
-  _drawDebugOverview(g) {
-    const Z = (typeof window !== 'undefined' && window.__townZoom) || ZOOM;
-    g.lineJoin = 'round'; g.lineCap = 'round';
-    for (const p of this.roadPlan) {
-      g.strokeStyle = p.kind === 'adventure' ? 'rgba(226,124,60,0.85)'
-        : p.kind === 'main' ? 'rgba(255,240,170,0.85)' : 'rgba(205,225,140,0.6)';
-      g.lineWidth = Math.max(p.width * 0.3, 2 / Z);
-      strokeRoundedPath(g, p.pts, 70);
-    }
-    const s = Math.max(2, Math.round(1.3 / Z));
-    for (const [name, x, y] of this.debugLabels) {
-      const w = textWidth(name, s) + 8 * s;
-      rect(g, x - w / 2, y - 5 * s, w, 10 * s, 'rgba(10,8,20,0.75)');
-      drawText(g, name, x, y - 3 * s, { color: '#ffd97a', align: 'center', scale: s });
-    }
-  }
 
   /** True if (x,y) sits inside (or near) any location's solid footprint. */
   _nearAnyDistrict(x, y, pad) {
@@ -147,7 +113,7 @@ export class TownScene {
     }
 
     if (this.overlay) { this.overlay.update(dt); return; }
-    if (this.dialogue) { this._updateDialogue(dt); return; }
+    if (this.dialogue) { updateDialogue(this, dt); return; }
 
     // movement with per-axis collision
     const ax = Input.axis();
@@ -182,7 +148,7 @@ export class TownScene {
       if (d < 30 && d < best) { best = d; this.near = loc; }
     }
 
-    if (this.near && Input.pressed('interact')) this._enter(this.near);
+    if (this.near && Input.pressed('interact')) enterLocation(this, this.near);
     if (Input.pressed('inventory')) { Audio.confirm(); this.overlay = new InventoryMenu(this.hero, () => { this.overlay = null; }); }
   }
 
@@ -195,77 +161,6 @@ export class TownScene {
     }
     if (dx) this.px = nx;
     if (dy) this.py = ny;
-  }
-
-  _enter(loc) {
-    Audio.confirm();
-    switch (loc.action) {
-      case 'training': this.hero.save(); this.hooks.toTraining(); break;
-      case 'weapon': this.hero.save(); if (this.hooks.toWeaponShop) this.hooks.toWeaponShop(); break;
-      case 'potion': this.hero.save(); if (this.hooks.toPotionShop) this.hooks.toPotionShop(); break;
-      case 'market': this.overlay = new PotionShop(this.hero, () => { this.overlay = null; }); break;
-      case 'pets': this.overlay = new InventoryMenu(this.hero, () => { this.overlay = null; }, 2); break;
-      case 'library': this.hero.save(); if (this.hooks.toLibrary) this.hooks.toLibrary(); break;
-      case 'quest': case 'guild': this._openQuest(loc.action === 'guild'); break;
-      case 'dungeon': this._enterGate(); break;
-      case 'rest': this._rest(); break;
-      case 'house': this.hero.save(); if (this.hooks.toHouse) this.hooks.toHouse(); break;
-    }
-  }
-
-  _rest() {
-    const healed = this.hero.s.hp < this.hero.maxHp || this.hero.s.mana < this.hero.maxMana;
-    this.hero.s.hp = this.hero.maxHp; this.hero.s.mana = this.hero.maxMana; this.hero.save();
-    this.particles.pickup(this.px, this.py - 12, '#b58bff');
-    this.toasts.push(healed ? 'The crystal restores you!' : 'Already at full health', this.px, this.py - 32, UI.good, { life: 1.6 });
-    Audio.levelUp();
-  }
-
-  _openQuest(atGuild) {
-    const q = this.hero.activeQuest();
-    const who = atGuild ? 'Guildmaster' : 'Captain Mara';
-    if (q) {
-      this.dialogue = { speaker: q.giver, lines: [q.intro, 'Objective: ' + q.objective, 'Rewards: ' + this._rewardText(q) + '. Head to the Dungeon Gate when ready!'], idx: 0 };
-    } else if (this.hero.s.quests.completed.includes('goblin_trouble')) {
-      this.dialogue = { speaker: who, lines: ['You cleared the goblin camp and felled their King. Embervale is in your debt!', 'Rest, train, and grow stronger — more adventures await.'], idx: 0 };
-    } else {
-      this.dialogue = { speaker: who, lines: ['No quests right now, hero. Come back soon.'], idx: 0 };
-    }
-    this.dialogueReveal = 0;
-  }
-
-  _rewardText(q) {
-    const r = q.reward; const parts = [];
-    if (r.gold) parts.push(r.gold + ' gold');
-    if (r.xp) parts.push(r.xp + ' XP');
-    if (r.item) parts.push('an item');
-    if (r.petChance) parts.push('a pet egg');
-    return parts.join(', ');
-  }
-
-  _enterGate() {
-    if (this.hero.s.quests.completed.includes('goblin_trouble')) {
-      this.dialogue = { speaker: 'Gate Guard', lines: ['The goblin threat is over. The gate is quiet now — return when new dangers stir.'], idx: 0 };
-      this.dialogueReveal = 0; return;
-    }
-    this.dialogue = {
-      speaker: 'Dungeon Gate',
-      lines: ['Beyond lies the Goblin Camp and the Goblin King. Ready yourself, hero.'],
-      idx: 0,
-      onDone: () => { this.hero.save(); this.hooks.toDungeon(); },
-    };
-    this.dialogueReveal = 0;
-  }
-
-  _updateDialogue(dt) {
-    this.dialogueReveal = Math.min(1, this.dialogueReveal + dt * 3);
-    if (Input.anyPressed('confirm', 'interact', 'light')) {
-      if (this.dialogueReveal < 1) { this.dialogueReveal = 1; return; }
-      const d = this.dialogue;
-      if (d.idx < d.lines.length - 1) { d.idx++; this.dialogueReveal = 0; Audio.select(); }
-      else { const done = d.onDone; this.dialogue = null; if (done) done(); else Audio.confirm(); }
-    }
-    if (Input.pressed('menu')) { this.dialogue = null; Audio.deny(); }
   }
 
   // ---- draw ---------------------------------------------------------------
@@ -307,10 +202,10 @@ export class TownScene {
     // every prop, road and sprite is exactly where the daytime pass put it.
     drawNight(this, g, Z);
 
-    this._drawNearPrompt(g);
+    drawNearPrompt(this, g);
 
     // development-only overview overlay (labels + road centerlines)
-    if (typeof window !== 'undefined' && window.__townDebug) this._drawDebugOverview(g);
+    if (typeof window !== 'undefined' && window.__townDebug) drawDebugOverview(this, g);
 
     // lamps + braziers glow on top
     for (const [x, y] of this.lamps) lamp(g, x, y, this.t);
@@ -322,7 +217,7 @@ export class TownScene {
     this.toasts.draw(g);
     g.restore();
 
-    this._drawHUD(g);
+    drawHUD(this, g);
 
     if (this.overlay) this.overlay.draw(g, this.W, this.H);
     if (this.dialogue) {
@@ -335,24 +230,6 @@ export class TownScene {
 
   _drawLocation(g, loc) {
     loc.draw(g);
-  }
-
-  // The interaction prompt is world-space UI, drawn AFTER the depth-sorted
-  // pass: it used to be painted inside _drawLocation, where anything south of
-  // the location (the Eldertree's colonnade, plaza planting by the fountain)
-  // could draw over the text.
-  _drawNearPrompt(g) {
-    const loc = this.near;
-    if (loc) {
-      const label = loc.label || { training: 'Enter Training Grounds', weapon: 'Enter Weapon Shop', potion: 'Enter Potion Shop', market: 'Browse Market', pets: 'Visit Pet Keeper', library: 'Enter Library', quest: 'Read Quest Board', guild: 'Enter Guild', dungeon: 'Enter Dungeon', rest: 'Rest', house: 'Enter Your House' }[loc.action] || 'Enter';
-      const w = textWidth('[E] ' + label) + 12;
-      // at the location's foot, but never over the player: when they stand
-      // south of the point (inside the near radius) drop it below their feet
-      const py = Math.max(loc.dy + 2, this.py + 3);
-      panel(g, loc.dx - w / 2, py, w, 13, { bg: 'rgba(12,10,22,0.9)' });
-      const blink = Math.floor(this.t * 3) % 2 === 0;
-      drawText(g, '[E] ' + label, loc.dx, py + 3, { color: blink ? UI.gold : UI.ink, align: 'center' });
-    }
   }
 
   _drawPlayer(g) {
@@ -373,37 +250,6 @@ export class TownScene {
   // decay from progress along the route rather than the old fixed world-Y
   // threshold — that constant went stale the moment districts moved.)
 
-  // ---- HUD + banners ------------------------------------------------------
-
-  _drawHUD(g) {
-    // slim plate: class + level, HP, gold
-    const pw = 118, ph = 22;
-    panel(g, 4, 4, pw, ph, { bg: 'rgba(12,10,22,0.82)' });
-    drawText(g, `${this.hero.cls().name}`, 8, 6, { color: UI.ink });
-    drawText(g, `Lv ${this.hero.s.level}`, pw - 2, 6, { color: UI.gold, align: 'right' });
-    bar(g, 8, 15, this.hero.s.hp, this.hero.maxHp, { w: 74, h: 4, color: '#e0483c' });
-    drawIcon(g, 'coin', pw - 26, 13);
-    drawText(g, `${this.hero.s.gold}`, pw - 16, 14, { color: UI.gold });
-
-    // transient district banner (top-center, fades)
-    if (this.districtBannerT > 0 && this.districtBanner) {
-      const a = clamp01(Math.min(1, this.districtBannerT * 1.5) * Math.min(1, (this.districtBannerT) * 2));
-      g.globalAlpha = a;
-      const w = textWidth(this.districtBanner, 2) + 24;
-      const bx = this.W / 2 - w / 2;
-      rect(g, bx, 12, w, 18, 'rgba(12,10,22,0.7)');
-      rect(g, bx, 12, w, 1, UI.gold); rect(g, bx, 29, w, 1, UI.gold);
-      drawText(g, this.districtBanner.toUpperCase(), this.W / 2, 15, { color: UI.gold, align: 'center', scale: 2, shadow: '#000' });
-      g.globalAlpha = 1;
-    }
-
-    // one-time control hint on load, then gone
-    if (this.introHintT > 0) {
-      g.globalAlpha = clamp01(Math.min(1, this.introHintT));
-      drawText(g, 'WASD move   E interact   I inventory', this.W / 2, this.H - 10, { color: 'rgba(230,223,251,0.55)', align: 'center' });
-      g.globalAlpha = 1;
-    }
-  }
 }
 
 // ============================================================ shared drawers
