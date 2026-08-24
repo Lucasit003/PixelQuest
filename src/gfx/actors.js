@@ -282,7 +282,7 @@ const WEAPONS = {
 
 // ------------------------------------------------------------------ specs
 
-const SPECS = {
+export const SPECS = {
   warrior:  { pal: 'warrior',  head: 'warriorHelm', torso: 'warrior',  weapon: 'sword',  h: 26 },
   mage:     { pal: 'mage',     head: 'mageHood',    torso: 'mage',     weapon: 'staff',  h: 26 },
   rogue:    { pal: 'rogue',    head: 'mageHood',    torso: 'warrior',  weapon: 'dagger', h: 25 },

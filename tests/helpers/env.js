@@ -25,6 +25,13 @@ export function clearStorage() {
   if (globalThis.localStorage) globalThis.localStorage.clear();
 }
 
+// Float-tolerant equality, for damage numbers that come out of the arithmetic
+// as 54.400000000000006. Gameplay rounds these before they matter.
+export function closeTo(actual, expected, msg) {
+  const ok = Math.abs(actual - expected) < 1e-9;
+  if (!ok) throw new Error(msg || `expected ${actual} to be close to ${expected}`);
+}
+
 // Silences the console.warn that save.js emits on malformed data, so a test that
 // deliberately corrupts a save doesn't spam the runner's output. Returns the
 // calls it swallowed, for assertions.
