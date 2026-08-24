@@ -90,9 +90,19 @@ Palettes are named-key objects (`gfx/actors.js` `PALETTES`) — `k` outline, `m`
 ## Production pipeline
 
 ```
-catalogue sheet → tools/sheetcut.py index → cut → assets/props/_src/ (full res)
-   → add DECOR_SIZE entry in town.js → tools/bake_props.py → assets/props/ (draw size)
+props      catalogue sheet → tools/sheetcut.py index → cut → assets/props/_src/
+              → DECOR_SIZE entry in town/props.js → tools/bake_props.py
+              → assets/props/                                   (draw size)
+
+buildings  assets/buildings/_src/  → tools/bake_props.py --buildings
+              → assets/buildings/                               (draw size)
+           sizes come from the *_W/*_H constants in town/buildings.js
 ```
+
+The bake picks its filter by reduction factor: LANCZOS up to 3x, BOX beyond.
+LANCZOS overshoots, and at the 4-6x the buildings need that overshoot becomes a
+white rim around every silhouette. The resize also runs in float — quantising
+premultiplied colour to bytes first drives low-alpha pixels to white.
 
 `bake_props.py` reads sizes from `DECOR_SIZE`, so the entry comes first and a size
 change means a re-bake. `DECOR_ART` auto-registers from the `DECOR_SIZE` keys.
