@@ -33,6 +33,13 @@ const DEPTH_MAX = 250;
 // math still uses the unscaled reach/width constants — this only affects drawing.
 const ACTOR_SCALE = 1.4;
 
+// How long an enemy keeps its 'attack' pose after committing to a swing. This
+// is an ANIMATION length, not a combat one — it must stay well under the
+// shortest attackCd (1.2s, the skeleton) so it can never delay a swing, and it
+// exists so a sprite attack animation can actually finish. Per-enemy override:
+// put `attackAnim` in that enemy's ENEMIES entry.
+const ATTACK_ANIM_HOLD = 0.25;
+
 // Stable pseudo-random in [0,1) from a world coordinate, for placing terrain
 // detail that doesn't flicker as the camera scrolls.
 function hash(x) {
@@ -157,7 +164,7 @@ export class CombatScene {
       x, depth, z: 0, vz: 0, facing: -1,
       hp: Math.round(def.hp * lvScale), maxHp: Math.round(def.hp * lvScale),
       state: 'idle', animTime: rand(0, 1), animDuration: 0,
-      flash: 0, attackTimer: rand(0.3, def.attackCd), hurtTimer: 0,
+      flash: 0, attackTimer: rand(0.3, def.attackCd), hurtTimer: 0, attackAnimT: 0,
       knockVx: 0, knockVdepth: 0, stunned: 0, frozen: 0,
       scale: 1, w: def.w,
       tint: def.tint, tintDark: def.tintDark, tintLite: def.tintLite,
@@ -659,10 +666,16 @@ export class CombatScene {
   }
 
   _enemyTryMelee(e, dt) {
-    e.state = 'idle';
+    // The pose is held for ATTACK_ANIM_HOLD, the swing itself is not. Without
+    // the hold this reassigns 'idle' on the very next frame, so a sprite-backed
+    // attack animation gets exactly one frame on screen before it is cancelled.
+    // Purely a rendering state: cooldown, windup, reach and damage are untouched.
+    e.attackAnimT = Math.max(0, (e.attackAnimT || 0) - dt);
+    e.state = e.attackAnimT > 0 ? 'attack' : 'idle';
     if (e.attackTimer <= 0) {
       e.attackTimer = e.def.attackCd;
       e.state = 'attack'; e.animTime = 0;
+      e.attackAnimT = e.tuning.attackAnim ?? ATTACK_ANIM_HOLD;
       e._swing = e.tuning.windup ?? 0.18; // telegraph, then the hit lands
     }
     if (e._swing > 0) {
@@ -1121,7 +1134,7 @@ export class CombatScene {
     const sc = e.isBoss ? e.scale : e.scale * ACTOR_SCALE;
     drawCharacter(g, {
       x: e.x, y: e.depth, z: e.z, facing: e.facing,
-      sprite: e.sprite, state: e.hp <= 0 ? 'hurt' : e.state,
+      sprite: e.sprite, state: e.hp <= 0 ? 'down' : e.state,
       animTime: e.animTime, animDuration: 0.3, flash: e.flash,
       alpha: e.alpha ?? 1, scale: sc,
       tint: e.tint, tintDark: e.tintDark, tintLite: e.tintLite,
