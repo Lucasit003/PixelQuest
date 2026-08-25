@@ -243,12 +243,16 @@ function flareProgress(fl, FC, R, px, py) {
 // never a flat wash circle. `flares` are the road-widen zones at each exit —
 // included so the paving flows into the roads with no hard seam.
 // Pick one of the 4 base stone variants, deterministic per cell.
+// Nine variants, not four. The floor drew from base1..base4 only while the road
+// families already mixed five more from the same pack, so the square was both
+// flatter than the roads leading into it and repeated twice as often. The mix_
+// tiles are the same masonry at the same scale — they were loaded and used by
+// roads.js all along, just never offered to the plaza.
+const PLAZA_BASE_POOL = ['base1', 'base2', 'base3', 'base4',
+                         'mix_base01', 'mix_base02', 'mix_base03', 'mix_base04', 'mix_base05'];
 function plazaBase(cc, rr) {
   const h = hash(cc * 7.1 + rr * 3.7);
-  if (h < 0.25) return PLAZA_TILES.base1;
-  if (h < 0.5) return PLAZA_TILES.base2;
-  if (h < 0.75) return PLAZA_TILES.base3;
-  return PLAZA_TILES.base4;
+  return PLAZA_TILES[PLAZA_BASE_POOL[Math.floor(h * PLAZA_BASE_POOL.length) % PLAZA_BASE_POOL.length]];
 }
 // Lay one paving tile in running bond. Every variant in the pack puts its
 // horizontal courses on the same rows — 4, 9, 14 and 19 in over 70% of them —
@@ -261,8 +265,12 @@ function plazaBase(cc, rr) {
 // so the step is done by drawing the two pieces of a horizontally-rotated tile
 // rather than by moving the tile off its cell — the cell has to stay put, since
 // the plaza's zone and edge tests are keyed to it.
-function layTile(g, tile, px, py) {
-  const off = 12;                       // ~half of ROAD_TILE, and cell-aligned
+// Whole tiles are blitted here, so unlike the road there is no ROAD_CELL
+// constraint on the step and the phase can be any integer. Drawn from a hash of
+// the tile row: a fixed 0/12 alternation is still a pattern, it just moves the
+// repeat from a 28-unit cycle to a 56-unit one.
+function layTile(g, tile, px, py, rr) {
+  const off = 1 + Math.floor(hash(rr * 23.7 + 311) * (ROAD_TILE - 2));
   g.drawImage(tile.img, off, 0, ROAD_TILE - off, ROAD_TILE, px, py, ROAD_TILE - off, ROAD_TILE);
   g.drawImage(tile.img, 0, 0, off, ROAD_TILE, px + (ROAD_TILE - off), py, off, ROAD_TILE);
 }
@@ -344,7 +352,7 @@ function plaza(g, cx, cy, r, flares) {
         // ---- FLARE: the transition trapezoid beyond the plaza's own edge —
         // material eases from clean paving to a more worn, road-adjacent mix.
         tile = flareTile(cc, rr, flareProgress(flareHit, FC, r, tcx, tcy));
-        if (tile && tile.ready) { if (rr & 1) layTile(g, tile, px, py); else g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE); }
+        if (tile && tile.ready) layTile(g, tile, px, py, rr);
         else rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84');
         continue;
       }
@@ -386,7 +394,7 @@ function plaza(g, cx, cy, r, flares) {
         }
       }
 
-      if (tile && tile.ready) { if (rr & 1) layTile(g, tile, px, py); else g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE); }
+      if (tile && tile.ready) layTile(g, tile, px, py, rr);
       else rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback, same stone family
     }
   }

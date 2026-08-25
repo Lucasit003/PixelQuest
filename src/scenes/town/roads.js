@@ -337,7 +337,15 @@ export function drawRoads(scene, g, visW, visH) {
       if (cell.edge === 1 && hash(c * 13.1 + r * 29.7) > 0.5) continue;
       // Sample the stone from the coarse tile grid, not per coverage cell,
       // so a single tile's pattern spans several cells uninterrupted.
-      const tr = Math.floor(y / ROAD_TILE);
+      // The courses are the other half of the lattice, and the more visible half:
+      // every variant carries its joints on the same rows, so the horizontal
+      // mortar lines run unbroken from one side of the map to the other. Giving
+      // each tile COLUMN its own vertical phase makes those lines step every 28
+      // units instead of ruling straight through, which is what stone laid by
+      // hand actually does. Same ROAD_CELL constraint as the horizontal phase.
+      const tc0 = Math.floor(x / ROAD_TILE);
+      const ys = y + Math.floor(hash(tc0 * 11.9 + 47) * 7) * ROAD_CELL;
+      const tr = Math.floor(ys / ROAD_TILE);
       // Running bond. Every variant in the pack puts its horizontal courses on
       // the same rows — 4, 9, 14 and 19 in over 70% of them — so laying the
       // tiles on a plain lattice lines the joints up with their neighbours in
@@ -350,11 +358,15 @@ export function drawRoads(scene, g, visW, visH) {
       // has to stay inside the tile: cells are ROAD_CELL wide, so a sampled x
       // of 26 would read 26..30 out of a 28-wide tile and come back clipped.
       // Any offset used here has to be a multiple of ROAD_CELL.
-      const xs = x + ((tr & 1) ? 12 : 0);
+      // Seven phases off a hash rather than two off row parity. A 0/12 alternation
+      // is still a pattern — every other course lands in the same place, so the
+      // vertical joints repeat on a 56-unit cycle instead of a 28-unit one. Any
+      // multiple of ROAD_CELL is legal, so the phase is drawn from all seven.
+      const xs = x + Math.floor(hash(tr * 17.3 + 91) * 7) * ROAD_CELL;
       const tc = Math.floor(xs / ROAD_TILE);
       const tile = roadTileFor(cell.fam, tc, tr);
       if (tile && tile.ready) {
-        g.drawImage(tile.img, xs - tc * ROAD_TILE, y - tr * ROAD_TILE, C, C, x, y, C, C);
+        g.drawImage(tile.img, xs - tc * ROAD_TILE, ys - tr * ROAD_TILE, C, C, x, y, C, C);
       } else {
         rect(g, x, y, C, C, '#a89e84');
       }
