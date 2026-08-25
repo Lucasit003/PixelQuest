@@ -87,21 +87,19 @@ export function windAt(x, y, t) {
 //          and moves only the crown (a tree trunk does not bend, its canopy
 //          does). This is what stops big trees looking rubbery.
 //   bands  slices used. More is smoother but costs more draw calls.
+// Only bushes and small plants move. Everything else in a town reads as
+// structure — a tree's mass, a banner's fixings — and eye-level foliage is
+// where wind is legible anyway. Amplitude is the PEAK PIXEL travel of the
+// sprite's top; the base never moves.
 const SWAY_RULES = [
-  // fabric — the most visibly mobile thing in a town, and genuinely limp
-  [/^(banner|flag|clothes_line|laundry_line|awning)/,               4.5, 1.35, 5],
-  // fine grasses and reeds — small, fast, whole-blade motion
-  [/^(grass_|wetgrass|rockgrass|nv_tallgrass|nv_weeds|weeds_|cattail|reed|waterleaf|fernbank|fern_)/,
-                                                                    2.2, 1.15, 4],
+  // fine grasses, reeds and ferns — the fastest, loosest things on the map
+  [/^(grass_|wetgrass|rockgrass|nv_tallgrass|nv_weeds|weeds_|cattail|reed|waterleaf|fernbank|fern_)/, 2.2],
   // flowers and soft leafy fill
-  [/^(flower|grass_bloom|leafplant|mushroom|myst_flower)/,           1.8, 1.25, 4],
-  // shrubs — moderate, mass near the ground
-  [/^(bush|nv_bush|myst_bush|topiary|hedge)/,                        2.0, 1.80, 4],
-  // crops sway, but they are planted and heavy-headed
-  [/^(crop_|wheat)/,                                                 1.8, 1.40, 4],
-  // trees — trunk essentially rigid, crown carries the motion
-  [/^(tree_|deciduous_tree|pine_tree|myst_tree|mystic_tree|tree_sapling)/,
-                                                                     3.2, 2.60, 6],
+  [/^(flower|grass_bloom|leafplant|mushroom|myst_flower)/,                                            1.8],
+  // shrubs — heavier, so they lean less for the same gust
+  [/^(bush|nv_bush|myst_bush|topiary|hedge)/,                                                         1.5],
+  // crops are small planted stems too, and a moving field sells the farm
+  [/^(crop_|wheat)/,                                                                                  1.8],
 ];
 
 // ---- camera culling ---------------------------------------------------------
@@ -160,8 +158,8 @@ export function propVisible(g, x, y, w, h, shadowRx = 0) {
 /** The sway profile for a prop name, or null if it must stay rigid. */
 export function swayFor(name) {
   if (!name) return null;
-  for (const [re, amp, curve, bands] of SWAY_RULES) {
-    if (re.test(name)) return { amp, curve, bands };
+  for (const [re, amp] of SWAY_RULES) {
+    if (re.test(name)) return { amp };
   }
   return null;
 }
@@ -239,73 +237,52 @@ export function drawPropArt(g, art, x, y, w, h, shadowRx, flip = false, t = null
  * prop's world position, footprint, collision or sort key is touched — this only
  * changes how its pixels are rasterised.
  */
+// A plant bends by shearing the frame it is drawn in, not by slicing it up.
+//
+// This replaces a banded version that cut the sprite into 2-6 horizontal strips
+// and offset each one as a block. On art this small that reads as the top half
+// moving, then the bottom half — the steps are as tall as the thing that is
+// supposed to be bending. A shear gives every PIXEL ROW its own offset, so the
+// plant leans as one continuous body, and it costs a single drawImage instead
+// of three to six.
+//
+// The local frame puts the origin at the base centre, so the sprite occupies
+// y = -h..0. A shear maps x -> x + c*y, which leaves y = 0 untouched — the
+// plant stays rooted exactly where it stands — and displaces the top by -c*h.
+// Wanting the top to travel `wind` gives c = -wind / h.
+//
+// Mirrored props take the opposite shear: g.scale(-1, 1) reverses the local x
+// axis, so reusing the sign would blow them upwind of their neighbours.
 function drawSwayed(g, art, x, y, w, h, flip, t) {
-  const { amp, curve } = art.sway;
-  // Taller things swing further in absolute pixels, but the response is damped
-  // so a 60px tree does not travel three times as far as a 20px shrub.
-  // windAt spans about -1.45..1.45; normalising it here means `amp` is read
-  // directly in pixels. Height is a gentle modifier, not a multiplier — a tall
-  // tree should lean a little further than a shrub, not three times as far.
+  // windAt spans about -1.45..1.45, so normalising lets `amp` be read straight
+  // off in pixels. Height is a gentle modifier, not a multiplier — a tall reed
+  // leans a little further than a low shrub, not three times as far.
   const w01 = windAt(x, y, t) / 1.45;
-  const heightScale = 0.78 + Math.min(0.45, h / 150);
-  const wind = w01 * amp * heightScale;
+  const wind = w01 * art.sway.amp * (0.78 + Math.min(0.45, h / 150));
 
-  // Two early-outs that carry almost all of this feature's performance.
-  //
-  // The lean is only ever a couple of pixels at this art scale, and for much of
-  // the gust cycle it rounds to nothing at all. When the top band would not
-  // move a whole pixel there is no bend to draw, so the prop takes the ordinary
-  // single blit — which at any moment is most of them.
-  const peak = Math.abs(wind);
-  if (peak < 0.5) {
+  const bx = Math.round(x);
+  const top = Math.round(y - h);
+  const left = Math.round(-w / 2);
+
+  // For much of the gust cycle the lean is under half a pixel, and with
+  // smoothing off every row then samples exactly where it would have anyway.
+  // Those props take the ordinary blit and skip the transform entirely, which
+  // at any given moment is most of them.
+  if (Math.abs(wind) < 0.35) {
     if (flip) {
-      g.save(); g.translate(Math.round(x), 0); g.scale(-1, 1);
-      g.drawImage(art.img, Math.round(-w / 2), Math.round(y - h), w, h);
+      g.save(); g.translate(bx, 0); g.scale(-1, 1);
+      g.drawImage(art.img, left, top, w, h);
       g.restore();
     } else {
-      g.drawImage(art.img, Math.round(x - w / 2), Math.round(y - h), w, h);
+      g.drawImage(art.img, Math.round(x - w / 2), top, w, h);
     }
     return;
   }
-  // Bands are spent in proportion to the travel available. Slicing a sprite six
-  // ways to express two pixels of bend buys nothing but draw calls, so the count
-  // scales with the lean and is capped by the category's own maximum.
-  // Also capped by the sprite's own height: a 12px grass tuft has nowhere to
-  // put five slices, and two reads identically for a fraction of the cost.
-  const bands = Math.max(2, Math.min(art.sway.bands,
-                                     Math.round(peak) + 2,
-                                     Math.round(h / 12) + 1));
 
-  const left = Math.round(x - w / 2);
-  const top = Math.round(y - h);
-  const srcH = art.img.naturalHeight || h;
-  const srcW = art.img.naturalWidth || w;
-
-  if (flip) { g.save(); g.translate(Math.round(x), 0); g.scale(-1, 1); }
-
-  for (let i = 0; i < bands; i++) {
-    // destination rows for this band, contiguous so no gap can open between them
-    const y0 = Math.round((i * h) / bands);
-    const y1 = Math.round(((i + 1) * h) / bands);
-    const bh = y1 - y0;
-    if (bh <= 0) continue;
-
-    // u = height of this band's MIDDLE above the base, 0 at the ground, 1 at the
-    // top. pow(u, curve) is what keeps a trunk still while its crown moves.
-    const u = 1 - (y0 + bh / 2) / h;
-    const dx = i === bands - 1 ? 0 : Math.round(wind * Math.pow(u, curve));
-
-    // matching source rows
-    const sy0 = Math.round((y0 * srcH) / h);
-    const sy1 = Math.round((y1 * srcH) / h);
-    const sh = Math.max(1, sy1 - sy0);
-
-    // In the mirrored frame the x axis is reversed, so the offset is negated to
-    // keep the wind blowing the same way in WORLD space for flipped props.
-    const ox = flip ? -dx : dx;
-    const dxLeft = flip ? Math.round(-w / 2) + ox : left + ox;
-    g.drawImage(art.img, 0, sy0, srcW, sh, dxLeft, top + y0, w, bh);
-  }
-
-  if (flip) g.restore();
+  g.save();
+  g.translate(bx, Math.round(y));
+  if (flip) g.scale(-1, 1);
+  g.transform(1, 0, (flip ? wind : -wind) / h, 1, 0, 0);
+  g.drawImage(art.img, left, -h, w, h);
+  g.restore();
 }
