@@ -75,6 +75,7 @@ export function stripAmbient(scene, FC) {
   scene.braziers = scene.braziers.filter(([x, y]) => !onPlaza(x, y));
   scene.butterflies = scene.butterflies.filter((b) => !onPlaza(b.x, b.y));
   scene.crystalGlows = scene.crystalGlows.filter(([x, y]) => !onPlaza(x, y));
+
   return {
     npcs: before.npcs - scene.npcs.length, trees: before.trees - scene.trees.length,
     lamps: before.lamps - scene.lamps.length, braziers: before.braziers - scene.braziers.length,
@@ -201,4 +202,38 @@ export function dressFlowerGarden(scene, FC, H) {
   }
   n.butterflies = 9;
   return n;
+}
+
+// ---------------------------------------------------------------------------
+// Props from NEIGHBOURING districts stand inside the plaza's frame too: the
+// riverbank planting reaches in from the west with trees, nv_ scrub, mushrooms
+// and rocks. They are placed by riverdecor.js and its siblings, never by
+// plaza.js's put(), so the demolition switch cannot see them.
+//
+// This MUST run after buildTown rather than inside buildPlazaDecor. layout.js
+// plants the river, bridge, waterfall and riverfront AFTER the plaza pass —
+// the plaza deliberately resets scene.decor, so everything riverside has to
+// come later. A filter inside the plaza pass therefore removes nothing,
+// because the props do not exist yet. That cost a full verification round:
+// the cut ran, reported success, and the trees were still standing.
+//
+// Cut on the WEST side only. The Ancient City's wall and paving reach into the
+// frame's top-RIGHT (dx +240..+466) and that district is being actively
+// rebuilt, so its edge is left intact. The bounds also stop well short of the
+// lake and the river proper — the lake's centre is dx -750 — so this clears
+// what leans into the plaza without reaching the districts it belongs to.
+// ---------------------------------------------------------------------------
+export function stripPlazaFrame(scene, FC) {
+  if (!PLAZA_STRIP || !FC) return null;
+  const inFrame = (d) => {
+    const dx = d.x - FC.x, dy = d.y - FC.y;
+    return dx < -60 && dx > -520 && dy > -320 && dy < 360;
+  };
+  const before = scene.decor.length + scene.groundDecor.length;
+  scene.decor = scene.decor.filter((d) => !inFrame(d));
+  scene.groundDecor = scene.groundDecor.filter((d) => !inFrame(d));
+  const tBefore = scene.trees.length;
+  scene.trees = scene.trees.filter((t) => !inFrame(t));
+  return { props: before - (scene.decor.length + scene.groundDecor.length),
+           trees: tBefore - scene.trees.length };
 }

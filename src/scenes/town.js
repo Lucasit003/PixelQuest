@@ -23,6 +23,7 @@ import { hash, contactShadow, drawPropArt, propVisible } from './town/primitives
 import { DECOR_ART, drawButterfly, crystalGlow, lamp, brazier, bigTree } from './town/props.js';
 import { MAP_W, MAP_H, ZOOM } from './town/dimensions.js';
 import { buildTown } from './town/layout.js';
+import { stripPlazaFrame } from './town/plazalife.js';
 import { drawHUD, drawNearPrompt, drawDebugOverview } from './town/hud.js';
 import { enterLocation, updateDialogue } from './town/interactions.js';
 import { drawGround } from './town/ground.js';
@@ -59,6 +60,9 @@ export class TownScene {
     this.introHintT = 4.5; // brief control hint, then it fades for good
 
     buildTown(this);
+    // Clears district planting that leans into the plaza frame while the site
+    // is stripped for rebuilding. No-op once PLAZA_STRIP is off.
+    stripPlazaFrame(this, this.plazaFocus);
     // player starts just south of the plaza (the world origin)
     this.px = this.plazaCenter.x; this.py = this.plazaCenter.y + 60;
     this.near = null;
