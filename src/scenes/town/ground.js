@@ -250,6 +250,23 @@ function plazaBase(cc, rr) {
   if (h < 0.75) return PLAZA_TILES.base3;
   return PLAZA_TILES.base4;
 }
+// Lay one paving tile in running bond. Every variant in the pack puts its
+// horizontal courses on the same rows — 4, 9, 14 and 19 in over 70% of them —
+// so a plain lattice lines the joints up with their neighbours in both axes at
+// once and the floor reads as a grid of squares rather than as masonry.
+// Stepping alternate tile courses sideways breaks the VERTICAL joints the way
+// paving is actually laid, and leaves the horizontal courses running on.
+//
+// The tile wraps horizontally (its last column is byte-identical to its first),
+// so the step is done by drawing the two pieces of a horizontally-rotated tile
+// rather than by moving the tile off its cell — the cell has to stay put, since
+// the plaza's zone and edge tests are keyed to it.
+function layTile(g, tile, px, py) {
+  const off = 12;                       // ~half of ROAD_TILE, and cell-aligned
+  g.drawImage(tile.img, off, 0, ROAD_TILE - off, ROAD_TILE, px, py, ROAD_TILE - off, ROAD_TILE);
+  g.drawImage(tile.img, 0, 0, off, ROAD_TILE, px + (ROAD_TILE - off), py, off, ROAD_TILE);
+}
+
 function plazaWorn(cc, rr) { return hash(cc * 2.9 + rr * 5.3 + 40) < 0.5 ? PLAZA_TILES.worn1 : PLAZA_TILES.worn2; }
 function plazaWeathered(cc, rr) { return hash(cc * 4.1 + rr * 1.7 + 50) < 0.5 ? PLAZA_TILES.cracked : PLAZA_TILES.weathered; }
 
@@ -327,7 +344,7 @@ function plaza(g, cx, cy, r, flares) {
         // ---- FLARE: the transition trapezoid beyond the plaza's own edge —
         // material eases from clean paving to a more worn, road-adjacent mix.
         tile = flareTile(cc, rr, flareProgress(flareHit, FC, r, tcx, tcy));
-        if (tile && tile.ready) g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE);
+        if (tile && tile.ready) { if (rr & 1) layTile(g, tile, px, py); else g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE); }
         else rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84');
         continue;
       }
@@ -369,7 +386,7 @@ function plaza(g, cx, cy, r, flares) {
         }
       }
 
-      if (tile && tile.ready) g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE);
+      if (tile && tile.ready) { if (rr & 1) layTile(g, tile, px, py); else g.drawImage(tile.img, px, py, ROAD_TILE, ROAD_TILE); }
       else rect(g, px, py, ROAD_TILE, ROAD_TILE, '#a89e84'); // loading fallback, same stone family
     }
   }

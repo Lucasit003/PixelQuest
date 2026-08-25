@@ -337,10 +337,24 @@ export function drawRoads(scene, g, visW, visH) {
       if (cell.edge === 1 && hash(c * 13.1 + r * 29.7) > 0.5) continue;
       // Sample the stone from the coarse tile grid, not per coverage cell,
       // so a single tile's pattern spans several cells uninterrupted.
-      const tc = Math.floor(x / ROAD_TILE), tr = Math.floor(y / ROAD_TILE);
+      const tr = Math.floor(y / ROAD_TILE);
+      // Running bond. Every variant in the pack puts its horizontal courses on
+      // the same rows — 4, 9, 14 and 19 in over 70% of them — so laying the
+      // tiles on a plain lattice lines the joints up with their neighbours in
+      // both axes at once, and the paving reads as a grid of squares rather
+      // than as masonry. Stepping alternate tile courses sideways breaks the
+      // VERTICAL joints the way paving is actually laid, while leaving the
+      // horizontal courses to run on, which is what courses should do.
+      //
+      // The step is 12 and not a true half-tile of 14 because the source rect
+      // has to stay inside the tile: cells are ROAD_CELL wide, so a sampled x
+      // of 26 would read 26..30 out of a 28-wide tile and come back clipped.
+      // Any offset used here has to be a multiple of ROAD_CELL.
+      const xs = x + ((tr & 1) ? 12 : 0);
+      const tc = Math.floor(xs / ROAD_TILE);
       const tile = roadTileFor(cell.fam, tc, tr);
       if (tile && tile.ready) {
-        g.drawImage(tile.img, x - tc * ROAD_TILE, y - tr * ROAD_TILE, C, C, x, y, C, C);
+        g.drawImage(tile.img, xs - tc * ROAD_TILE, y - tr * ROAD_TILE, C, C, x, y, C, C);
       } else {
         rect(g, x, y, C, C, '#a89e84');
       }
