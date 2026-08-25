@@ -356,33 +356,63 @@ function drawEldertree(g, cx, baseY, t) {
 
 // ---- Butterflies ---------------------------------------------------------
 // Six-frame flap strips (12x9 per frame) baked from assets/butterfly.png.
-// Each butterfly owns a home point and wanders around it on two slow sine
-// octaves — never a straight line, never the same loop twice in a row to the
-// eye — with a bob that follows the wingbeat. They are drawn in the overlay
-// pass: they fly, so nothing on the ground should ever draw over them.
+//
+// The flight used to be two summed sines, which traces a smooth closed loop.
+// That is a moth's idea of flying, or a bee's — a butterfly is the least smooth
+// thing in a garden. It commits to a short heading, darts, coasts, changes its
+// mind, and drops height between wingbeats. All three of those are modelled
+// here, and it is the last one the eye actually reads.
+//
+// Still driven entirely off `t`, with no per-frame state: the same time always
+// gives the same position, which is what lets the render harnesses hash a frame
+// and compare it. Randomness comes from hash() keyed on the butterfly's own
+// home point, so two butterflies over the same bed never fly in step.
 const BUTTERFLY_ART = {};
 for (const n of ['blue', 'violet', 'gold', 'white']) BUTTERFLY_ART[n] = loadBuildingArt(`assets/props/butterfly_${n}.png`);
 const BF_W = 12, BF_H = 9;
+const BF_LEG = 0.95;          // seconds committed to one heading
+
 function drawButterfly(g, b, t) {
   const art = BUTTERFLY_ART[b.col];
   if (!art.ready) return;
+  // Derived rather than stored, so every existing spawn site keeps working
+  // unchanged — they push {x, y, col, rx, ry, speed, phase} and nothing else.
+  const seed = b.x * 0.37 + b.y * 0.71 + b.phase * 13.1;
   const tt = t * b.speed + b.phase;
-  // wander: two octaves, unrelated periods, so the path never closes visibly
-  const x = b.x + Math.sin(tt * 0.31) * b.rx + Math.sin(tt * 0.83 + 1.7) * b.rx * 0.35;
-  const y = b.y + Math.cos(tt * 0.23 + 0.6) * b.ry + Math.sin(tt * 0.71) * b.ry * 0.3;
-  // wingbeat: ~7 flaps/s over the four TOP-DOWN frames only (open, half,
-  // half, open) — the strip's edge-on frames 2/3 read as a vertical sliver
-  // at this size and are skipped; the body dips a pixel on the closed beat
-  const FLAP = [0, 1, 4, 5];
-  const k = Math.floor((t * 7 + b.phase) % 4);
-  const f = FLAP[k];
-  const bob = k === 1 ? 1 : 0;
-  // face the direction of travel (dx sign) by mirroring
-  const dx = Math.cos(tt * 0.31) * b.rx * 0.31 + Math.cos(tt * 0.83 + 1.7) * b.rx * 0.35 * 0.83;
-  const px = Math.round(x), py = Math.round(y + bob);
+
+  // ---- path: legs, not orbits ---------------------------------------------
+  const i = Math.floor(tt / BF_LEG);
+  const u = tt / BF_LEG - i;
+  const at = (k) => [(hash(seed + k * 13.7) - 0.5) * 2 * b.rx,
+                     (hash(seed + 511 + k * 7.3) - 0.5) * 2 * b.ry];
+  // Roughly one leg in four is a REST: it has found something and stays on it,
+  // wings beating slowly. Without these the flight is relentless and reads as
+  // machinery; the pauses are what make the darting look like a decision.
+  const resting = (k) => hash(seed + 977 + k * 3.9) < 0.26;
+  const rest = resting(i);
+  const [x0, y0] = at(i);
+  const [x1, y1] = rest ? [x0, y0] : at(i + 1);
+  // Fast out of the turn, slow into the next one. That asymmetry is the whole
+  // difference between a dart and a drift; an eased-both-ends curve just gives
+  // back the sine loop this replaced.
+  const e = 1 - Math.pow(1 - u, 2.6);
+  const x = b.x + x0 + (x1 - x0) * e;
+  let y = b.y + y0 + (y1 - y0) * e;
+
+  // ---- wingbeat, and the bob that comes off it ----------------------------
+  // Height is lost between beats and won back on the downstroke, so the path
+  // scallops instead of running level. Frame and bob are taken from the same
+  // phase; driving them separately makes the wings fight the body.
+  const beat = (t * (rest ? 3.4 : 9.5) + b.phase * 3) % 1;
+  const FLAP = [0, 1, 4, 5];   // top-down frames only — 2 and 3 are edge-on and
+  const f = FLAP[Math.min(3, Math.floor(beat * 4))];   // vanish at this size
+  y -= Math.sin(beat * Math.PI * 2) * (rest ? 0.5 : 2.4);
+
+  const px = Math.round(x), py = Math.round(y);
   contactShadow(g, px, py + 6, 3, 1, 0.14);
   g.save();
-  if (dx < 0) { g.translate(px, 0); g.scale(-1, 1); g.translate(-px, 0); }
+  // face the way it is going, not the way it is leaning
+  if (x1 - x0 < 0) { g.translate(px, 0); g.scale(-1, 1); g.translate(-px, 0); }
   g.drawImage(art.img, f * BF_W, 0, BF_W, BF_H, px - BF_W / 2, py - BF_H / 2, BF_W, BF_H);
   g.restore();
 }

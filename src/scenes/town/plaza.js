@@ -25,6 +25,7 @@ import { ROAD_CELL } from './roads.js';
 import { DECOR_ART } from './props.js';
 import { drawPropArt } from './primitives.js';
 import { POND_W, POND_H } from './lake.js';
+import { dressFlowerGarden } from './plazalife.js';
 
 export function buildPlazaDecor(scene, FC) {
   scene.decor = [];        // depth-sorted against the player
@@ -731,6 +732,13 @@ export function buildPlazaDecor(scene, FC) {
            { flat: true, flip: h3 > 0.5, road: 14 }, 0.75);
     }
   }
+
+  // The two living corners. Runs last, so the garden arranges itself around
+  // every mass and vignette already on the ground. Being after MICRO costs
+  // nothing: that pass places flat groundDecor, which never enters `placed`
+  // and so blocks nothing. See plazalife.js.
+  const gardenN = dressFlowerGarden(scene, FC, { area, set, bed, station });
+  if (typeof window !== 'undefined' && window.__plazaCounts) console.log('flower garden:', gardenN);
 
   scene.propGroups.push({ fn: (g) => {
     for (const d of scene.groundDecor) drawPropArt(g, DECOR_ART[d.name], d.x, d.y, d.w, d.h, 0, d.flip);
