@@ -27,6 +27,14 @@ const names=[...new Set(sc.decor.map(d=>d.name))].sort();
 const sways=names.filter(n=>swayFor(n)), still=names.filter(n=>!swayFor(n));
 const counts={}; for(const d of sc.decor) counts[d.name]=(counts[d.name]||0)+1;
 const tally=(list)=>list.reduce((a,n)=>a+counts[n],0);
+// A prop at NaN coordinates draws nothing but poisons the scene's depth sort:
+// every comparison against its key returns NaN, so (a,b)=>a.y-b.y stops being a
+// consistent ordering and V8 arranges unrelated props arbitrarily. Cheap to
+// check, invisible when it breaks, so it is checked here every time.
+const nan = sc.decor.filter(d=>!Number.isFinite(d.sortY) || !Number.isFinite(d.x));
+say(nan.length ? ('!! '+nan.length+' props at NaN coords: '+[...new Set(nan.map(d=>d.name))].join(', '))
+               : 'depth-sort keys: all finite, OK');
+say('');
 say('distinct decor names: '+names.length);
 say('  SWAY  '+sways.length+' names / '+tally(sways)+' props');
 say('  STILL '+still.length+' names / '+tally(still)+' props');
