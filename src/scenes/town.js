@@ -24,6 +24,7 @@ import { DECOR_ART, drawButterfly, crystalGlow, lamp, brazier, bigTree } from '.
 import { MAP_W, MAP_H, ZOOM } from './town/dimensions.js';
 import { buildTown } from './town/layout.js';
 import { stripPlazaFrame } from './town/plazalife.js';
+import { openRoadGates } from './town/passability.js';
 import { drawHUD, drawNearPrompt, drawDebugOverview } from './town/hud.js';
 import { enterLocation, updateDialogue } from './town/interactions.js';
 import { drawGround } from './town/ground.js';
@@ -63,6 +64,10 @@ export class TownScene {
     // Clears district planting that leans into the plaza frame while the site
     // is stripped for rebuilding. No-op once PLAZA_STRIP is off.
     stripPlazaFrame(this, this.plazaFocus);
+    // Cut a gate where a wall's collision closes a carriageway. Must run after
+    // buildTown: roads, city and plaza are separate passes and only the
+    // finished scene knows where they landed. See passability.js.
+    this._gates = openRoadGates(this);
     // player starts just south of the plaza (the world origin)
     this.px = this.plazaCenter.x; this.py = this.plazaCenter.y + 60;
     this.near = null;
