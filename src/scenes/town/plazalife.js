@@ -20,6 +20,69 @@
 
 import { hash } from './primitives.js';
 
+// ---------------------------------------------------------------------------
+// DEMOLITION SWITCH
+//
+// Holds the whole plaza clear of dressing so it can be rebuilt from bare
+// ground, keeping only the four crop plots and the fences that enclose them.
+//
+// Done as a switch rather than by deleting the dressing code, for three
+// reasons. buildPlazaDecor is an authored level another session is actively
+// extending — cutting it would throw away their market nook, traveller camp,
+// memorial garden and forest edge along with everything else. Reverting is one
+// word here versus reconstructing a thousand lines. And every composition
+// decision stays on disk to be read while the corner is rebuilt.
+//
+// Roads, the fountain and every gameplay LOCATION survive untouched: none of
+// them are placed through put(), and stripping the buildings would take the
+// Archive and the Eldertree with them — that is where mastery is learnt and
+// spent, so the game would no longer be completable. Deliberately out of scope
+// for a dressing pass; say the word if they should go too.
+export const PLAZA_STRIP = true;
+
+// The four beds sit on a lattice centred at (290, 200) with +/-76 by +/-68 bed
+// offsets and a fence rectangle of +/-60 by -54..+46 around each, so this box
+// with a little margin is exactly the field and nothing else. fence_run is used
+// elsewhere on the site too, which is why the fence rule is positional rather
+// than by name.
+const FARM = { x0: 140, x1: 442, y0: 58, y1: 332 };
+const inFarm = (dx, dy) => dx > FARM.x0 && dx < FARM.x1 && dy > FARM.y0 && dy < FARM.y1;
+
+export function stripKeep(name, dx, dy) {
+  if (!PLAZA_STRIP) return true;
+  if (/^(crop_|soil_plot)/.test(name)) return true;
+  return /^fence/.test(name) && inFarm(dx, dy);
+}
+
+// Ambient life is not placed through put(), so it has to be cleared separately.
+// Filtered by position rather than emptied: these arrays are map-wide, and the
+// lake, river and ancient city fill them too — emptying them would silently
+// strip three districts nobody asked about.
+export function stripAmbient(scene, FC) {
+  if (!PLAZA_STRIP) return null;
+  const onPlaza = (x, y) => {
+    const dx = x - FC.x, dy = y - FC.y;
+    return Math.abs(dx) < 470 && dy > -300 && dy < 350 && !inFarm(dx, dy);
+  };
+  const before = {
+    npcs: scene.npcs.length, trees: scene.trees.length,
+    lamps: scene.lamps.length, braziers: scene.braziers.length,
+    butterflies: scene.butterflies.length, crystals: scene.crystalGlows.length,
+  };
+  scene.npcs = scene.npcs.filter((n) => !onPlaza(n.x, n.y));
+  scene.trees = scene.trees.filter((t) => !onPlaza(t.x, t.y));
+  scene.lamps = scene.lamps.filter(([x, y]) => !onPlaza(x, y));
+  scene.braziers = scene.braziers.filter(([x, y]) => !onPlaza(x, y));
+  scene.butterflies = scene.butterflies.filter((b) => !onPlaza(b.x, b.y));
+  scene.crystalGlows = scene.crystalGlows.filter(([x, y]) => !onPlaza(x, y));
+  return {
+    npcs: before.npcs - scene.npcs.length, trees: before.trees - scene.trees.length,
+    lamps: before.lamps - scene.lamps.length, braziers: before.braziers - scene.braziers.length,
+    butterflies: before.butterflies - scene.butterflies.length,
+    crystals: before.crystals - scene.crystalGlows.length,
+  };
+}
+
 // Warm palettes, chosen against what MASS A already has. The civic garden is
 // entirely blue and white today; reading as a FLOWER garden rather than a lawn
 // with beds on it needs colour that argues with that, not more of it.
@@ -42,6 +105,7 @@ const SOFT = ['grass_bloom_01', 'grass_bloom_02', 'grass_bloom_03', 'flowers_whi
 // composition back to an even field of props.
 // ---------------------------------------------------------------------------
 export function dressFlowerGarden(scene, FC, H) {
+  if (PLAZA_STRIP) return { stripped: true };
   const { area, set, bed, station } = H;
   area('nw');
   const n = { arch: 0, beds: 0, path: 0, trim: 0, wings: 0 };

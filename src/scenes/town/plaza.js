@@ -25,7 +25,7 @@ import { ROAD_CELL } from './roads.js';
 import { DECOR_ART } from './props.js';
 import { drawPropArt } from './primitives.js';
 import { POND_W, POND_H } from './lake.js';
-import { dressFlowerGarden } from './plazalife.js';
+import { dressFlowerGarden, stripKeep, stripAmbient } from './plazalife.js';
 
 export function buildPlazaDecor(scene, FC) {
   scene.decor = [];        // depth-sorted against the player
@@ -113,6 +113,10 @@ export function buildPlazaDecor(scene, FC) {
   };
   const put = (name, x, y, opts = {}) => {
     const [w, h] = DECOR_SIZE[name];
+    // Demolition switch — see plazalife.js. Rejects every prop except the crop
+    // plots and their fences, so the plaza can be rebuilt from bare ground
+    // without any dressing code being deleted.
+    if (!stripKeep(name, x - FC.x, y - FC.y)) return false;
     // Everything lands on the 8-grid except where a prop has to be placed
     // EXACTLY — see the fountain's lantern pair, which cannot be symmetric
     // about a focus that is not itself a grid point.
@@ -739,6 +743,8 @@ export function buildPlazaDecor(scene, FC) {
   // and so blocks nothing. See plazalife.js.
   const gardenN = dressFlowerGarden(scene, FC, { area, set, bed, station });
   if (typeof window !== 'undefined' && window.__plazaCounts) console.log('flower garden:', gardenN);
+  const strippedN = stripAmbient(scene, FC);
+  if (typeof window !== 'undefined' && window.__plazaCounts) console.log('stripped:', strippedN);
 
   scene.propGroups.push({ fn: (g) => {
     for (const d of scene.groundDecor) drawPropArt(g, DECOR_ART[d.name], d.x, d.y, d.w, d.h, 0, d.flip);
