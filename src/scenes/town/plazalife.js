@@ -237,3 +237,51 @@ export function stripPlazaFrame(scene, FC) {
   return { props: before - (scene.decor.length + scene.groundDecor.length),
            trees: tBefore - scene.trees.length };
 }
+
+// ---------------------------------------------------------------------------
+// GLADE STRIP — the third demolition switch, after PLAZA_STRIP here and
+// CITY_STRIP in city.js.
+//
+// Removes the Eldertree itself and the roads crossing its glade. THIS ONE IS
+// FUNCTIONAL, not just dressing: the tree is the venue where mastery is spent
+// ('action: tree'), so while it is stripped there is NOWHERE to upgrade
+// skills. The switch records that deliberately — flip it to false and the
+// venue, its collision and the glade's roads all return.
+//
+// Roads are cut only inside the glade box. The network elsewhere — plaza,
+// market, gate, residential — is untouched; the approach roads simply end at
+// the glade's edge, which is the honest result of clearing the district.
+export const GLADE_STRIP = true;
+
+export function stripGlade(scene) {
+  if (!GLADE_STRIP || !scene.districts || !scene.districts.eldertree) return null;
+  const ET = scene.districts.eldertree;
+  const inGlade = (x, y) => Math.abs(x - ET.x) < 350 && y - ET.y > -280 && y - ET.y < 370;
+
+  // The tree: the location, and its collision box. The solid OBJECT is shared
+  // by reference between the location and scene.solids (layout.js seeds solids
+  // from the locations), so it is removed by identity, not geometry.
+  const tree = scene.locations.find((l) => l.id === 'eldertree');
+  if (tree) {
+    scene.locations = scene.locations.filter((l) => l !== tree);
+    if (tree.solid) scene.solids = scene.solids.filter((sq) => sq !== tree.solid);
+  }
+
+  // The roads: both representations, or the cut is cosmetic-only. The coarse
+  // rects feed the keep-clear and nearness tests; roadCov is what actually
+  // paints. CELL matches roads.js's 4-unit coverage grid.
+  const CELL = 4;
+  const rBefore = (scene.roads || []).length;
+  scene.roads = (scene.roads || []).filter((r) => {
+    const cx = r.x + (r.w || 0) / 2, cy = r.y + (r.h || 0) / 2;
+    return !inGlade(cx, cy);
+  });
+  let covCut = 0;
+  if (scene.roadCov) {
+    for (const key of [...scene.roadCov.keys()]) {
+      const [c, rr] = key.split(',').map(Number);
+      if (inGlade(c * CELL + CELL / 2, rr * CELL + CELL / 2)) { scene.roadCov.delete(key); covCut++; }
+    }
+  }
+  return { tree: !!tree, roadRects: rBefore - scene.roads.length, covCells: covCut };
+}

@@ -17,13 +17,14 @@ import { Audio } from '../core/audio.js';
 import { dialogue, UI, Toasts } from '../gfx/ui.js';
 import { clamp, lerp } from '../gfx/pixel.js';
 import { drawCharacter, drawActor, drawPet } from '../gfx/actors.js';
+import { ACTOR_ZOOM } from '../gfx/actorScale.js';
 import { Particles } from '../gfx/particles.js';
 import { InventoryMenu } from './menus.js';
 import { hash, contactShadow, drawPropArt, propVisible } from './town/primitives.js';
 import { DECOR_ART, drawButterfly, crystalGlow, lamp, brazier, bigTree } from './town/props.js';
 import { MAP_W, MAP_H, ZOOM } from './town/dimensions.js';
 import { buildTown } from './town/layout.js';
-import { stripPlazaFrame } from './town/plazalife.js';
+import { stripPlazaFrame, stripGlade } from './town/plazalife.js';
 import { openRoadGates } from './town/passability.js';
 import { drawHUD, drawNearPrompt, drawDebugOverview } from './town/hud.js';
 import { enterLocation, updateDialogue } from './town/interactions.js';
@@ -68,6 +69,8 @@ export class TownScene {
     // buildTown: roads, city and plaza are separate passes and only the
     // finished scene knows where they landed. See passability.js.
     this._gates = openRoadGates(this);
+    // Removes the Eldertree and the glade's roads while GLADE_STRIP holds.
+    this._glade = stripGlade(this);
     // player starts just south of the plaza (the world origin)
     this.px = this.plazaCenter.x; this.py = this.plazaCenter.y + 60;
     this.near = null;
