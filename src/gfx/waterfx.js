@@ -107,8 +107,15 @@ export function buildWaterMask(img) {
 }
 
 // dx/dy are world-unit offsets from the art's top-left draw position.
+//
+// An info object may carry FUNCTIONS instead of pixel arrays — `isWaterFn`
+// and `clearFn`, both in the same art-local units — which is how the
+// procedural river lends its analytic water field to the pond's wildlife
+// (fish jumps on the calm reaches) without rendering a mask bitmap the size
+// of the map. Mask-backed ponds are untouched.
 function waterAt(info, worldW, worldH, dx, dy) {
   if (!info) return false;
+  if (info.isWaterFn) return info.isWaterFn(dx, dy);
   const sx = Math.round(dx * (info.w / worldW));
   const sy = Math.round(dy * (info.h / worldH));
   if (sx < 0 || sy < 0 || sx >= info.w || sy >= info.h) return false;
@@ -125,6 +132,7 @@ function waterAt(info, worldW, worldH, dx, dy) {
 // a single lookup and catches obstacles of any size (a sampled ring test lets
 // small ones slip between the sample rays).
 function hasClearWater(info, worldW, worldH, cx, cy, rx) {
+  if (info.clearFn) return info.clearFn(cx, cy) >= rx + 2;
   if (!info.clearance) return waterAt(info, worldW, worldH, cx, cy);
   const kx = info.w / worldW;
   const sx = Math.round(cx * kx), sy = Math.round(cy * (info.h / worldH));
@@ -136,6 +144,7 @@ function hasClearWater(info, worldW, worldH, cx, cy, rx) {
 // How much clear water there is around a point, in world units — i.e. the
 // largest ring that can be drawn here without touching anything.
 function clearRadius(info, worldW, worldH, cx, cy) {
+  if (info.clearFn) return info.clearFn(cx, cy);
   if (!info.clearance) return 0;
   const kx = info.w / worldW;
   const sx = Math.round(cx * kx), sy = Math.round(cy * (info.h / worldH));
@@ -149,7 +158,7 @@ function clearRadius(info, worldW, worldH, cx, cy) {
 // thinning out into a faceted/star-shaped outline at 8 fixed points.
 // `rgb` is the crest colour as [r,g,b]; `alpha` its peak opacity. `seed`
 // decorrelates the per-ring wobble/brightness so no two rings look identical.
-function ringDots(g, cx, cy, rx, ry, rgb, alpha, maskFn, seed = 0) {
+export function ringDots(g, cx, cy, rx, ry, rgb, alpha, maskFn, seed = 0) {
   const circumference = Math.PI * (rx + ry);
   // ~1.4 samples per pixel of arc: dense enough that the crest reads as a
   // continuous line rather than separated dots, without overdrawing.

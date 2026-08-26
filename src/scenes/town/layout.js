@@ -16,7 +16,7 @@ import { buildFlare } from './ground.js';
 import { roadPath, buildRoadCoverage } from './roads.js';
 import { POND_W, POND_H, POND_WATER_RECTS, buildLakeDetail, buildLakeDecor } from './lake.js';
 import { buildPlazaDecor } from './plaza.js';
-import { buildEldertreeGrove } from './ancientcity.js';
+import { buildAncientCity } from './city.js';
 import {
   COTTAGE_ART, COTTAGE_H, COTTAGE_W, DUNGEON_ART, DUNGEON_H, DUNGEON_W, HOUSE_H, HOUSE_W,
   SANCTUARY_ART, SANCTUARY_H, SANCTUARY_W, WATCH_ART, WATCH_H, WATCH_W,
@@ -24,6 +24,11 @@ import {
   drawQuestBoard, drawSignpost, drawTavern, drawTrainingGround,
 } from './buildings.js';
 import { drawFountainSprite, FOUNTAIN_W, FOUNTAIN_H } from './fountain.js';
+import { buildRiver } from './river.js';
+import { buildRiverDecor } from './riverdecor.js';
+import { buildCrossings } from './bridge.js';
+import { buildWaterfall } from './waterfall.js';
+import { buildRiverfront } from './riverfront.js';
 import { drawEldertree } from './props.js';
 import { drawPropArt, hash } from './primitives.js';
 import { MAP_W, MAP_H } from './dimensions.js';
@@ -367,7 +372,7 @@ export function buildTown(scene) {
     { kind: 'secondary', fam: 'main', famTo: 'civic', w0: 24, w1: 24, width: narrowWidth, pts: [
       [D.archive.x - 40, D.archive.y - 20], [D.archive.x - 700, D.archive.y - 200], [WX - 24, D.watch.y + 500]] },
     // ---- Eldertree Glade approaches ---------------------------------
-    // The glade is entered from the SOUTH (see _buildEldertreeGrove for
+    // The glade is entered from the SOUTH (see city.js for
     // why the axis is fixed). Both spurs are town cobble easing into the
     // Nature family — grass reclaiming a footpath — because the town keeps
     // the shrine way walkable but stopped paving it long ago; the glade's
@@ -434,6 +439,12 @@ export function buildTown(scene) {
     { kind: 'secondary', fam: 'nature', w0: 17, w1: 18, width: narrowWidth, pts: [
       [D.training.x + 165, D.training.y + 510], [D.lake.x - 400, D.lake.y + 305],
       [D.lake.x - 150, D.lake.y + 215], [D.lake.x - 135, D.lake.y + 188]] },
+    // NATURE: Archive -> the river landing. A short lane from the end of the
+    // Commercial->Archive road down to the dock on the west bank, so the
+    // riverfront reads reached rather than conjured. Ends at the dock root.
+    { kind: 'secondary', fam: 'nature', w0: 15, w1: 13, width: narrowWidth, pts: [
+      [D.archive.x, D.archive.y + 195], [D.archive.x + 84, D.archive.y + 214],
+      [D.archive.x + 146, D.archive.y + 168]] },
   ];
   scene.roadPlan = plan;
   scene.roads = plan.flatMap((p) => roadPath(p.pts, p.width));
@@ -458,6 +469,12 @@ export function buildTown(scene) {
   }
 
   buildRoadCoverage(scene, FC);
+
+  // The river system: waterway geometry, water collision and the clearance
+  // queries. After the road coverage (the bridge and the ford sit on the
+  // painted roads) and before any dressing pass, so planting can test
+  // scene.waterways and stay out of the channel.
+  buildRiver(scene);
 
   // ----------------------------------------------------------- terrain --
   // wild/meadow zones: outer districts + gate approach only
@@ -564,7 +581,19 @@ export function buildTown(scene) {
   // itself is kept intact below — restore it by calling it again.
   // buildLakeDecor(scene);
   buildLakeDetail(scene);
-  buildEldertreeGrove(scene);
+  buildAncientCity(scene);
+  // Riverbank planting, riverside tree stands and the in-water stones.
+  // After buildPlazaDecor — that pass RESETS scene.decor/groundDecor, so
+  // anything pushed earlier would be wiped.
+  buildRiverDecor(scene);
+  // The bridge, the ford stones and the boulder-hop: parapet solids, corner
+  // lamps, and the piers joining the wake-source list riverdecor just built.
+  buildCrossings(scene);
+  // The river's source: the scarp, the falls, the plunge pool's churn, the
+  // crown pines and the cave mouth.
+  buildWaterfall(scene);
+  // The Archive landing: dock, boat, cargo, lantern.
+  buildRiverfront(scene);
 
   // Step-24 development overview data (drawn only while window.__townDebug
   // is set from the console — never gameplay UI): big district tags, plus

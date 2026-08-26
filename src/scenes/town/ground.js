@@ -27,6 +27,10 @@ import { POND_ART, POND_W, POND_H, pondMask, setPondMask } from './lake.js';
 import { FOUNTAIN_W } from './fountain.js';
 import { DECOR_ART } from './props.js';
 import { buildWaterMask, drawFishJump, drawDucks, drawFrogs, drawPondPads } from '../../gfx/waterfx.js';
+import { drawRiverBase, drawWaterOverlays, riverJumpRegions } from './river.js';
+import { drawRiverFX, drawLakeInflow } from '../../gfx/riverfx.js';
+import { drawCrossings } from './bridge.js';
+import { drawRiverfrontGround } from './riverfront.js';
 
 export function drawGround(scene, g, visW, visH) {
   const camX = scene.camX, camY = scene.camY;
@@ -82,6 +86,11 @@ export function drawGround(scene, g, visW, visH) {
     }
   }
 
+  // The river: base water + banks, from cached chunk renders. Before the
+  // pond art so the stream's end dissolves under the lake's own painted
+  // shore, after the grass it is cut into.
+  drawRiverBase(scene, g, visW, visH);
+
   // The Lake: pure ground/environment artwork, drawn flat under everything
   // depth-sorted (buildings, trees, the player) so it can never render over
   // them — see the class comment on POND_ART/POND_WATER_RECTS above for
@@ -95,6 +104,13 @@ export function drawGround(scene, g, visW, visH) {
   if (POND_ART.ready) {
     g.drawImage(POND_ART.img, Math.round(scene.lakeTopLeft.x), Math.round(scene.lakeTopLeft.y), POND_W, POND_H);
     if (!pondMask()) setPondMask(buildWaterMask(POND_ART.img));
+    // The stream mouth: repaint its water over the pond art's baked east
+    // shore, so the stream visibly joins the lake's own water. Masked to
+    // the art's own land pixels — needs the pond mask just built.
+    drawWaterOverlays(scene, g, visW, visH, 'pond', pondMask());
+    // ...and the lake answers the inflow: ripple arcs spreading from the
+    // delta out into the pond, foam riding the last of the current.
+    drawLakeInflow(scene, g, visW, visH, scene.t);
     // Extra lily pads from assets/pond vegg.png, straight after the art and
     // before anything living so the fish, ducks and frogs are on top of them.
     // The frogs treat these as somewhere to jump, not just as scenery.
@@ -122,6 +138,30 @@ export function drawGround(scene, g, visW, visH) {
   // pack (see ROAD_FAM). Drawn before the plaza so the plaza's own edge
   // tiles and flares finish on top of where the roads meet it.
   drawRoads(scene, g, visW, visH);
+
+  // Where the trunk road fords the stream, the water wins: re-blit the
+  // river base over the road paint so the road visibly dips into the
+  // crossing (the stepping stones draw on top of this).
+  drawWaterOverlays(scene, g, visW, visH, 'roads');
+
+  // The current: streaks, glints, whitecaps, carried ripples, leaves, fish
+  // shadows, rock wakes — everything on the river that moves.
+  drawRiverFX(scene, g, visW, visH, scene.t);
+
+  // The pond's fish break the surface of the river too, in its two calm
+  // deeps — the plunge pool and the Archive reach.
+  for (const r of riverJumpRegions(scene)) {
+    if (r.left > scene.camX + visW || r.left + r.w < scene.camX ||
+        r.top > scene.camY + visH || r.top + r.h < scene.camY) continue;
+    drawFishJump(g, r.info, r.left, r.top, r.w, r.h, scene.t, r.period, r.count);
+  }
+
+  // The crossings paint OVER the moving water: bridge deck and parapets,
+  // ford stepping stones, the wild boulder-hop.
+  drawCrossings(scene, g, visW, visH);
+
+  // The Archive landing's plank deck (its boat is an entity).
+  drawRiverfrontGround(scene, g, visW, visH);
 
   // Crystal Plaza floor: the approved zoned stone disc with its four
   // flare transitions, which the roads above run into with no seam —

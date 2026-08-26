@@ -148,7 +148,10 @@ export function buildLakeDetail(scene) {
     // standing at y=2213 leaves a clear margin of grass in front of it.
     [1338, 2213, 1.35, false],   // the big one, set back off the water
     [916, 2298, 1.00, false],    // west side
-    [1686, 2350, 0.88, true],    // east side
+    // East side. Was 1686,2350 — that spot is now the stream's mouth (the
+    // river's side-channel enters the lake there), so the tree steps back
+    // south-east and frames the inlet instead of standing in it.
+    [1748, 2398, 0.88, true],
   ];
   for (const [x, y, k, flip] of SPOTS) {
     const w = Math.round(bw * k), h = Math.round(bh * k);
@@ -195,6 +198,12 @@ export function buildLakeDetail(scene) {
     }
     return best;
   };
+  // The river's side-channel runs through this region on its way into the
+  // lake — everything planted here has to stay off it, exactly as it stays
+  // off the pond's own water. landClearance is the waterways' signed
+  // distance to the waterline (negative IN the water).
+  const nearStream = (x, y, pad) =>
+    scene.waterways && scene.waterways.landClearance(x, y) < pad;
   // Species and variant are both taken from COUNTERS, not from a random draw.
   // Drawing species at 38% pine gave 18% on the ground: the draw itself is
   // uniform (checked), but which candidates survive the spacing test is not
@@ -222,6 +231,7 @@ export function buildLakeDetail(scene) {
     const y = Math.round(L.y + POND_H / 2 + Math.sin(a) * (POND_H * 0.5 + out - 40));
     const d = distToWater(x, y);
     if (d < TREE_KEEP || d > 470) continue;         // never against the water
+    if (nearStream(x, y, 30)) continue;             // and never in the stream
     if (scene._nearAnyRoad(x, y, 34) || scene._nearAnyDistrict(x, y, 60)) continue;
     if (onRoadPaint(x, y, 54, 16)) continue;
     const gap = 40 + Math.max(0, d - TREE_KEEP) * 0.30;  // opens up with distance
@@ -239,7 +249,8 @@ export function buildLakeDetail(scene) {
       const ca = hash(8700 + n * 3.3) * Math.PI * 2;
       const cr = 34 + hash(8800 + n * 5.7) * 26;
       const cx2 = Math.round(x + Math.cos(ca) * cr), cy2 = Math.round(y + Math.sin(ca) * cr * 0.7);
-      if (distToWater(cx2, cy2) > TREE_KEEP && !scene._nearAnyRoad(cx2, cy2, 30)
+      if (distToWater(cx2, cy2) > TREE_KEEP && !nearStream(cx2, cy2, 28)
+          && !scene._nearAnyRoad(cx2, cy2, 30)
           && !scene._nearAnyDistrict(cx2, cy2, 60) && !onRoadPaint(cx2, cy2, 46, 14)) {
         const n2 = nextTree();
         const [w2, h2] = DECOR_SIZE[n2];
@@ -287,7 +298,7 @@ export function buildLakeDetail(scene) {
       const off = (t.w * 0.16 + hash(11800 + i * 2.9 + k * 6.1) * t.w * 0.3) * side;
       const bx = Math.round(t.x + off);
       const by = Math.round(t.y + (hash(11900 + i * 4.3 + k) - 0.35) * 6);
-      if (onRoadPaint(bx, by, 20, 8) || distToWater(bx, by) < 10) continue;
+      if (onRoadPaint(bx, by, 20, 8) || distToWater(bx, by) < 10 || nearStream(bx, by, 10)) continue;
       const nm = BASEPLANT[Math.floor(hash(12000 + i * 8.1 + k * 3.3) * BASEPLANT.length) % BASEPLANT.length];
       const [bw, bh] = DECOR_SIZE[nm];
       const bk = 0.65 + hash(12100 + i * 5.7 + k) * 0.35;
@@ -312,6 +323,9 @@ export function buildLakeDetail(scene) {
     const name = nextUnder();
     const [w, h] = DECOR_SIZE[name];
     const k = 0.8 + hash(9700 + n * 2.9) * 0.45;
+    // Stream clearance scales with the sprite's own reach: an anchor 13
+    // units off the water still hangs a 60-wide bush over the channel.
+    if (nearStream(x, y, Math.max(13, w * k * 0.42))) continue;
     scene.decor.push({ name, x, y, w: Math.round(w * k), h: Math.round(h * k),
                       flip: hash(9800 + n) > 0.5, sortY: y,
                       shadow: Math.round(w * k * 0.2) });
@@ -336,6 +350,7 @@ export function buildLakeDetail(scene) {
     const y = Math.round(L.y + POND_H / 2 + Math.sin(ang) * (POND_H * 0.5 + out - 30));
     const d = distToWater(x, y);
     if (d < 12 || d > 440) continue;
+    if (nearStream(x, y, 9)) continue;         // rocks may sit close, not in
     if (scene._nearAnyRoad(x, y, 24) || scene._nearAnyDistrict(x, y, 48)) continue;
     if (onRoadPaint(x, y, 30, 10)) continue;   // widest rock mass scales to ~55
     const gap = 34 + d * 0.26;
@@ -353,7 +368,7 @@ export function buildLakeDetail(scene) {
       const ea = hash(10800 + n * 6.1 + e * 9.7) * Math.PI * 2;
       const er = 12 + hash(10900 + n * 3.7 + e * 5.3) * 16;
       const ex = Math.round(x + Math.cos(ea) * er), ey = Math.round(y + Math.sin(ea) * er * 0.7);
-      if (distToWater(ex, ey) < 8 || onRoadPaint(ex, ey, 12, 6)) continue;
+      if (distToWater(ex, ey) < 8 || nearStream(ex, ey, 7) || onRoadPaint(ex, ey, 12, 6)) continue;
       const sm = COBBLE[Math.floor(hash(11000 + n * 8.9 + e) * COBBLE.length) % COBBLE.length];
       const [sw, sh] = DECOR_SIZE[sm];
       scene.decor.push({ name: sm, x: ex, y: ey, w: sw, h: sh,
@@ -375,7 +390,8 @@ export function buildLakeDetail(scene) {
     x > r.x - pad && x < r.x + r.w + pad && y > r.y - pad && y < r.y + r.h + pad);
   const CAPS = ['mushrooms_01', 'mushrooms_02', 'mushrooms_03', 'mushrooms_04'];
   const clumps = [];
-  const ok = (x, y, gap) => !wet(x, y) && !scene._nearAnyRoad(x, y, 20) && !onRoadPaint(x, y, 16, 6)
+  const ok = (x, y, gap) => !wet(x, y) && !nearStream(x, y, 8)
+    && !scene._nearAnyRoad(x, y, 20) && !onRoadPaint(x, y, 16, 6)
     && !scene._nearAnyDistrict(x, y, 46)
     && !clumps.some((c) => Math.hypot(c.x - x, c.y - y) < gap);
 

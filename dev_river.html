@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>River preview</title>
+<style>
+  body { background:#14100f; color:#eee; font:11px monospace; margin:0; padding:8px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .lbl { padding:3px 0; color:#7fd4ff; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script type="module">
+// River/waterways framing harness — same idea as dev_plaza.html (boots the
+// real TownScene, parks the camera, renders with the game's own pipeline),
+// with two additions this work needs:
+//
+//   * a MODULE CACHE SWEEP before the first import. The in-app review browser
+//     holds long-stale copies of src/*.js and ignores ordinary reloads;
+//     fetch(cache:'reload') refreshes each HTTP cache entry so the module
+//     graph that loads next is the code actually on disk.
+//   * named presets for every stretch of the river, and a frame-strip mode
+//     (?frames=N&dt=S) that renders the same camera at successive times in
+//     one capture, so FLOW reads in a still screenshot.
+//
+//   ?at=falls|gorge|nwbend|guild|bridge|confluence|archive|island|wetland|
+//       ford|mouth|streamlake      named camera (or explicit ?cx=&cy=)
+//   &zoom=N &w=&h=&scale=          framing
+//   &t=seconds                     animation phase (single frame)
+//   &frames=N&dt=S                 N frames t, t+dt, ... tiled vertically
+//   &night=1                       dusk pass on (default: day)
+//   &anim=1                        continuous rAF loop (eyeballing motion)
+//   &hud=0 &hero=0 &debug=1        as dev_plaza
+const SRC = [
+  "src/academics/adaptive.js","src/academics/bank.js","src/core/audio.js",
+  "src/core/input.js","src/core/loop.js","src/core/rng.js","src/core/save.js",
+  "src/core/touch.js","src/dev/console.js","src/game/classMechanics.js",
+  "src/game/combatMath.js","src/game/data.js","src/game/enemyBehaviors.js",
+  "src/game/state.js","src/gfx/abilityFx.js","src/gfx/actors.js",
+  "src/gfx/font.js","src/gfx/particles.js","src/gfx/pixel.js","src/gfx/props.js",
+  "src/gfx/riverfx.js","src/gfx/spriteCatalog.js","src/gfx/sprites.js",
+  "src/gfx/ui.js","src/gfx/waterfx.js","src/main.js","src/scenes/combat.js",
+  "src/scenes/house.js","src/scenes/library.js","src/scenes/menus.js",
+  "src/scenes/potionshop.js","src/scenes/title.js","src/scenes/town.js",
+  "src/scenes/town/city.js","src/scenes/town/bridge.js",
+  "src/scenes/town/buildings.js","src/scenes/town/dimensions.js",
+  "src/scenes/town/fountain.js","src/scenes/town/ground.js",
+  "src/scenes/town/hud.js","src/scenes/town/interactions.js",
+  "src/scenes/town/lake.js","src/scenes/town/layout.js",
+  "src/scenes/town/lighting.js","src/scenes/town/plaza.js",
+  "src/scenes/town/primitives.js","src/scenes/town/props.js",
+  "src/scenes/town/river.js","src/scenes/town/riverdecor.js",
+  "src/scenes/town/riverfront.js",
+  "src/scenes/town/roads.js","src/scenes/town/tiles.js",
+  "src/scenes/town/waterfall.js","src/scenes/training.js",
+  "src/scenes/weaponshop.js",
+];
+await Promise.all(SRC.map((p) => fetch('/' + p, { cache: 'reload' }).catch(() => null)));
+
+const q = new URLSearchParams(location.search);
+const { TownScene } = await import('./src/scenes/town.js');
+const { Hero } = await import('./src/game/state.js');
+
+// Camera presets along the waterways — world coordinates of the CENTRE.
+const AT = {
+  falls:      { cx: 620,  cy: 560,  zoom: 1.0 },
+  gorge:      { cx: 680,  cy: 850,  zoom: 1.0 },
+  nwbend:     { cx: 1050, cy: 1180, zoom: 0.9 },
+  guild:      { cx: 1420, cy: 1400, zoom: 0.8 },
+  bridge:     { cx: 2061, cy: 1470, zoom: 1.0 },
+  confluence: { cx: 2430, cy: 1580, zoom: 0.9 },
+  archive:    { cx: 3330, cy: 2130, zoom: 0.8 },
+  island:     { cx: 3210, cy: 3170, zoom: 0.8 },
+  wetland:    { cx: 3060, cy: 3900, zoom: 0.8 },
+  ford:       { cx: 2045, cy: 1975, zoom: 1.3 },
+  mouth:      { cx: 3025, cy: 4260, zoom: 0.9 },
+  streamlake: { cx: 1700, cy: 2300, zoom: 1.0 },
+  overview:   { cx: 1800, cy: 2200, zoom: 0.17 },
+};
+const at = AT[q.get('at')] || null;
+const zoom = +(q.get('zoom') || (at ? at.zoom : 1.0));
+const BASE_W = 480, BASE_H = 270;
+const OUT_W = +(q.get('w') || BASE_W), OUT_H = +(q.get('h') || BASE_H);
+const scale = +(q.get('scale') || 2);
+const frames = Math.max(1, +(q.get('frames') || 1));
+const dtStep = +(q.get('dt') || 0.4);
+
+const canvas = document.createElement('canvas');
+canvas.width = OUT_W; canvas.height = OUT_H * frames + (frames - 1) * 2;
+canvas.style.width = (canvas.width * scale) + 'px';
+canvas.style.height = (canvas.height * scale) + 'px';
+const g = canvas.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+const lbl = document.createElement('div');
+lbl.className = 'lbl';
+document.getElementById('out').appendChild(lbl);
+document.getElementById('out').appendChild(canvas);
+
+window.__townNight = q.get('night') === '1';
+const hero = Hero.create('warrior');
+const scene = new TownScene(hero, {});
+scene.enter({ width: OUT_W, height: OUT_H });
+
+const visH = OUT_H / zoom;
+let cx = +(q.get('cx') || (at ? at.cx : scene.plazaCenter.x));
+let cy = +(q.get('cy') || (at ? at.cy : scene.plazaCenter.y));
+scene.px = cx; scene.py = cy + visH * 0.12;
+window.__townZoom = zoom;
+
+if (q.get('hero') === '0') scene._drawPlayer = () => {};
+
+// let the art decode
+await new Promise((r) => setTimeout(r, 1500));
+
+const T0 = +(q.get('t') || 4.2);
+scene.introHintT = 0; scene.districtBannerT = 0;
+if (q.get('debug') === '1') window.__townDebug = true;
+
+const buf = document.createElement('canvas');
+buf.width = OUT_W; buf.height = OUT_H;
+const bg = buf.getContext('2d');
+bg.imageSmoothingEnabled = false;
+
+function renderOne(t, dy) {
+  scene.t = t;
+  bg.clearRect(0, 0, OUT_W, OUT_H);
+  scene.draw(bg, { width: OUT_W, height: OUT_H, shake: 0 });
+  g.drawImage(buf, 0, dy);
+}
+
+if (q.get('anim') === '1') {
+  let t = T0;
+  const loop = () => { t += 1 / 60; renderOne(t, 0); requestAnimationFrame(loop); };
+  loop();
+} else {
+  // stability-gated: draw until two consecutive captures agree, so a shot
+  // can never carry a half-decoded tile (see the project skill).
+  let prev = null;
+  for (let i = 0; i < 10; i++) {
+    renderOne(T0, 0);
+    const d = bg.getImageData(0, 0, OUT_W, OUT_H).data;
+    let same = prev !== null && d.length === prev.length;
+    if (same) { for (let k = 0; k < d.length; k += 97) if (d[k] !== prev[k]) { same = false; break; } }
+    if (same && i > 1) break;
+    prev = d;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  for (let f = 0; f < frames; f++) renderOne(T0 + f * dtStep, f * (OUT_H + 2));
+}
+
+lbl.textContent = `at=${q.get('at') || 'custom'} cam centre=(${cx},${cy}) zoom=${zoom} t=${T0}`
+  + (frames > 1 ? ` frames=${frames} dt=${dtStep}` : '') + (window.__townNight ? ' NIGHT' : ' day');
+window.__ready = true;
+window.__scene = scene;
+</script>
+</body>
+</html>
