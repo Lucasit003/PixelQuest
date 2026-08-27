@@ -741,6 +741,16 @@ export function buildPlazaDecor(scene, FC) {
   // every mass and vignette already on the ground. Being after MICRO costs
   // nothing: that pass places flat groundDecor, which never enters `placed`
   // and so blocks nothing. See plazalife.js.
+  // station(): candidate-list placement, verbatim from the in-flight market
+  // pass on the actor/plaza side — the flower garden below was committed
+  // consuming it before the pass that defines it landed, which left main
+  // unable to build the town at all.
+  const station = (name, cands, opts = {}) => {
+    for (const [dx, dy, extra] of cands) {
+      if (set(name, dx, dy, Object.assign({}, opts, extra || {}))) return [dx, dy];
+    }
+    return null;
+  };
   const gardenN = dressFlowerGarden(scene, FC, { area, set, bed, station });
   if (typeof window !== 'undefined' && window.__plazaCounts) console.log('flower garden:', gardenN);
   const strippedN = stripAmbient(scene, FC);

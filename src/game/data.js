@@ -615,13 +615,31 @@ export const ENEMIES = {
     name: 'Slime', sprite: 'slime', hp: 26, attack: 6, speed: 30, defense: 0,
     reach: 16, gold: [2, 6], xp: 4, behavior: 'hop', attackCd: 1.8, w: 14,
     tint: '#3fb872', tintDark: '#2a8a52', tintLite: '#7fe8a8',
-    bloodColor: '#2a8a52',
+    bloodColor: '#2a8a52', deathHold: 0.65,
   },
   slime_blue: {
     name: 'Frost Slime', sprite: 'slime', hp: 40, attack: 9, speed: 26, defense: 3,
     reach: 16, gold: [4, 8], xp: 7, behavior: 'hop', attackCd: 1.6, w: 14,
     tint: '#4f9fe0', tintDark: '#2f6fb0', tintLite: '#9fd0ff',
     bloodColor: '#2f6fb0',
+  },
+  // The elite slime: on death it tears at its saddle into its two children.
+  // deathHold lets the 5-frame split play before the fade; splitInto is what
+  // combat spawns when it finishes. Children never split again.
+  splitcrown: {
+    name: 'Splitcrown', sprite: 'splitcrown', hp: 36, attack: 8, speed: 28, defense: 1,
+    reach: 17, gold: [3, 7], xp: 8, behavior: 'hop', attackCd: 1.7, w: 17,
+    bloodColor: '#2a8a52', deathHold: 0.65, splitInto: ['lobeling', 'nubling'],
+  },
+  lobeling: {
+    name: 'Lobeling', sprite: 'lobeling', hp: 11, attack: 4, speed: 40, defense: 0,
+    reach: 12, gold: [1, 3], xp: 3, behavior: 'hop', attackCd: 1.4, w: 10,
+    bloodColor: '#2a8a52', deathHold: 0.65,
+  },
+  nubling: {
+    name: 'Nubling', sprite: 'nubling', hp: 8, attack: 3, speed: 46, defense: 0,
+    reach: 10, gold: [1, 2], xp: 2, behavior: 'hop', attackCd: 1.2, w: 8,
+    bloodColor: '#2a8a52', deathHold: 0.65,
   },
   skeleton: {
     name: 'Skeleton', sprite: 'skeleton', hp: 30, attack: 10, speed: 40, defense: 4,

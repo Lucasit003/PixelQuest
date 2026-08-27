@@ -7,6 +7,7 @@
 // because rotating pixel art through canvas transforms destroys the grid.
 
 import { drawGrid, shadow, disc, rect } from './pixel.js';
+import { drawSheetActor, sheetActorHeight, isSlimeSprite } from './actorSheets.js';
 
 // ---------------------------------------------------------------- palettes
 
@@ -299,7 +300,8 @@ export const SPECS = {
 
 export function actorHeight(sprite) {
   const s = SPECS[sprite];
-  return s ? s.h * (s.scale || 1) : 24;
+  if (s) return s.h * (s.scale || 1);
+  return sheetActorHeight(sprite) || 24;
 }
 
 // ---------------------------------------------------------------- the pose
@@ -572,9 +574,12 @@ export function drawSlime(g, a) {
   }
 }
 
-/** Dispatch: slimes use the blob renderer, everything else the humanoid one. */
+/** Dispatch: a registered sheet wins; then slimes use the blob renderer,
+ * everything else the humanoid one. A sheet still decoding reports false,
+ * so actors keep their procedural look instead of blinking out. */
 export function drawCharacter(g, a) {
-  if (a.sprite === 'slime') drawSlime(g, a);
+  if (drawSheetActor(g, a)) return;
+  if (isSlimeSprite(a.sprite)) drawSlime(g, a);
   else drawActor(g, a);
 }
 

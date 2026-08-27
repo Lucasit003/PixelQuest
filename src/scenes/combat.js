@@ -128,7 +128,7 @@ export class CombatScene {
     // advances. The last is the boss.
     this.gates = [
       { x: 220, spawns: [['goblin', 2], ['slime', 1]] },
-      { x: 480, spawns: [['goblin', 2], ['slime', 2]] },
+      { x: 480, spawns: [['goblin', 2], ['slime', 1], ['splitcrown', 1]] },
       { x: 740, spawns: [['skeleton', 2], ['goblin', 1]] },
       { x: 980, spawns: [['skeleton_archer', 1], ['skeleton', 2], ['slime_blue', 1]], mini: true },
       { x: 1300, boss: 'goblin_king' },
@@ -155,6 +155,19 @@ export class CombatScene {
       if (gate.mini) this._setMessage('MINI-BOSS', 2.2, 'BONE VANGUARD');
       else this._setMessage(`WAVE ${this.waveNum}`, 1.8, `${this.waveTotal} ENEMIES`);
     }
+  }
+
+  _splitEnemy(e) {
+    for (let i = 0; i < e.def.splitInto.length; i++) {
+      const dir = i === 0 ? -1 : 1;
+      const child = this._spawnEnemy(e.def.splitInto[i],
+        e.x + dir * 10, clamp(e.depth + dir * 4, DEPTH_MIN, DEPTH_MAX));
+      child.facing = e.facing;
+      child.knockVx = dir * 45;          // burst apart...
+      child.z = 1; child.vz = 85;        // ...with a little hop out
+      child.showHp = 2;
+    }
+    this.particles.magicBurst(e.x, e.depth - 8, '#7fe8a8', 10);
   }
 
   _spawnEnemy(type, x, depth) {
@@ -605,6 +618,7 @@ export class CombatScene {
   }
 
   _onEnemyKilled(e, dir) {
+    e.animTime = 0; // the down animation starts on its first frame
     this.hero.s.stats.enemiesDefeated++;
     this.particles.magicBurst(e.x, e.depth - 12, e.tintDark || '#c23b3b', 12);
     this.game.addShake(2);
@@ -641,10 +655,23 @@ export class CombatScene {
       if (e.flash > 0) e.flash -= dt * 4;
 
       if (e.hp <= 0) {
-        // death fade
         e.deathT = (e.deathT || 0) + dt;
-        e.alpha = clamp01(1 - e.deathT * 2.5);
-        e.z += dt * 6; e.knockVx *= 0.9; e.x += e.knockVx * dt;
+        const hold = e.def.deathHold || 0;
+        if (hold) {
+          // sheet slimes play their down row flat on the ground, then fade;
+          // no corpse float. Splitcrown's down row IS the split, so its two
+          // children take over the moment it finishes.
+          e.alpha = clamp01(1 - Math.max(0, e.deathT - hold) * 4);
+          if (e.def.splitInto && !e._split && e.deathT >= hold) {
+            e._split = true;
+            this._splitEnemy(e);
+          }
+        } else {
+          // death fade
+          e.alpha = clamp01(1 - e.deathT * 2.5);
+          e.z += dt * 6;
+        }
+        e.knockVx *= 0.9; e.x += e.knockVx * dt;
         continue;
       }
 

@@ -12,6 +12,7 @@ import {
 } from '../src/game/data.js';
 import { ICONS } from '../src/gfx/props.js';
 import { SPECS, PALETTES } from '../src/gfx/actors.js';
+import { hasActorSheet } from '../src/gfx/actorSheets.js';
 
 const CATEGORY_IDS = new Set(CATEGORIES.map((c) => c.id));
 const LEVEL_IDS = new Set(LEVELS.map((l) => l.id));
@@ -298,7 +299,7 @@ test('every potion is complete and does something', () => {
 test('every enemy is complete and renderable', () => {
   for (const [id, e] of Object.entries(ENEMIES)) {
     assert.ok(e.name, `enemy ${id} has no name`);
-    assert.ok(e.sprite === 'slime' || SPECS[e.sprite],
+    assert.ok(e.sprite === 'slime' || SPECS[e.sprite] || hasActorSheet(e.sprite),
       `enemy ${id} uses unknown sprite "${e.sprite}"`);
     for (const stat of ['hp', 'attack', 'speed', 'reach', 'w', 'xp', 'attackCd']) {
       assert.ok(isFiniteNumber(e[stat]) && e[stat] > 0, `enemy ${id} has a bad ${stat}`);
