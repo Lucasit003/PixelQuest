@@ -14,6 +14,7 @@ import { rect, rectOutline, clamp, clamp01, lerp, disc, shadow } from '../gfx/pi
 import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
+import { drawTelegraphs, updateTelegraphs } from '../gfx/telegraphs.js';
 import { resolveFx, playAbilityFx, CLASS_FX } from '../gfx/abilityFx.js';
 import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
 import {
@@ -64,6 +65,7 @@ export class CombatScene {
     this.worldEnd = 1400;          // total scroll length to the boss arena
     this.enemies = [];
     this.projectiles = [];
+    this.telegraphs = [];
     this.drops = [];
     this.hitStop = 0;              // freeze frames on big hits
     this.slowmo = 0;
@@ -235,6 +237,7 @@ export class CombatScene {
     this._updatePresentation(dt);
     this._updatePlayer(sdt);
     this._updateEnemies(sdt);
+    this.telegraphs = updateTelegraphs(this.telegraphs, sdt);
     this._updateProjectiles(sdt);
     this._updateDrops(sdt);
     this._updateCamera(sdt);
@@ -723,6 +726,12 @@ export class CombatScene {
       e.state = 'attack'; e.animTime = 0;
       e.attackAnimT = e.tuning.attackAnim ?? ATTACK_ANIM_HOLD;
       e._swing = e.tuning.windup ?? 0.18; // telegraph, then the hit lands
+      if (e.def.telegraph) {
+        this.telegraphs.push({
+          shape: e.def.telegraph, x: e.x + e.facing * 3, y: e.depth,
+          r: e.def.reach + 7, facing: e.facing, t: 0, ttl: e._swing,
+        });
+      }
     }
     if (e._swing > 0) {
       e._swing -= dt;
@@ -1011,6 +1020,7 @@ export class CombatScene {
     g.save();
     g.translate(ox, sh.y);
     this._drawWorld(g);
+    drawTelegraphs(g, this.telegraphs);
 
     // y-sort actors by depth
     const actors = [this.p, ...this.enemies];

@@ -36,6 +36,15 @@ const MINI_ANIMS = {
   attack: { row: 2, frames: 4, fps: 12, loop: false, lift: [0, 3, 0, 0] },
 };
 
+function still(sheet, frameW, frameH, logicalHeight, shadowRadius) {
+  const f = { row: 0, frames: 1, fps: 1, loop: true };
+  return {
+    sheet, frameW, frameH, anchorX: Math.floor(frameW / 2), anchorY: frameH,
+    scale: 1 / 1.4, logicalHeight, shadowRadius,
+    anims: { idle: f, walk: f, attack: f, hurt: f, down: f },
+  };
+}
+
 function slime(sheet, logicalHeight, shadowRadius, anims = SLIME_ANIMS) {
   return {
     sheet, frameW: 32, frameH: 24, anchorX: 16, anchorY: 24,
@@ -59,6 +68,18 @@ const DEFS = {
     },
   },
   slime:      slime('assets/actors/slime_dollop.png', 11, 7),
+  // Forest roster bodies, baked from the approved art pack. Single-frame
+  // sheets for stage 1: the pose IS the sprite, motion comes from the
+  // engine (positions, knockback, flash) until each unit's action poses
+  // are baked in as extra frames in its own rollout stage.
+  gob_bomber:    still('assets/actors/gob_bomber.png', 17, 21, 17, 6),
+  gob_trapper:   still('assets/actors/gob_trapper.png', 18, 21, 17, 6),
+  gob_shaman:    still('assets/actors/gob_shaman.png', 18, 22, 18, 6),
+  gob_brute:     still('assets/actors/gob_brute.png', 34, 34, 26, 12),
+  war_hound:     still('assets/actors/war_hound.png', 22, 13, 10, 8),
+  gob_captain:   still('assets/actors/gob_captain.png', 17, 26, 21, 6),
+  risen_footman: still('assets/actors/risen_footman.png', 19, 28, 23, 7),
+  risen_archer:  still('assets/actors/risen_archer.png', 16, 27, 22, 6),
   splitcrown: slime('assets/actors/slime_splitcrown.png', 12, 8),
   lobeling:   slime('assets/actors/slime_lobeling.png', 8, 5, MINI_ANIMS),
   nubling:    slime('assets/actors/slime_nubling.png', 6, 4, MINI_ANIMS),

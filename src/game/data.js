@@ -641,6 +641,55 @@ export const ENEMIES = {
     reach: 10, gold: [1, 2], xp: 2, behavior: 'hop', attackCd: 1.2, w: 8,
     bloodColor: '#2a8a52', deathHold: 0.65,
   },
+  // ---- Forest roster (approved art pack, staged rollout). Stage 1 gives
+  // every unit a body and a proven archetype; specialised state machines
+  // (bomber arcs, hound circling, shaman support, captain command) arrive
+  // per-enemy in later stages without touching these identities.
+  gob_bomber: {
+    name: 'Goblin Bomber', sprite: 'gob_bomber', hp: 18, attack: 8, speed: 38,
+    defense: 0, reach: 150, gold: [4, 8], xp: 7, behavior: 'ranged',
+    attackCd: 2.4, w: 12, projectile: true, projSpeed: 95,
+    bloodColor: '#3f7a3f',
+  },
+  gob_trapper: {
+    name: 'Goblin Trapper', sprite: 'gob_trapper', hp: 20, attack: 6,
+    speed: 46, defense: 0, reach: 16, gold: [3, 7], xp: 6, behavior: 'chase',
+    attackCd: 1.3, w: 12, bloodColor: '#3f7a3f',
+  },
+  gob_shaman: {
+    name: 'Goblin Shaman', sprite: 'gob_shaman', hp: 22, attack: 7, speed: 30,
+    defense: 0, reach: 150, gold: [5, 10], xp: 9, behavior: 'ranged',
+    attackCd: 2.8, w: 12, projectile: true, projSpeed: 115,
+    bloodColor: '#3f7a3f',
+  },
+  gob_brute: {
+    name: 'Goblin Brute', sprite: 'gob_brute', hp: 95, attack: 16, speed: 26,
+    defense: 6, reach: 26, gold: [10, 18], xp: 16, behavior: 'chase',
+    attackCd: 2.6, w: 22, telegraph: 'arc', bloodColor: '#3f7a3f',
+  },
+  war_hound: {
+    name: 'War Hound', sprite: 'war_hound', hp: 22, attack: 8, speed: 88,
+    defense: 0, reach: 15, gold: [2, 6], xp: 6, behavior: 'chase',
+    attackCd: 1.5, w: 16, bloodColor: '#7a3f2f',
+  },
+  gob_captain: {
+    name: 'Goblin Captain', sprite: 'gob_captain', hp: 62, attack: 12,
+    speed: 44, defense: 5, reach: 20, gold: [12, 20], xp: 18,
+    behavior: 'chase', attackCd: 1.6, w: 13, telegraph: 'arc',
+    bloodColor: '#3f7a3f',
+  },
+  risen_footman: {
+    name: 'Risen Footman', sprite: 'risen_footman', hp: 46, attack: 13,
+    speed: 33, defense: 4, reach: 21, gold: [6, 12], xp: 12,
+    behavior: 'chase', attackCd: 2.3, w: 12, telegraph: 'arc',
+    bloodColor: '#b8a888',
+  },
+  risen_archer: {
+    name: 'Risen Archer', sprite: 'risen_archer', hp: 26, attack: 10,
+    speed: 30, defense: 1, reach: 175, gold: [6, 12], xp: 12,
+    behavior: 'ranged', attackCd: 2.7, w: 11, projectile: true,
+    projSpeed: 155, bloodColor: '#b8a888',
+  },
   skeleton: {
     name: 'Skeleton', sprite: 'skeleton', hp: 30, attack: 10, speed: 40, defense: 4,
     reach: 22, gold: [5, 11], xp: 8, behavior: 'chase', attackCd: 1.2, w: 12,
