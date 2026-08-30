@@ -72,14 +72,14 @@ const DEFS = {
   // sheets for stage 1: the pose IS the sprite, motion comes from the
   // engine (positions, knockback, flash) until each unit's action poses
   // are baked in as extra frames in its own rollout stage.
-  gob_bomber:    still('assets/actors/gob_bomber.png', 17, 21, 17, 6),
-  gob_trapper:   still('assets/actors/gob_trapper.png', 18, 21, 17, 6),
-  gob_shaman:    still('assets/actors/gob_shaman.png', 18, 22, 18, 6),
-  gob_brute:     still('assets/actors/gob_brute.png', 34, 34, 26, 12),
-  war_hound:     still('assets/actors/war_hound.png', 22, 13, 10, 8),
-  gob_captain:   still('assets/actors/gob_captain.png', 17, 26, 21, 6),
-  risen_footman: still('assets/actors/risen_footman.png', 19, 28, 23, 7),
-  risen_archer:  still('assets/actors/risen_archer.png', 16, 27, 22, 6),
+  gob_bomber:    still('assets/actors/gob_bomber.png', 19, 23, 17, 6),
+  gob_trapper:   still('assets/actors/gob_trapper.png', 20, 23, 17, 6),
+  gob_shaman:    still('assets/actors/gob_shaman.png', 20, 24, 18, 6),
+  gob_brute:     still('assets/actors/gob_brute.png', 36, 36, 26, 12),
+  war_hound:     still('assets/actors/war_hound.png', 20, 15, 10, 8),
+  gob_captain:   still('assets/actors/gob_captain.png', 19, 28, 21, 6),
+  risen_footman: still('assets/actors/risen_footman.png', 21, 31, 23, 7),
+  risen_archer:  still('assets/actors/risen_archer.png', 18, 29, 22, 6),
   splitcrown: slime('assets/actors/slime_splitcrown.png', 12, 8),
   lobeling:   slime('assets/actors/slime_lobeling.png', 8, 5, MINI_ANIMS),
   nubling:    slime('assets/actors/slime_nubling.png', 6, 4, MINI_ANIMS),
