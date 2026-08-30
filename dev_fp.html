@@ -1,0 +1,73 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>fp</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { CombatScene }=await import('./src/scenes/combat.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const { drawCharacter }=await import('./src/gfx/actors.js'+b);
+const { COMBAT_ACTOR_SCALE }=await import('./src/gfx/actorScale.js'+b);
+const W=480,H=270;
+const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+const g=cv.getContext('2d',{willReadFrequently:true});
+const out=[];const say=s=>{out.push(s);document.getElementById('out').textContent=out.join('\n');};
+const TAG=new URLSearchParams(location.search).get('tag')||'x';
+const sc=new CombatScene(Hero.create('warrior'), ()=>{});
+sc.enter({ width:W, height:H, addShake(){}, shakeOffset(){ return {x:0,y:0}; } });
+await new Promise(r=>setTimeout(r,2800));
+const CAM=+(new URLSearchParams(location.search).get('cam')||500);
+function reset(){ sc.camX=CAM; sc.currentGate=2; sc.enemies=[]; sc.messageT=0; sc.message=null;
+  const p=sc.player||sc.p; if(p){p.x=-9999;} }
+async function shot(id, prep, after){
+  reset(); if(prep) prep();
+  for(let i=0;i<10;i++){ sc.t=3.1; g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g);
+    if(after){ g.save(); g.translate(-Math.round(sc.camX),0); after(g); g.restore(); } }
+  const bl=await new Promise(r=>cv.toBlob(r,'image/png'));
+  await fetch('http://127.0.0.1:8479/fp_'+TAG+'_'+id+'.png',{method:'POST',body:bl});
+  say(id);
+}
+const SC=COMBAT_ACTOR_SCALE||1;
+// EMPTY
+await shot('empty');
+// NORMAL: player + 3
+await shot('normal', ()=>{ const p=sc.player||sc.p; if(p){p.x=sc.camX+140;p.depth=214;}
+  try{ sc._spawnEnemy('goblin',sc.camX+265,192); sc._spawnEnemy('skeleton',sc.camX+195,242);
+       sc._spawnEnemy('slime',sc.camX+350,224);}catch(e){} sc.messageT=0; sc.message=null; });
+// CAST: warrior + paladin + rogue + goblin + slime.  The two extra classes are
+// stamped with the game's own drawCharacter, purely for the colour check.
+await shot('cast', ()=>{ const p=sc.player||sc.p; if(p){p.x=sc.camX+96;p.depth=218;}
+  try{ sc._spawnEnemy('goblin',          sc.camX+206, 190);
+       sc._spawnEnemy('slime',           sc.camX+286, 232);
+       sc._spawnEnemy('skeleton',        sc.camX+352, 200);
+       sc._spawnEnemy('skeleton_archer', sc.camX+416, 240); }catch(e){say('spawn '+e.message);}
+  sc.messageT=0; sc.message=null; },
+  (gg)=>{ drawCharacter(gg,{x:sc.camX+150,y:246,z:0,facing:1,sprite:'paladin',weapon:'none',
+      state:'idle',animTime:1.1,scale:SC}); });
+await shot('chaos', ()=>{ const p=sc.player||sc.p; if(p){p.x=sc.camX+96;p.depth=222;}
+  const K=['goblin','skeleton','goblin','skeleton','goblin','slime'];
+  for(let i=0;i<6;i++){ try{ sc._spawnEnemy(K[i], sc.camX+150+(i%3)*108, 168+Math.floor(i/3)*54+((i*11)%16)); }catch(e){} }
+  try{ for(let i=0;i<34;i++) sc.particles.spawn({x:sc.camX+230+((i*41)%160), y:186+((i*29)%56),
+        kind:'ember', color:i%3?'#ffd36e':'#c2b2ff', vx:0, vy:-9, life:0.7, size:1});
+       if(sc.toasts&&sc.toasts.add){ sc.toasts.add('24',sc.camX+265,178); sc.toasts.add('11',sc.camX+360,206); } }catch(e){}
+  sc.messageT=0; sc.message=null; },
+  (gg)=>{ // AoE telegraph ring
+    gg.save(); gg.globalCompositeOperation='lighter'; gg.globalAlpha=0.5;
+    gg.strokeStyle='#ffb03a'; gg.lineWidth=2;
+    gg.beginPath(); gg.ellipse(sc.camX+300,232,54,20,0,0,Math.PI*2); gg.stroke();
+    gg.globalAlpha=0.16; gg.fillStyle='#ffb03a';
+    gg.beginPath(); gg.ellipse(sc.camX+300,232,54,20,0,0,Math.PI*2); gg.fill();
+    gg.restore(); gg.globalAlpha=1; });
+function bench(fn,n){for(let i=0;i<20;i++)fn();const t0=performance.now();
+  for(let i=0;i<n;i++)fn();return (performance.now()-t0)/n;}
+reset();
+const full=bench(()=>{g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,W,H);sc.draw(g);},120);
+await fetch('http://127.0.0.1:8479/fp_perf.txt',{method:'POST',
+  body:'full frame draw: '+full.toFixed(2)+' ms   (60fps budget 16.67 ms)'});
+say('perf '+full.toFixed(2)+'ms');
+say('DONE');
+</script></body></html>
