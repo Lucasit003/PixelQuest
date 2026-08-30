@@ -15,6 +15,7 @@ import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
 import { drawTelegraphs, updateTelegraphs } from '../gfx/telegraphs.js';
+import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
 import { resolveFx, playAbilityFx, CLASS_FX } from '../gfx/abilityFx.js';
 import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
 import {
@@ -33,7 +34,7 @@ const DEPTH_MAX = 250;
 
 // Render-only scale bump for actors so they read clearly in the arena. Collision
 // math still uses the unscaled reach/width constants — this only affects drawing.
-const ACTOR_SCALE = 1.4;
+const ACTOR_SCALE = COMBAT_ACTOR_SCALE;
 
 // How long an enemy keeps its 'attack' pose after committing to a swing. This
 // is an ANIMATION length, not a combat one — it must stay well under the

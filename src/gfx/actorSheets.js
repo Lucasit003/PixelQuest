@@ -20,6 +20,7 @@
 // non-default tint falls through to the procedural blob.
 
 import { shadow } from './pixel.js';
+import { COMBAT_ACTOR_SCALE } from './actorScale.js';
 
 const SLIME_TINT = '#3fb872'; // the default green drawSlime() uses
 
@@ -39,8 +40,11 @@ const MINI_ANIMS = {
 function still(sheet, frameW, frameH, logicalHeight, shadowRadius) {
   const f = { row: 0, frames: 1, fps: 1, loop: true };
   return {
+    // Authored at the FINAL on-screen size: combat draws actors at
+    // COMBAT_ACTOR_SCALE, and 1/scale nets exactly 1.0 so these blit 1:1
+    // with no fractional row doubling.
     sheet, frameW, frameH, anchorX: Math.floor(frameW / 2), anchorY: frameH,
-    scale: 1 / 1.4, logicalHeight, shadowRadius,
+    scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight, shadowRadius,
     anims: { idle: f, walk: f, attack: f, hurt: f, down: f },
   };
 }
@@ -72,14 +76,14 @@ const DEFS = {
   // sheets for stage 1: the pose IS the sprite, motion comes from the
   // engine (positions, knockback, flash) until each unit's action poses
   // are baked in as extra frames in its own rollout stage.
-  gob_bomber:    still('assets/actors/gob_bomber.png', 19, 23, 17, 6),
-  gob_trapper:   still('assets/actors/gob_trapper.png', 20, 23, 17, 6),
-  gob_shaman:    still('assets/actors/gob_shaman.png', 20, 24, 18, 6),
-  gob_brute:     still('assets/actors/gob_brute.png', 36, 36, 26, 12),
-  war_hound:     still('assets/actors/war_hound.png', 20, 15, 10, 8),
-  gob_captain:   still('assets/actors/gob_captain.png', 19, 28, 21, 6),
-  risen_footman: still('assets/actors/risen_footman.png', 21, 31, 23, 7),
-  risen_archer:  still('assets/actors/risen_archer.png', 18, 29, 22, 6),
+  gob_bomber:    still('assets/actors/gob_bomber.png', 28, 34, 17, 9),
+  gob_trapper:   still('assets/actors/gob_trapper.png', 30, 35, 17, 9),
+  gob_shaman:    still('assets/actors/gob_shaman.png', 29, 36, 18, 9),
+  gob_brute:     still('assets/actors/gob_brute.png', 55, 55, 26, 17),
+  war_hound:     still('assets/actors/war_hound.png', 31, 23, 10, 12),
+  gob_captain:   still('assets/actors/gob_captain.png', 28, 43, 21, 9),
+  risen_footman: still('assets/actors/risen_footman.png', 33, 47, 23, 10),
+  risen_archer:  still('assets/actors/risen_archer.png', 28, 46, 22, 9),
   splitcrown: slime('assets/actors/slime_splitcrown.png', 12, 8),
   lobeling:   slime('assets/actors/slime_lobeling.png', 8, 5, MINI_ANIMS),
   nubling:    slime('assets/actors/slime_nubling.png', 6, 4, MINI_ANIMS),
