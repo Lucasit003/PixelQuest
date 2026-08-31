@@ -223,7 +223,26 @@ def build(hero):
     src = {'down': f'{SRC}/{hero}_front.png',
            'side': f'{SRC}/{hero}_side.png',
            'up':   f'{SRC}/{hero}_back.png'}
-    art = {d: np.array(Image.open(p).convert('RGBA')) for d, p in src.items()}
+    art = {}
+    for d, path in src.items():
+        a = np.array(Image.open(path).convert('RGBA'))
+        # Every view is packed facing the SAME way, so one mirror rule serves all
+        # three and the game can turn a hero left or right without a second sheet.
+        #
+        # The profile and the front view already agree: measured on the face
+        # pixels rather than the silhouette, the front view's face sits 1.4 to
+        # 2.9px right of the head's centre on every hero, turned the same way the
+        # profile faces. (The silhouette says the opposite -- hair mass drags the
+        # head's centroid the other way -- which is why this is measured on skin.)
+        #
+        # The back view is the odd one out, and necessarily so. It is the same
+        # body turn seen from behind, so the cheek that peeks out lands on the
+        # far side: 1.7 to 4.4px LEFT of centre. Drawn as-is it would read as
+        # walking away up-and-left while the front read down-and-right. So it is
+        # mirrored once, here, rather than special-cased at draw time.
+        if d == 'up':
+            a = a[:, ::-1].copy()
+        art[d] = a
     hip = int(next(iter(art.values())).shape[0] * HIP)
     hem = max(hem_row(a, hip) for a in art.values())        # one hem per hero
     pad = STRIDE + 3

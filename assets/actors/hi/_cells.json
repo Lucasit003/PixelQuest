@@ -8,7 +8,7 @@
     "hem": 43
   },
   "mage": {
-    "cellW": 46,
+    "cellW": 45,
     "cellH": 80,
     "columns": 7,
     "anchorX": 22,
@@ -16,10 +16,10 @@
     "hem": 51
   },
   "rogue": {
-    "cellW": 45,
+    "cellW": 44,
     "cellH": 80,
     "columns": 7,
-    "anchorX": 21,
+    "anchorX": 22,
     "anchorY": 74,
     "hem": 44
   },
@@ -27,7 +27,7 @@
     "cellW": 44,
     "cellH": 80,
     "columns": 7,
-    "anchorX": 22,
+    "anchorX": 21,
     "anchorY": 74,
     "hem": 43
   },

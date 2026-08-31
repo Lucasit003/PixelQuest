@@ -70,11 +70,14 @@ export class WeaponShopScene {
       this._tryMove(ax.x * 78 * dt, 0);
       this._tryMove(0, ax.y * 78 * dt);
       if (Math.abs(ax.x) > FACE_DEADZONE) this.facing = ax.x > 0 ? 1 : -1;
-      // Which way he is turned relative to the camera. Vertical intent wins over
-      // horizontal so a mostly-up diagonal shows his back rather than his side;
-      // `facing` still carries left/right for the side view. This persists when
-      // he stops, so he keeps facing the way he was walking.
-      this.dir = Math.abs(ax.y) > Math.abs(ax.x)
+      // Which way he is turned relative to the camera. Vertical intent wins
+      // ties as well as contests, because a 45-degree diagonal is exactly what
+      // the three-quarter art is drawn for -- a pure profile there reads as
+      // walking sideways along a diagonal. `facing` still carries left/right,
+      // and now mirrors the three-quarter views too, so up and down each have a
+      // left-ish and a right-ish pose. This persists when he stops, so he keeps
+      // facing the way he was walking.
+      this.dir = Math.abs(ax.y) >= Math.abs(ax.x)
         ? (ax.y < 0 ? 'up' : 'down') : 'side';
       this.walkT += dt;
     }

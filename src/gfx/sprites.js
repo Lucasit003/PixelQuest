@@ -380,9 +380,14 @@ export function drawSpriteActor(g, a, cfg) {
   const anchor = anchorOf(cfg);
   const rect = frameRect(cfg, picked.frame, sheet.img);
   const scale = (cfg.scale || 1) * (a.scale || 1);
-  // A back or front view is authored facing the camera, not sideways, so
-  // mirroring it would be meaningless at best and wrong at worst.
-  const flip = a.facing < 0 && !picked.vertical;
+  // Whether the vertical views may be mirrored depends on how they were drawn.
+  // A dead-on front view gains nothing from it and can lose an asymmetric
+  // detail, so it is off by default. Art drawn in THREE-QUARTER, where the
+  // figure is already turned a little, is the opposite case: mirroring is the
+  // whole point, because it turns a single drawing into a left-ish and a
+  // right-ish pose. Such a sheet opts in with `threeQuarter`, and every view on
+  // it must be authored facing the same way -- see the note in spriteCatalog.
+  const flip = a.facing < 0 && (!picked.vertical || !!cfg.threeQuarter);
 
   const gx = Math.round(a.x);
   const gy = Math.round(a.y);

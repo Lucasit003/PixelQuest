@@ -81,6 +81,14 @@ test('every hero carries its own art for walking toward and away', async () => {
     for (const name of ['walkUp', 'walkDown', 'idleUp', 'idleDown']) {
       assert.ok(anims[name], `${id} has no ${name}`);
     }
+    // The vertical views are three-quarter drawings, already turned a little,
+    // so they are mirrored by `facing` to give a left-ish and a right-ish pose.
+    // Without this flag the engine leaves them unmirrored and every hero walks
+    // the same way whichever diagonal he takes -- which looks almost right, and
+    // is therefore easy to miss.
+    assert.equal(sprites[id].threeQuarter, true,
+      `${id} does not declare threeQuarter, so its 3/4 views will not mirror`);
+
     // The three views must not overlap: each frame belongs to exactly one.
     const seen = new Set();
     for (const anim of Object.values(anims)) {
