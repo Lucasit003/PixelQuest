@@ -177,7 +177,8 @@ export class CombatScene {
     const def = ENEMIES[type];
     const lvScale = 1 + (this.hero.s.level - 1) * 0.06;
     const e = {
-      type, def, sprite: def.sprite,
+      type, def,
+      sprite: def.spriteVariants ? pick(def.spriteVariants) : def.sprite,
       x, depth, z: 0, vz: 0, facing: -1,
       hp: Math.round(def.hp * lvScale), maxHp: Math.round(def.hp * lvScale),
       state: 'idle', animTime: rand(0, 1), animDuration: 0,

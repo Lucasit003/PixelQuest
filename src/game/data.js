@@ -680,12 +680,16 @@ export const ENEMIES = {
   },
   risen_footman: {
     name: 'Risen Footman', sprite: 'risen_footman', hp: 46, attack: 13,
+    spriteVariants: ['risen_footman', 'risen_footman_b', 'risen_footman_c',
+                     'risen_footman_d'],
     speed: 33, defense: 4, reach: 21, gold: [6, 12], xp: 12,
     behavior: 'chase', attackCd: 2.3, w: 12, telegraph: 'arc',
     bloodColor: '#b8a888',
   },
   risen_archer: {
     name: 'Risen Archer', sprite: 'risen_archer', hp: 26, attack: 10,
+    spriteVariants: ['risen_archer', 'risen_archer_b', 'risen_archer_c',
+                     'risen_archer_d'],
     speed: 30, defense: 1, reach: 175, gold: [6, 12], xp: 12,
     behavior: 'ranged', attackCd: 2.7, w: 11, projectile: true,
     projSpeed: 155, bloodColor: '#b8a888',

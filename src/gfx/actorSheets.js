@@ -82,8 +82,16 @@ const DEFS = {
   gob_brute:     still('assets/actors/gob_brute.png', 55, 55, 26, 17),
   war_hound:     still('assets/actors/war_hound.png', 31, 23, 10, 12),
   gob_captain:   still('assets/actors/gob_captain.png', 28, 43, 21, 9),
-  risen_footman: still('assets/actors/risen_footman.png', 33, 47, 23, 10),
-  risen_archer:  still('assets/actors/risen_archer.png', 28, 46, 22, 9),
+  risen_footman: still('assets/actors/risen_footman.png', 21, 48, 23, 8),
+  risen_archer:  still('assets/actors/risen_archer.png', 20, 48, 22, 7),
+  // The Risen dig themselves out as individuals: each spawn draws one of
+  // the approved skeleton builds from the concept sheet's top rows.
+  risen_footman_b: still('assets/actors/risen_footman_b.png', 21, 48, 23, 8),
+  risen_footman_c: still('assets/actors/risen_footman_c.png', 20, 48, 23, 8),
+  risen_footman_d: still('assets/actors/risen_footman_d.png', 20, 49, 23, 8),
+  risen_archer_b:  still('assets/actors/risen_archer_b.png', 19, 46, 22, 7),
+  risen_archer_c:  still('assets/actors/risen_archer_c.png', 19, 46, 22, 7),
+  risen_archer_d:  still('assets/actors/risen_archer_d.png', 22, 48, 22, 7),
   splitcrown: slime('assets/actors/slime_splitcrown.png', 12, 8),
   lobeling:   slime('assets/actors/slime_lobeling.png', 8, 5, MINI_ANIMS),
   nubling:    slime('assets/actors/slime_nubling.png', 6, 4, MINI_ANIMS),
