@@ -87,16 +87,33 @@ const DEFS = {
   gob_brute:     still('assets/actors/gob_brute.png', 55, 55, 26, 17),
   war_hound:     still('assets/actors/war_hound.png', 31, 23, 10, 12),
   gob_captain:   still('assets/actors/gob_captain.png', 28, 43, 21, 9),
-  risen_footman: still('assets/actors/risen_footman.png', 21, 48, 23, 8),
-  risen_archer:  still('assets/actors/risen_archer.png', 20, 48, 22, 7),
-  // The Risen dig themselves out as individuals: each spawn draws one of
-  // the approved skeleton builds from the concept sheet's top rows.
-  risen_footman_b: still('assets/actors/risen_footman_b.png', 21, 48, 23, 8),
-  risen_footman_c: still('assets/actors/risen_footman_c.png', 20, 48, 23, 8),
-  risen_footman_d: still('assets/actors/risen_footman_d.png', 20, 49, 23, 8),
-  risen_archer_b:  still('assets/actors/risen_archer_b.png', 19, 46, 22, 7),
-  risen_archer_c:  still('assets/actors/risen_archer_c.png', 19, 46, 22, 7),
-  risen_archer_d:  still('assets/actors/risen_archer_d.png', 22, 48, 22, 7),
+  // The Risen fight from their own Spine rigs (tools/spine): spearman
+  // thrusts with a rect telegraph, archer nocks and holds a real draw.
+  // Both fall forward into a bone pile on the down row.
+  risen_footman: {
+    sheet: 'assets/actors/risen_footman.png',
+    frameW: 56, frameH: 48, anchorX: 20, anchorY: 47,
+    scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 23, shadowRadius: 8,
+    anims: {
+      idle:   { row: 0, frames: 4, fps: 5, loop: true },
+      walk:   { row: 1, frames: 4, fps: 9, loop: true },
+      attack: { row: 2, frames: 6, fps: 6, loop: false },
+      hurt:   { row: 3, frames: 1, fps: 10, loop: false },
+      down:   { row: 4, frames: 4, fps: 8, loop: false },
+    },
+  },
+  risen_archer: {
+    sheet: 'assets/actors/risen_archer.png',
+    frameW: 52, frameH: 47, anchorX: 16, anchorY: 46,
+    scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 22, shadowRadius: 7,
+    anims: {
+      idle:   { row: 0, frames: 4, fps: 5, loop: true },
+      walk:   { row: 1, frames: 4, fps: 9, loop: true },
+      attack: { row: 2, frames: 6, fps: 5, loop: false },
+      hurt:   { row: 3, frames: 1, fps: 10, loop: false },
+      down:   { row: 4, frames: 4, fps: 8, loop: false },
+    },
+  },
   splitcrown: slime('assets/actors/slime_splitcrown.png', 12, 8),
   lobeling:   slime('assets/actors/slime_lobeling.png', 8, 5, MINI_ANIMS),
   nubling:    slime('assets/actors/slime_nubling.png', 6, 4, MINI_ANIMS),

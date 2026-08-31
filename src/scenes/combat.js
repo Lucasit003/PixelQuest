@@ -726,12 +726,13 @@ export class CombatScene {
     if (e.attackTimer <= 0) {
       e.attackTimer = e.def.attackCd;
       e.state = 'attack'; e.animTime = 0;
-      e.attackAnimT = e.tuning.attackAnim ?? ATTACK_ANIM_HOLD;
+      e.attackAnimT = e.def.attackAnim ?? ATTACK_ANIM_HOLD;
       e._swing = e.tuning.windup ?? 0.18; // telegraph, then the hit lands
       if (e.def.telegraph) {
         this.telegraphs.push({
           shape: e.def.telegraph, x: e.x + e.facing * 3, y: e.depth,
-          r: e.def.reach + 7, facing: e.facing, t: 0, ttl: e._swing,
+          r: e.def.reach + 7, len: e.def.reach + 9, w: 7,
+          facing: e.facing, t: 0, ttl: e._swing,
         });
       }
     }

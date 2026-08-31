@@ -71,6 +71,15 @@ export const ENEMY_BEHAVIORS = {
     update(e, c) {
       const t = e.tuning;
       const spd = e.def.speed;
+      // A shot in progress: the projectile leaves on the release beat of the
+      // attack animation (def.shootDelay), not the moment it starts.
+      if (e._loose !== undefined) {
+        e._loose -= c.dt;
+        if (e._loose <= 0) { c.shoot(e); e._loose = undefined; }
+      }
+      e.attackAnimT = Math.max(0, (e.attackAnimT || 0) - c.dt);
+      if (e.attackAnimT > 0) { e.state = 'attack'; return; } // planted mid-draw
+
       if (c.dist < t.keepMin) { e.x -= e.facing * spd * c.dt; e.state = 'walk'; }
       else if (c.dist > t.keepMax) { e.x += e.facing * spd * t.approachRate * c.dt; e.state = 'walk'; }
       else e.state = 'idle';
@@ -80,7 +89,9 @@ export const ENEMY_BEHAVIORS = {
       if (e.attackTimer <= 0 && Math.abs(c.ddepth) < t.fireArc) {
         e.attackTimer = e.def.attackCd;
         e.state = 'attack'; e.animTime = 0;
-        c.shoot(e);
+        e.attackAnimT = e.def.attackAnim ?? 0;
+        if (e.def.shootDelay) e._loose = e.def.shootDelay;
+        else c.shoot(e);
       }
     },
   },
