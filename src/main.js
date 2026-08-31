@@ -19,6 +19,15 @@ import { installDevConsole } from './dev/console.js';
 // many times it is imported, and this way the game still populates its actor
 // sprites even if a browser is holding a stale copy of actors.js.
 import './gfx/spriteCatalog.js';
+import { loadHeroEquipment } from './gfx/heroEquipment.js';
+
+// Merge the baked per-frame weapon anchors into the hero sprite configs before
+// the first frame. It is deliberately fire-and-forget: a hero whose anchor file
+// is missing or malformed simply renders unarmed rather than taking the game
+// down, which is the same failure posture drawEquipped already has.
+loadHeroEquipment().then((armed) => {
+  if (armed.length) console.log('equipment wired for:', armed.join(', '));
+});
 
 const canvas = document.getElementById('game');
 const BASE_W = canvas.width;   // 480

@@ -1956,12 +1956,13 @@ function drawArena(g, camX, W, H, t, awake) {
   // end, and centring pushed it off the frame. The left wall's shelves are the
   // cheaper thing to lose.
   const x0 = ARENA_ANCHOR + W - ARENA_W;
+  // The stone is carried well past the room in both directions BEFORE the plate
+  // is drawn. Filling only to the frame edge worked while the camera was fixed;
+  // the cinematic zooms and pans, so a fill sized to the gameplay frame leaves a
+  // black band exactly when the camera goes looking for the walls.
+  rect(g, x0 - 700, 0, 700, H, '#14171b');
+  rect(g, x0 + ARENA_W - 1, 0, 700, H, '#14171b');
   g.drawImage(ARENA_IMG, x0, 0);
-  // Anything the camera can see beyond the room's own walls is the same stone
-  // carried outward, so the edges never show as a cut.
-  if (x0 > camX) rect(g, camX, 0, x0 - camX + 1, H, '#14171b');
-  const right = x0 + ARENA_W;
-  if (right < camX + W) rect(g, right - 1, 0, camX + W - right + 1, H, '#14171b');
   // torchlight breathing, the only motion in the room
   const puls = 0.09 + Math.sin(t * 1.7) * 0.02 + Math.sin(t * 3.1 + 1.3) * 0.012;
   g.fillStyle = `rgba(120,64,22,${puls})`;

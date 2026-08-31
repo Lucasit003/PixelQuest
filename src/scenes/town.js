@@ -17,6 +17,7 @@ import { Audio } from '../core/audio.js';
 import { dialogue, UI, Toasts } from '../gfx/ui.js';
 import { clamp, lerp } from '../gfx/pixel.js';
 import { drawCharacter, drawActor, drawPet } from '../gfx/actors.js';
+import { loadHeroEquipment, loadoutFor } from '../gfx/heroEquipment.js';
 import { ACTOR_ZOOM } from '../gfx/actorScale.js';
 import { Particles } from '../gfx/particles.js';
 import { InventoryMenu } from './menus.js';
@@ -275,6 +276,7 @@ export class TownScene {
     if (pet) drawPet(g, pet, this.px - this.facing * 14, this.py - 16, this.t);
     drawCharacter(g, {
       x: this.px, y: this.py, z: 0, facing: this.facing, dir: this.dir,
+      equipped: loadoutFor(this.hero.cls().sprite),
       sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(),
       state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t,
       scale: ACTOR_ZOOM,

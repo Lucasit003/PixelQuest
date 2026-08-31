@@ -12,6 +12,8 @@ import { drawText, textWidth } from '../gfx/font.js';
 import { panel, bar, heading, UI, Toasts } from '../gfx/ui.js';
 import { rect, rectOutline, clamp, clamp01, lerp, disc, shadow } from '../gfx/pixel.js';
 import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
+import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
+         drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
 import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
 import { drawForestArena } from '../gfx/forestArena.js';
@@ -99,6 +101,7 @@ export class CombatScene {
     ];
     this.activeTip = null; this.activeTipT = 0;
     this.awaitingArena = false; this.arenaPrompt = false; this.inArena = false;
+    this.cine = null; this.phase2 = false;
     this.waveNum = 0; this.waveTotal = 0;
     this.clearFlash = 0;
 
@@ -240,6 +243,16 @@ export class CombatScene {
 
   update(dt, game) {
     this.t += dt;
+    // Cinematic owns the frame: player input, enemy AI, spawns, timers and the
+    // combat sim are all simply not run. Nothing is disabled flag-by-flag,
+    // because a flag someone forgets is a boss that attacks during a cutscene.
+    if (this.cine) {
+      this.cine.update(dt);
+      if (this.cine.shakeReq) this.game.addShake(this.cine.shakeReq);
+      if (this.cine.canSkip && Input.anyPressed('confirm', 'menu')) this.cine.skip();
+      this.particles.update(dt);
+      return;
+    }
     this._updateBossIntro(dt);
     this._updateBossRise(dt);
     this._updateArenaGate();
@@ -1324,6 +1337,11 @@ export class CombatScene {
 
   _onBossDefeated() {
     if (this.state !== 'play') return;
+    // The FIRST time his bar empties he does not die — he refuses to. Control
+    // is handed to the cinematic, which hands it back with Phase 2 standing.
+    // Guarded on phase2 so the second defeat is a real one and the normal
+    // victory/reward path is untouched.
+    if (this.inArena && !this.phase2 && !this.cine) { this._beginThornCinematic(); return; }
     this.state = 'victory'; this.endTimer = 0;
     this.boss.hp = 0;
     this.hero.s.quests.bossDefeated = true;
@@ -1332,6 +1350,42 @@ export class CombatScene {
     this._setMessage('THE GOBLIN KING FALLS!', 3);
     // rewards
     this._grantRewards();
+  }
+
+  _beginThornCinematic() {
+    const seen = !!(this.hero.s.flags && this.hero.s.flags.thornCinematicSeen);
+    this.boss.hp = 1;                       // he is not dead; the bar is spent
+    this.boss.seated = false;
+    this.state = 'cinematic';
+    this.message = null; this.messageT = 0; this.messageSub = null;
+    this.tutorialBox = null; this.activeTip = null; this.tips = [];
+    this.clearFlash = 0;
+    Audio.confirm();
+    this.cine = new ThornCinematic(this.boss, {
+      W: this.W, H: this.H, camX: this.camX, canSkip: seen,
+      // The hall's walls, so no shot can frame past the scenery.
+      bounds: { x0: this.camX - 4, x1: this.camX + this.W + 4, y0: 0, y1: this.H },
+      onFinish: () => this._endThornCinematic(),
+    });
+    if (this.hero.s.flags) this.hero.s.flags.thornCinematicSeen = true;
+  }
+
+  // Everything the cinematic changed about the fight is set HERE, once, so the
+  // skip path and the played path cannot disagree about what Phase 2 is.
+  _endThornCinematic() {
+    this.cine = null;
+    this.phase2 = true;
+    this.state = 'play';
+    const b = this.boss;
+    if (b) {
+      b.maxHp = Math.round(b.maxHp * 0.85);   // a fresh, shorter second bar
+      b.hp = b.maxHp;
+      b.phaseIdx = 0; b.phaseAnnounced = -1;
+      b.attackTimer = 0.9;                    // a beat before he moves
+      b.speed = (b.def.speed || 40) * 1.25;
+      b.seated = false; b.z = 0;
+    }
+    this.arenaAwakened = true;                // the floor stays fractured
   }
 
   _grantRewards() {
@@ -1427,8 +1481,13 @@ export class CombatScene {
     const ox = -Math.round(this.camX) + sh.x;
 
     g.save();
-    g.translate(ox, sh.y);
+    // The cinematic substitutes its own lens. The world underneath is still
+    // drawn in world coordinates around the same camX, so the chamber does not
+    // move a pixel while the camera roams it — the shots are of THIS room.
+    if (this.cine) { g.translate(sh.x, sh.y); this.cine.applyCamera(g); }
+    else g.translate(ox, sh.y);
     this._drawWorld(g);
+    if (this.cine) this._drawCinematicWorld(g);
 
     // y-sort actors by depth
     const actors = [this.p, ...this.enemies];
@@ -1531,6 +1590,40 @@ export class CombatScene {
       disc(g, tx, ty, 1, '#eae2ff');
       g.globalAlpha = 1;
       if (Math.random() < 0.15) this.particles.spawn({ x: tx, y: ty, kind: 'ember', color: '#c2b2ff', vx: 0, vy: -6, life: 0.5, size: 1 });
+    }
+  }
+
+  // World-space cinematic layers: grade, roots, eye, floor. Drawn inside the
+  // cinematic transform so they sit in the room rather than on the screen.
+  _drawCinematicWorld(g) {
+    const c = this.cine, b = this.boss;
+    if (!c) return;
+    const camX = this.camX;
+    // The grade is SCREEN space only — see _drawCinematicOverlay. Drawing it in
+    // world space too put a second vignette in the frame, centred on the
+    // gameplay camera rather than the cinematic one, which is what was darkening
+    // one side of every zoomed shot.
+    if (b) {
+      const h = actorHeight(b.sprite) * (b.scale || 1.6);
+      drawFloorFracture(g, c, Math.round(b.x), Math.round(b.depth + 2),
+                        camX, this.W, this.H);
+      drawRoots(g, c, Math.round(b.x), Math.round(b.depth), h);
+      drawEye(g, c, Math.round(b.x), Math.round(b.depth), h);
+    }
+  }
+
+  // Screen-space: bars and subtitle, after the lens is undone so neither
+  // scales with the shot.
+  _drawCinematicOverlay(g) {
+    const c = this.cine;
+    if (!c) return;
+    drawCinematicGrade(g, c, 0, this.W, this.H);
+    drawLetterbox(g, c, this.W, this.H);
+    drawCinematicLine(g, c, this.W, this.H, drawText);
+    if (c.canSkip) {
+      g.globalAlpha = 0.5;
+      drawText(g, 'ENTER  SKIP', this.W - 10, this.H - 14, { color: '#9a9184', align: 'right' });
+      g.globalAlpha = 1;
     }
   }
 
@@ -1643,6 +1736,11 @@ export class CombatScene {
     if (this.clearFlash > 0) {
       g.globalAlpha = this.clearFlash * 0.18; g.fillStyle = '#f2c94f'; g.fillRect(0, 0, this.W, this.H); g.globalAlpha = 1;
     }
+
+    // The cinematic owns the whole frame. Nothing of the fight's UI survives
+    // into it — a health plate under a king's last words is the fastest way to
+    // make a cutscene look like a menu.
+    if (this.cine) { this._drawCinematicOverlay(g); return; }
 
     this._drawPlayerPlate(g);
     this._drawAbilityBar(g);
@@ -1763,7 +1861,7 @@ export class CombatScene {
   _drawTopBanner(g) {
     // Not while he is still on the throne: the bar going up before he moves
     // announces the fight the staging is trying to let you discover.
-    if (this.boss && this.boss.hp > 0 && !this.boss.seated) {
+    if (this.boss && this.boss.hp > 0 && !this.boss.seated && !this.cine) {
       const bw = this.W - 80, bx = 40, by = 16;
       // dark banner strip behind
       rect(g, bx - 6, by - 12, bw + 12, 30, 'rgba(9,7,16,0.7)');

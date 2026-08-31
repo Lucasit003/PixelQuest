@@ -18,6 +18,7 @@ import { spriteConfigFor, drawSpriteActor, ACTOR_SPRITES } from './sprites.js';
 // them rendering registered actors as procedural fallbacks — the sheet loaded
 // fine, but nothing had told the registry it existed.
 import './spriteCatalog.js';
+import { drawActorEquipment } from './equipment.js';
 
 // ---------------------------------------------------------------- palettes
 
@@ -696,7 +697,17 @@ export function drawSlime(g, a) {
  */
 export function drawCharacter(g, a) {
   const cfg = spriteConfigFor(a);
-  if (cfg && drawSpriteActor(g, a, cfg)) return;
+  if (cfg) {
+    // Equipment brackets the body: `behind` first so a shield strapped to the
+    // far arm sits under the torso, then the body, then `front`. A sheet-backed
+    // actor with nothing equipped costs two no-op calls.
+    if (a.equipped) drawActorEquipment(g, a, cfg, 'behind');
+    const drew = drawSpriteActor(g, a, cfg);
+    if (drew) {
+      if (a.equipped) drawActorEquipment(g, a, cfg, 'front');
+      return;
+    }
+  }
   if (a.sprite === 'slime') drawSlime(g, a);
   else drawActor(g, a);
 }

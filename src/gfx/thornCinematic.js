@@ -65,71 +65,78 @@ const SHOT = {
   CHAMBER:     [  0,  -10,  0.92],
 };
 
-// The sequence. `hold` is seconds. `lines` are [text, atSecond] within the
-// state, so dialogue timing is data and can be retuned without touching code.
-// Timing is tuned to the dialogue, not to a target runtime. The 22 specified
-// lines take ~32.6s at an unhurried pace, and the required action beats add
-// ~17.6s, so ~50s is the floor for this script — see the note in the handover.
-// Every hold below is the minimum that does not rush its own content.
+// THE SCRIPT.
+//
+// Cut from 22 lines to 13, and the cut IS the craft. A defeated king who
+// explains himself at length is a king being narrated at; one who says three
+// things and lets the room go quiet is a king. Every line dropped here was
+// doing work a surviving line already does — the roll-call of dead challengers
+// is carried by "all of them fell", and "come, warrior" was redundant with the
+// last word he says. What is left has to earn its place on screen.
+//
+// Silence is scored as deliberately as speech. `music` runs 0 through the
+// defeat, barely lifts under the speech, and returns to ZERO on the sacrifice:
+// the loudest moment in the sequence has nothing under it at all. It only
+// swells once he is already standing.
+//
+// `ease` is the camera's approach speed for that shot — low numbers make the
+// lens crawl. The push during the speech and the drift onto the eye are slow on
+// purpose; the slam is fast because the cut should hit as hard as the weapon.
+// `hold` is seconds; `lines` are [text, atSecond] so timing stays data.
 const SEQUENCE = [
-  { id: CUT.KNEEL, hold: 2.2, shot: 'MEDIUM_WIDE', music: 0, lines: [] },
+  // He is finished. Play it long and completely silent — the player should have
+  // time to believe the fight is over before anything contradicts them.
+  { id: CUT.KNEEL, hold: 3.4, shot: 'MEDIUM_WIDE', music: 0, ease: 1.2, letterbox: 1, lines: [] },
 
-  { id: CUT.FAILED_RISE, hold: 2.8, shot: 'MEDIUM', music: 0, lines: [] },
+  { id: CUT.FAILED_RISE, hold: 2.9, shot: 'MEDIUM', music: 0, ease: 1.4, letterbox: 1, lines: [] },
 
-  { id: CUT.SPEECH_01, hold: 13.1, shot: 'PUSH', music: 0.10,
+  { id: CUT.SPEECH_01, hold: 7.2, shot: 'PUSH', music: 0.08, ease: 0.55, letterbox: 1,
     lines: [
-      ['So...', 0.3],
-      ["At last, a warrior worthy of drawing a king's blood.", 1.1],
-      ['For years, they came for this throne.', 3.9],
-      ['Soldiers. Lords. Men who thought themselves heroes.', 6.0],
-      ['They all fell.', 8.7],
-      ['But you...', 9.9],
-      ['You have brought a king to his knees.', 10.9],
+      ['So.', 0.5],
+      ['Many came for this throne. All of them fell.', 1.8],
+      ['You have brought a king to his knees.', 4.6],
     ] },
 
-  { id: CUT.RECOGNITION, hold: 2.2, shot: 'CLOSE_FACE', music: 0.10,
-    lines: [['You should be proud.', 0.2]] },
+  { id: CUT.RECOGNITION, hold: 2.6, shot: 'CLOSE_FACE', music: 0.08, ease: 0.9, letterbox: 1,
+    lines: [['You should be proud.', 0.3]] },
 
-  { id: CUT.RETRIEVAL, hold: 6.8, shot: 'MEDIUM', music: 0.18,
+  { id: CUT.RETRIEVAL, hold: 5.2, shot: 'MEDIUM', music: 0.16, ease: 1.1, letterbox: 1,
     lines: [
-      ['And yet...', 0.6],
-      ['My kingdom still stands.', 1.6],
-      ['My people still draw breath.', 3.2],
-      ['So I have no right to die.', 5.0],
+      ['And yet my kingdom stands.', 1.2],
+      ['So I have no right to die.', 3.2],
     ] },
 
-  { id: CUT.SPEECH_02, hold: 10.0, shot: 'MEDIUM', music: 0.26,
+  { id: CUT.SPEECH_02, hold: 7.4, shot: 'MEDIUM', music: 0.24, ease: 0.8, letterbox: 1,
     lines: [
-      ['You have conquered my flesh.', 0.3],
+      ['You have conquered my flesh.', 0.4],
       ['Now conquer what lies beneath it.', 2.1],
-      ['Ancient Thorn...', 4.1],
-      ['Take what remains of me.', 5.4],
-      ['Give me strength...', 7.0],
-      ['...for one final war.', 8.4],
+      ['Ancient Thorn. Take what remains of me.', 4.1],
+      ['...for one final war.', 6.2],
     ] },
 
-  // Impact, then the floor drops out of the music. The silence is the point.
-  { id: CUT.SACRIFICE, hold: 1.8, shot: 'PUSH', music: 0, shake: 7, lines: [] },
+  // Impact, and the score cuts out entirely. Hold on him in the silence.
+  { id: CUT.SACRIFICE, hold: 2.6, shot: 'PUSH', music: 0, ease: 2.4, shake: 7, letterbox: 1, lines: [] },
 
-  { id: CUT.BINDING, hold: 2.8, shot: 'MEDIUM', music: 0.14, lines: [] },
+  { id: CUT.BINDING, hold: 3.2, shot: 'MEDIUM', music: 0.12, ease: 0.9, letterbox: 1, lines: [] },
 
-  { id: CUT.EYE, hold: 1.8, shot: 'CLOSE_EYE', music: 0.22, lines: [] },
+  // The image the sequence is built around. The lens barely moves.
+  { id: CUT.EYE, hold: 2.6, shot: 'CLOSE_EYE', music: 0.20, ease: 0.45, letterbox: 1, lines: [] },
 
-  { id: CUT.RISE, hold: 2.4, shot: 'LOW_RISE', music: 0.42, lines: [] },
+  { id: CUT.RISE, hold: 3.0, shot: 'LOW_RISE', music: 0.44, ease: 0.9, letterbox: 1, lines: [] },
 
-  { id: CUT.HERO, hold: 5.5, shot: 'HERO', music: 0.62,
+  { id: CUT.HERO, hold: 4.2, shot: 'HERO', music: 0.66, ease: 0.7, letterbox: 1,
     lines: [
-      ['Come, warrior.', 0.4],
-      ['You defeated a king.', 1.6],
-      ['Now face his kingdom.', 3.1],
+      ['You defeated a king.', 0.6],
+      ['Now face his kingdom.', 2.2],
     ] },
 
-  { id: CUT.SLAM, hold: 1.6, shot: 'LOW_RISE', music: 0.75, shake: 9, lines: [] },
+  { id: CUT.SLAM, hold: 1.9, shot: 'LOW_RISE', music: 0.78, ease: 3.0, shake: 9, letterbox: 1, lines: [] },
 
-  { id: CUT.AWAKENING, hold: 2.2, shot: 'CHAMBER', music: 0.9, lines: [] },
+  { id: CUT.AWAKENING, hold: 2.6, shot: 'CHAMBER', music: 0.92, ease: 1.0, letterbox: 1, lines: [] },
 
-  { id: CUT.REVEAL, hold: 2.6, shot: 'WIDE', music: 1.0,
-    lines: [['Come.', 1.4]] },
+  // Bars retract here, handing the frame back to gameplay before he moves.
+  { id: CUT.REVEAL, hold: 3.0, shot: 'WIDE', music: 1.0, ease: 1.3, letterbox: 0,
+    lines: [['Come.', 1.5]] },
 ];
 
 export const CINEMATIC_LENGTH = SEQUENCE.reduce((a, s) => a + s.hold, 0);
@@ -145,6 +152,10 @@ export class ThornCinematic {
     this.W = o.W || 480;
     this.H = o.H || 270;
     this.baseCamX = o.camX || 0;
+    // The walls of the set. The King stands at the room's right end, so every
+    // shot framed on him wants to overrun it; a camera that leaves the room
+    // shows you the void behind the scenery.
+    this.bounds = o.bounds || null;
     this.onFinish = o.onFinish || (() => {});
     this.canSkip = !!o.canSkip;
 
@@ -183,6 +194,9 @@ export class ThornCinematic {
 
     this.cam = { fx: 0, fy: 0, z: 1 };
     this.music = 0;
+    // Cinematic bars. They ride in over the first beat and retract before
+    // control returns, so the handover to gameplay is felt rather than cut.
+    this.letterbox = 0;
     this.line = null;
     this.lineT = 0;
     this.shakeReq = 0;
@@ -233,6 +247,7 @@ export class ThornCinematic {
     this.env.floor = 1; this.env.carpetTear = 1;
     this.env.brazier = 1; this.env.dust = 0; this.env.throneRoots = 1;
     this.music = 1;
+    this.letterbox = 0;
     this.line = null;
   }
 
@@ -246,6 +261,8 @@ export class ThornCinematic {
     if (!s) { this._finish(); return; }
 
     const u = clamp01(this.t / s.hold);
+    const lbTarget = s.letterbox != null ? s.letterbox : 1;
+    this.letterbox += (lbTarget - this.letterbox) * Math.min(1, dt * 3.2);
     this._poseFor(s.id, u, this.t);
     this._camFor(s.shot, u);
     this._lineFor(s);
@@ -278,18 +295,31 @@ export class ThornCinematic {
     // Ease into every shot rather than snapping. First frame of a state seeds
     // the camera so the ease has somewhere to come from.
     if (this.t <= 0.001) { this.cam.fx = tx; this.cam.fy = ty; this.cam.z = z; return; }
+    const st = SEQUENCE[this.i];
+    const spd = (st && st.ease != null) ? st.ease : 1;   // per-shot lens speed
     const e = 1 - Math.pow(0.0025, 1 / 60);   // frame-rate independent ease
-    this.cam.fx = lerp(this.cam.fx, tx, e * 3.4);
-    this.cam.fy = lerp(this.cam.fy, ty, e * 3.4);
-    this.cam.z = lerp(this.cam.z, z, e * 3.0);
+    this.cam.fx = lerp(this.cam.fx, tx, e * 3.4 * spd);
+    this.cam.fy = lerp(this.cam.fy, ty, e * 3.4 * spd);
+    this.cam.z = lerp(this.cam.z, z, e * 3.0 * spd);
   }
 
   // Whole-pixel discipline: the focus rounds to integers and the zoom snaps to
   // eighths, so sprites never land between pixels while the camera is moving.
   applyCamera(g) {
     const z = Math.max(0.25, Math.round(this.cam.z * 8) / 8);
-    const fx = Math.round(this.cam.fx);
-    const fy = Math.round(this.cam.fy);
+    let fx = this.cam.fx, fy = this.cam.fy;
+    if (this.bounds) {
+      const hw = this.W / 2 / z, hh = this.H / 2 / z;
+      const b = this.bounds;
+      // When the set is narrower than the shot, centre on it rather than
+      // clamping to a nonsensical range.
+      fx = (b.x1 - b.x0) <= hw * 2 ? (b.x0 + b.x1) / 2
+         : Math.min(Math.max(fx, b.x0 + hw), b.x1 - hw);
+      fy = (b.y1 - b.y0) <= hh * 2 ? (b.y0 + b.y1) / 2
+         : Math.min(Math.max(fy, b.y0 + hh), b.y1 - hh);
+    }
+    fx = Math.round(fx);
+    fy = Math.round(fy);
     g.translate(Math.round(this.W / 2), Math.round(this.H / 2));
     g.scale(z, z);
     g.translate(-fx, -fy);
@@ -432,4 +462,159 @@ export class ThornCinematic {
         break;
     }
   }
+}
+
+// =========================================================================
+// RENDERER
+// =========================================================================
+//
+// Atmosphere here is carried by restraint, not by effects. The rules this
+// follows, in priority order: the room stays the room; the light comes from
+// somewhere; nothing glows that has not been reached yet; and the frame gets
+// quieter as the moment gets bigger.
+
+// Local hash. The fracture owns its own noise so callers do not have to supply
+// one, and so the same impact always produces the same crack network — §28
+// wants the final arena reproducible, which means deterministic.
+function hsh(n) {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+const TEAL = { core: '#bdf6e8', body: '#3fd0bb', deep: '#12736c', dim: '#0b3a3a' };
+
+// Cinematic bars. Drawn in SCREEN space, after the camera transform is undone,
+// so they never scale with the shot.
+export function drawLetterbox(g, cine, W, H) {
+  const h = Math.round(cine.letterbox * 26);
+  if (h <= 0) return;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, W, h);
+  g.fillRect(0, H - h, W, h);
+}
+
+// Subtitle, not a dialogue box. A panel with a frame around it turns a king's
+// last words into a UI element; plain text over the floor does not.
+export function drawCinematicLine(g, cine, W, H, drawText) {
+  if (!cine.line) return;
+  const fade = clamp01(cine.lineT * 4) * clamp01((3.6 - cine.lineT) * 2.2);
+  if (fade <= 0.01) return;
+  g.globalAlpha = clamp01(fade);
+  drawText(g, cine.line, W / 2, H - 40, { color: '#e8dfc8', align: 'center', shadow: '#000' });
+  g.globalAlpha = 1;
+}
+
+// The chamber's own light, pushed around by the sequence. Desaturated and cold
+// while he is beaten; warmth returns only as the roots do.
+export function drawCinematicGrade(g, cine, camX, W, H) {
+  const p = cine.pose;
+  const dead = 1 - clamp01(p.rootTravel * 1.2);
+  if (dead > 0.01) {                     // the colour drains out of the defeat
+    g.fillStyle = `rgba(26,30,38,${0.30 * dead})`;
+    g.fillRect(camX, 0, W, H);
+  }
+  const lit = clamp01(p.rootTravel);
+  if (lit > 0.01) {
+    g.fillStyle = `rgba(18,90,86,${0.10 * lit})`;
+    g.fillRect(camX, 0, W, H);
+  }
+  // The vignette tightens as the shot closes in, which is what makes a push
+  // feel like a push rather than a zoom.
+  const tight = clamp01((cine.cam.z - 1) / 3.2);
+  const vig = g.createRadialGradient(camX + W / 2, H / 2, 40 + (1 - tight) * 120,
+                                     camX + W / 2, H / 2, 210 + (1 - tight) * 150);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, `rgba(0,0,0,${0.34 + tight * 0.30})`);
+  g.fillStyle = vig;
+  g.fillRect(camX, 0, W, H);
+}
+
+// The transformation, travelling. `rootTravel` is a HEIGHT THRESHOLD up the
+// body: a root only draws once the front has climbed past where it starts, so
+// nothing above the shoulder can light while the shoulder is still dark.
+export function drawRoots(g, cine, kx, ky, bodyH) {
+  const p = cine.pose;
+  if (p.rootTravel <= 0.001) return;
+  const front = p.rootTravel;
+  const top = ky - bodyH * 0.9;              // crown height above his feet
+  for (let i = 0; i < 14; i++) {
+    const seed = i * 3.77;
+    const start = (i % 5) / 5 * 0.55;    // where up the body this root begins
+    if (front < start) continue;
+    const grow = clamp01((front - start) / 0.30);
+    const side = i % 2 ? 1 : -1;
+    const x0 = kx + side * (1 + (i % 3));
+    const y0 = ky - (ky - top) * start;
+    const len = (7 + (i % 4) * 4) * grow;
+    let x = x0, y = y0;
+    for (let d = 0; d < len; d++) {
+      const w = Math.sin(d * 0.5 + seed) * 0.9;
+      x += side * 0.22 + w * 0.12;
+      y -= 0.85;
+      g.fillStyle = d > len - 3 ? TEAL.core : (d % 4 === 0 ? TEAL.body : TEAL.deep);
+      g.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+  }
+  // Crown, last and only once the front has actually reached it.
+  if (p.crownLit > 0.01) {
+    g.globalAlpha = p.crownLit;
+    g.fillStyle = TEAL.core;
+    for (let i = -3; i <= 3; i++) g.fillRect(Math.round(kx + i * 2), Math.round(top), 1, 2);
+    g.globalAlpha = 1;
+  }
+}
+
+// One eye. The other stays as it was — a whole glowing face is a monster, and
+// this is still a king.
+export function drawEye(g, cine, kx, ky, bodyH) {
+  const p = cine.pose;
+  if (p.eyeOpen <= 0.01) return;
+  const ex = Math.round(kx + 2), ey = Math.round(ky - bodyH * 0.82);
+  const open = clamp01(p.eyeOpen);
+  g.globalAlpha = open;
+  g.fillStyle = TEAL.core;
+  g.fillRect(ex, ey, 2, Math.max(1, Math.round(open * 2)));
+  g.globalAlpha = open * 0.45;
+  g.fillStyle = TEAL.body;
+  g.fillRect(ex - 1, ey - 1, 4, Math.max(1, Math.round(open * 4)));
+  g.globalAlpha = 1;
+}
+
+// The floor. Cracks BRANCH from the impact point rather than being scattered,
+// and they are drawn under a dark overlay so the light reads as coming from
+// beneath the stone instead of being painted onto it.
+export function drawFloorFracture(g, cine, ix, iy, camX, W, H) {
+  const f = cine.env.floor;
+  if (f <= 0.001) return;
+  const branch = (x, y, ang, len, depth, seed) => {
+    let cx = x, cy = y, a = ang;
+    const reach = len * clamp01(f * 1.4 - depth * 0.12);
+    for (let d = 0; d < reach; d++) {
+      a += (hsh(seed + d * 0.21) - 0.5) * 0.30;
+      cx += Math.cos(a); cy += Math.sin(a) * 0.42;
+      if (cx < camX - 10 || cx > camX + W + 10) break;
+      const glow = 1 - d / Math.max(1, reach);
+      // Mostly the dim tones, with the bright core only at the growing tip.
+      // A crack network in full cyan turns the hall into a blue arena, which is
+      // the one thing the spec is most emphatic about not doing.
+      g.globalAlpha = 0.34 + glow * 0.42;
+      g.fillStyle = glow > 0.90 ? TEAL.body : (glow > 0.55 ? TEAL.deep : TEAL.dim);
+      g.fillRect(Math.round(cx), Math.round(cy), 1, 1);
+      g.globalAlpha = 1;
+      if (depth < 3 && d > reach * 0.35 && hsh(seed + d * 1.7) > 0.955) {
+        branch(cx, cy, a + (hsh(seed + d) > 0.5 ? 0.8 : -0.8),
+               len * 0.55, depth + 1, seed + d * 3.1);
+      }
+    }
+  };
+  for (let i = 0; i < 6; i++) {
+    branch(ix, iy, (i / 6) * Math.PI * 2 + 0.3, 74, 0, i * 9.13);
+  }
+  // Under-stone bloom at the strike itself.
+  const r = 8 + f * 26;
+  const gl = g.createRadialGradient(ix, iy, 0, ix, iy, r);
+  gl.addColorStop(0, `rgba(63,208,187,${0.16 * f})`);
+  gl.addColorStop(1, 'rgba(63,208,187,0)');
+  g.fillStyle = gl;
+  g.fillRect(ix - r, iy - r, r * 2, r * 2);
 }
