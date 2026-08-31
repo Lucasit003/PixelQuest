@@ -752,11 +752,14 @@ export class CombatScene {
   _enemyShoot(e) {
     const p = this.p;
     const t = e.tuning;
-    const dx = p.x - e.x, dy = (p.depth) - (e.depth);
+    // Launch from where the weapon actually is (an archer's nock point sits
+    // forward of the body at draw height), not from the sprite's center.
+    const sx = e.x + e.facing * (e.def.projFwd ?? 0);
+    const dx = p.x - sx, dy = (p.depth) - (e.depth);
     const d = Math.hypot(dx, dy) || 1;
     const spd = e.def.projSpeed;
     this.projectiles.push({
-      x: e.x, depth: e.depth, z: 12,
+      x: sx, depth: e.depth, z: e.def.projZ ?? 12, shape: e.def.projShape,
       vx: (dx / d) * spd, vdepth: (dy / d) * spd, life: t.projLife,
       dmg: e.def.attack, owner: 'enemy', color: t.projColor, r: t.projRadius, hit: new Set(),
     });
@@ -858,7 +861,8 @@ export class CombatScene {
       pr.x += pr.vx * dt;
       if (pr.vdepth) pr.depth += pr.vdepth * dt;
       pr.trailT = (pr.trailT || 0) + dt;
-      if (pr.trailT > 0.03) { pr.trailT = 0; this.particles.spawn({ x: pr.x, y: pr.depth - pr.z, kind: 'ember', color: pr.color, vx: 0, vy: 0, life: 0.25, size: 1 }); }
+      // arrows are wood, not magic — they fly without an ember trail
+      if (pr.shape !== 'arrow' && pr.trailT > 0.03) { pr.trailT = 0; this.particles.spawn({ x: pr.x, y: pr.depth - pr.z, kind: 'ember', color: pr.color, vx: 0, vy: 0, life: 0.25, size: 1 }); }
 
       if (pr.owner === 'player') {
         for (const e of this.enemies) {
@@ -1216,6 +1220,26 @@ export class CombatScene {
   _drawProjectiles(g) {
     for (const pr of this.projectiles) {
       const y = pr.depth - pr.z;
+      if (pr.shape === 'arrow') {
+        // A physical arrow drawn along its flight: wood shaft, steel head at
+        // the leading end, red fletching at the tail.
+        g.save();
+        g.translate(Math.round(pr.x), Math.round(y));
+        g.rotate(Math.atan2(pr.vdepth || 0, pr.vx));
+        g.fillStyle = '#6e5436';
+        g.fillRect(-7, 0, 11, 1);
+        g.fillStyle = '#aab2bc';
+        g.fillRect(4, 0, 2, 1);
+        g.fillStyle = '#e8edf2';
+        g.fillRect(6, 0, 1, 1);
+        g.fillStyle = '#9c3c32';
+        g.fillRect(-7, -1, 2, 1);
+        g.fillRect(-7, 1, 2, 1);
+        g.fillStyle = '#c0503f';
+        g.fillRect(-8, 0, 1, 1);
+        g.restore();
+        continue;
+      }
       // A trailing tail behind the head reads as travel; a bare disc reads as a
       // dot that teleports. Three shrinking discs is enough at this resolution.
       const dir = Math.sign(pr.vx) || 1;

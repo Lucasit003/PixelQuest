@@ -691,6 +691,9 @@ export const ENEMIES = {
     speed: 30, defense: 1, reach: 175, gold: [6, 12], xp: 12,
     behavior: 'ranged', attackCd: 2.7, w: 11, projectile: true,
     projSpeed: 155, attackAnim: 1.2, shootDelay: 0.95,
+    // the shot is a real arrow, loosed from the bow: forward of the body at
+    // full-draw height, drawn as shaft/head/fletching along its flight
+    projShape: 'arrow', projFwd: 16, projZ: 26,
     bloodColor: '#b8a888',
   },
   skeleton: {
