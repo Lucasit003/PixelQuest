@@ -3,13 +3,27 @@
 
 import { Input } from './input.js';
 
+// The coordinate space every scene draws in, whatever the buffer size is.
+export const LOGICAL_W = 480;
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
     this.g = canvas.getContext('2d');
     this.g.imageSmoothingEnabled = false;
-    this.width = canvas.width;
-    this.height = canvas.height;
+
+    // SUPERSAMPLING. The drawing buffer may be larger than the coordinate space
+    // scenes draw in. Everything -- world, actors, HUD, menus -- keeps using
+    // 480x270 coordinates, and the buffer just holds more pixels per unit.
+    //
+    // Doing it here rather than by rescaling every layout number is what makes
+    // a resolution change safe: not one call site moves. Art with more source
+    // pixels than it had room for (a 68px hero drawn 34 units tall) simply
+    // stops throwing detail away, while art authored for the old size looks
+    // exactly as before.
+    this.pixelScale = canvas.width / LOGICAL_W;
+    this.width = LOGICAL_W;
+    this.height = canvas.height / this.pixelScale;
 
     this.scene = null;
     this.pendingScene = null;
@@ -123,6 +137,7 @@ export class Game {
   _draw() {
     const g = this.g;
     g.save();
+    if (this.pixelScale !== 1) g.scale(this.pixelScale, this.pixelScale);
     g.fillStyle = '#0d0b14';
     g.fillRect(-16, -16, this.width + 32, this.height + 32);
     if (this.scene && this.scene.draw) this.scene.draw(g, this);

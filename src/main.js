@@ -30,8 +30,10 @@ loadHeroEquipment().then((armed) => {
 });
 
 const canvas = document.getElementById('game');
-const BASE_W = canvas.width;   // 480
-const BASE_H = canvas.height;  // 270
+// The CSS size follows the LOGICAL resolution, not the buffer. The buffer is
+// 2x for detail; the window should still show a 480x270 game.
+const BASE_W = 480;
+const BASE_H = 270;
 
 // Scale the canvas up to fill the viewport while preserving aspect ratio and
 // crisp pixels. We scale via CSS so the drawing buffer stays at native res.

@@ -1,37 +1,37 @@
 {
   "warrior": {
-    "cellW": 22,
-    "cellH": 40,
+    "cellW": 41,
+    "cellH": 76,
     "columns": 4
   },
   "mage": {
-    "cellW": 22,
-    "cellH": 41,
+    "cellW": 40,
+    "cellH": 76,
     "columns": 4
   },
   "rogue": {
-    "cellW": 22,
-    "cellH": 41,
+    "cellW": 39,
+    "cellH": 76,
     "columns": 4
   },
   "ranger": {
-    "cellW": 22,
-    "cellH": 40,
+    "cellW": 39,
+    "cellH": 76,
     "columns": 4
   },
   "paladin": {
-    "cellW": 22,
-    "cellH": 40,
+    "cellW": 41,
+    "cellH": 76,
     "columns": 4
   },
   "berserker": {
-    "cellW": 23,
-    "cellH": 40,
+    "cellW": 41,
+    "cellH": 76,
     "columns": 4
   },
   "summoner": {
-    "cellW": 22,
-    "cellH": 39,
+    "cellW": 40,
+    "cellH": 76,
     "columns": 4
   }
 }

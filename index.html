@@ -8,7 +8,11 @@
 </head>
 <body>
   <div id="stage">
-    <canvas id="game" width="480" height="270"></canvas>
+    <!-- The drawing buffer is 2x the logical size. Every scene still draws in
+     480x270 coordinates; core/loop.js applies the 2x transform once per
+     frame. So the UI needs no rescaling and high-resolution art gets
+     sharper for free. -->
+    <canvas id="game" width="960" height="540"></canvas>
   </div>
   <div id="rotate">Rotate your device or widen the window.</div>
   <script type="module" src="src/main.js"></script>
