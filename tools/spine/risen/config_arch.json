@@ -74,6 +74,11 @@
  ],
  "slots": [
   {
+   "name": "quiver",
+   "bone": "torso",
+   "attachment": "quiver"
+  },
+  {
    "name": "leg_l",
    "bone": "leg_l",
    "attachment": "leg_l"
@@ -173,6 +178,12 @@
    "height": 82,
    "x": 0.5,
    "y": -35.0
+  },
+  "quiver": {
+   "width": 60,
+   "height": 98,
+   "x": -17,
+   "y": 12
   }
  },
  "animations": [],
