@@ -196,10 +196,16 @@ const HERO_SCALE = 1 / ACTOR_ZOOM;
 // sprite -- with the buffer supersampled 2x there is room for the extra detail,
 // and at 35px the characters read as four beige pixels where a face should be.
 //
-// Idle and walk are composed from each sprite's own pixels, moved. The legs
-// LIFT rather than splay: in a front view a stride travels toward and away from
-// the camera, so a sideways splay is not a step, and it opens a gap between the
-// legs that the torso encloses. Verified zero enclosed holes added by any frame.
+// Idle is a SINGLE static frame. A breathing cycle read as an odd little bounce
+// at this size -- the same failure the Warrior's original sheet had, where an
+// idle cycle made him rotate on the spot. A character standing still stands still.
+//
+// The walk is six beats -- contact, lift, pass, twice -- composed from each
+// sprite's own pixels. The legs LIFT rather than splay: in a front view a stride
+// travels toward and away from the camera, so a sideways splay is not a step,
+// and it opens a gap between the legs that the torso encloses. The upper body
+// also sways a pixel toward the planted foot, which is what separates walking
+// from marching on the spot. Verified zero enclosed holes added by any frame.
 //
 // HERO_WORLD_H is the height they occupy in logical units. 34 was the old size;
 // 1.35x reads as a person rather than a doll against the benches and wells.
@@ -207,91 +213,91 @@ const HERO_WORLD_H = 34 * 1.35;
 
 registerActorSprite('warrior', {
   sheet: 'assets/actors/hi/warrior.png',
-  frameWidth: 41, frameHeight: 76, columns: 4,
+  frameWidth: 41, frameHeight: 76, columns: 5,
   anchorX: 20, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });
 
 registerActorSprite('mage', {
   sheet: 'assets/actors/hi/mage.png',
-  frameWidth: 40, frameHeight: 76, columns: 4,
+  frameWidth: 40, frameHeight: 76, columns: 5,
   anchorX: 20, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });
 
 registerActorSprite('rogue', {
   sheet: 'assets/actors/hi/rogue.png',
-  frameWidth: 39, frameHeight: 76, columns: 4,
+  frameWidth: 39, frameHeight: 76, columns: 5,
   anchorX: 19, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });
 
 registerActorSprite('ranger', {
   sheet: 'assets/actors/hi/ranger.png',
-  frameWidth: 39, frameHeight: 76, columns: 4,
+  frameWidth: 39, frameHeight: 76, columns: 5,
   anchorX: 19, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });
 
 registerActorSprite('paladin', {
   sheet: 'assets/actors/hi/paladin.png',
-  frameWidth: 41, frameHeight: 76, columns: 4,
+  frameWidth: 41, frameHeight: 76, columns: 5,
   anchorX: 20, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });
 
 registerActorSprite('berserker', {
   sheet: 'assets/actors/hi/berserker.png',
-  frameWidth: 41, frameHeight: 76, columns: 4,
+  frameWidth: 41, frameHeight: 76, columns: 5,
   anchorX: 20, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });
 
 registerActorSprite('summoner', {
   sheet: 'assets/actors/hi/summoner.png',
-  frameWidth: 40, frameHeight: 76, columns: 4,
+  frameWidth: 40, frameHeight: 76, columns: 5,
   anchorX: 20, anchorY: 76,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
   animations: {
-    idle: { frames: [0, 1, 2, 3], fps: 4 },
-    walk: { frames: [4, 5, 6, 7], fps: 10 },
+    idle: { frames: [0], fps: 1 },
+    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
   },
 });

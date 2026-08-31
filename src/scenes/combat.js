@@ -1667,6 +1667,15 @@ export class CombatScene {
     if (!img || !img.complete || !img.naturalWidth) return false;
     const x = Math.round(e.x - img.naturalWidth / 2);
     const y = Math.round(e.depth - (e.z || 0) - img.naturalHeight);
+    // He has to be able to turn. The art faces one way; `facing` mirrors it,
+    // which is also what lets him sit facing DOWN the hall rather than staring
+    // out of the screen — a throne faces its own room.
+    const flip = e.facing > 0;
+    if (flip) {
+      g.save();
+      g.translate(Math.round(e.x) * 2, 0);
+      g.scale(-1, 1);
+    }
     if (e.flash > 0) {                       // hit flash, without tinting the art
       g.drawImage(img, x, y);
       g.globalAlpha = Math.min(0.7, e.flash);
@@ -1674,11 +1683,12 @@ export class CombatScene {
       g.drawImage(img, x, y);
       g.globalCompositeOperation = 'source-over';
       g.globalAlpha = 1;
-      return true;
+    } else {
+      g.globalAlpha = e.alpha ?? 1;
+      g.drawImage(img, x, y);
+      g.globalAlpha = 1;
     }
-    g.globalAlpha = e.alpha ?? 1;
-    g.drawImage(img, x, y);
-    g.globalAlpha = 1;
+    if (flip) g.restore();
     return true;
   }
 
