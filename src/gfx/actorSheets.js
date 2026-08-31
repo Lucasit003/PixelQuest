@@ -60,19 +60,20 @@ const DEFS = {
   // The goblin's numbers mirror the actor-side catalog design: authored at
   // screen resolution for combat's ACTOR_SCALE 1.4, so 1/1.4 blits 1:1.
   goblin: {
+    // Rebaked at the actor zoom from the original source art: 32px body,
+    // blitted 1:1 at COMBAT_ACTOR_SCALE (the 20px sheet was being
+    // fractionally upscaled 1.59x). Attack + lunge rows render from the
+    // Spine rig in tools/spine/goblin/.
     sheet: 'assets/actors/goblin.png',
-    frameW: 32, frameH: 32, anchorX: 16, anchorY: 32,
-    scale: 1 / 1.4, logicalHeight: 22, shadowRadius: 8,
+    frameW: 44, frameH: 44, anchorX: 22, anchorY: 43,
+    scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 22, shadowRadius: 9,
     anims: {
       idle:   { row: 0, frames: 4, fps: 6, loop: true },
       walk:   { row: 1, frames: 6, fps: 10, loop: true },
-      // rows 5-6: dagger attacks baked from the Spine rig (quick slash /
-      // lunge). Quick is the default melee; the old 4-frame row 2 stays in
-      // the sheet untouched. Lunge is wired for a future behavior stage.
-      attack: { row: 5, frames: 6, fps: 13, loop: false },
-      lunge:  { row: 6, frames: 6, fps: 12, loop: false },
+      attack: { row: 2, frames: 6, fps: 13, loop: false },
       hurt:   { row: 3, frames: 2, fps: 10, loop: false },
-      down:   { row: 4, frames: 4, fps: 8, loop: false },
+      down:   { row: 4, frames: 5, fps: 8, loop: false },
+      lunge:  { row: 5, frames: 6, fps: 12, loop: false },
     },
   },
   slime:      slime('assets/actors/slime_dollop.png', 11, 7),
@@ -159,6 +160,11 @@ export function drawSheetActor(g, a) {
   // real height cancels the baked lift so the two never stack
   let dy = 0;
   if (z > 0 && anim.lift) dy = (anim.lift[i] || 0) * k;
+  // single-frame bodies get a one-pixel breath so the roster never freezes
+  if (anim.frames === 1 && state !== 'down') {
+    const rate = state === 'walk' ? 7 : 1.6;
+    dy += Math.floor(t * rate) % 2;
+  }
 
   const alive = state !== 'down';
   if (alive || (a.alpha ?? 1) > 0.5) {
