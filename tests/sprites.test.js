@@ -410,24 +410,20 @@ test('the Warrior sheet matches its catalog entry exactly', () => {
   assert.equal(height % cfg.frameHeight, 0, 'sheet height is not a whole number of frame rows');
 });
 
-// This test used to assert the OPPOSITE — that 'warrior' must stay unregistered
-// so the procedural Warrior remained the default. That was right while the
-// sheet was a look-dev experiment. The three finished hero classes are now the
-// shipping art, deliberately registered under the ids CLASSES already uses, so
-// the assertion is inverted on purpose rather than deleted.
-test('the three finished heroes are registered under their CLASSES ids', () => {
-  for (const id of ['warrior', 'paladin', 'rogue']) {
-    assert.ok(ACTOR_SPRITES[id], `${id} should be sheet-backed`);
+// This assertion has now flipped twice, which is the point of keeping it rather
+// than deleting it. It first said 'warrior' must stay UNREGISTERED so the
+// procedural Warrior remained the default; then said the three finished heroes
+// must be registered, once their sheets shipped; and now says none of the seven
+// class ids may be registered, because every hero sheet was cleared for the
+// Spine rebuild. Each flip is a deliberate statement of what the game currently
+// is, and a guard against a half-finished sheet being wired in by accident.
+test('no class id is sheet-backed while the heroes are being rebuilt', () => {
+  for (const id of ['warrior', 'mage', 'rogue', 'ranger', 'paladin', 'berserker', 'summoner']) {
+    assert.equal(ACTOR_SPRITES[id], undefined,
+      `${id} must render procedurally until its Spine-driven sheet exists`);
   }
-  assert.ok(ACTOR_SPRITES.warrior_sprite, 'the phase-A Warrior keeps its own id');
-});
-
-test('the four unfinished classes still render procedurally', () => {
-  // Registering one of these before its art exists would silently swap a
-  // finished-looking hero for a missing sheet.
-  for (const id of ['mage', 'ranger', 'berserker', 'summoner']) {
-    assert.equal(ACTOR_SPRITES[id], undefined, `${id} has no art yet`);
-  }
+  assert.ok(ACTOR_SPRITES.warrior_sprite,
+    'the phase-A look-dev sheet keeps its own id and is unaffected');
 });
 
 test('the Warrior reports the procedural logical height, not its frame height', () => {

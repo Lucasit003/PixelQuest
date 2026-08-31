@@ -1,3 +1,6 @@
+import { registerActorSprite } from './sprites.js';
+import { ACTOR_ZOOM } from './actorScale.js';
+
 // Which actors are drawn from sprite sheets.
 //
 // This is the one place actor sheets get registered. Everything not listed here
@@ -56,43 +59,21 @@
 // When the Warrior sheets exist, the Warrior becomes sheet-backed by adding one
 // entry here — no change to combat, scenes, or actors.js:
 //
-//   registerActorSprite('warrior', {
-//     sheet: 'assets/actors/warrior.png',
-//     frameWidth: 32, frameHeight: 32, columns: 8,
-//     logicalHeight: 26,           // keep the procedural SPECS height
-//     hand: [22, 17],
-//     animations: {
-//       idle:   { frames: [0, 1, 2, 3], fps: 6 },
-//       walk:   { frames: [8, 9, 10, 11], fps: 10 },
-//       attack: { frames: [16, 17, 18, 19], fps: 14, loop: false },
-//       heavy:  { frames: [24, 25, 26, 27], fps: 12, loop: false },
-//       hurt:   { frames: [32], fps: 1 },
-//       down:   { frames: [33, 34], fps: 6, loop: false },
-//     },
-//   });
+//   // -------------------------------------------------------------- traveller
+// The adventurer camped by the arrival point. Cut from the same approved
+// master as the Warrior, but from the AXE pose on purpose: the player's
+// Warrior carries a sword, and a sword-bearer stood beside them reads as a
+// clone rather than as somebody else.
 //
-// A pet or wildlife actor works identically — a dog providing idle/walk/sit/
-// sleep/bark just names those animations; the extra ones are played by asking
-// for that state.
-
-import { registerActorSprite } from './sprites.js';
-import { ACTOR_ZOOM } from './actorScale.js';
-
-// ------------------------------------------------------ Warrior, phase A
-// Registered as 'warrior_sprite', NOT 'warrior' — the procedural Warrior stays
-// the default everywhere. To look at this one, point an actor's sprite id here
-// (PQDev or `scene.p.sprite = 'warrior_sprite'`); nothing switches on its own.
+// This is the first NPC on the sheet-backed path. town.js now draws NPCs with
+// drawCharacter instead of drawActor, so any npc whose sprite id is NOT
+// registered here (villager, sage, ...) still renders procedurally exactly as
+// before -- registering is what opts one in.
 //
-// Frames are real poses cut from the approved master (assets/warrior weaw.png)
-// by tools/build_actor_sheet.py — regenerate with:
-//     python3 tools/build_actor_sheet.py --manifest tools/actor_manifests/warrior_phase_a.json
-//
-// Phase A scope: this validates the pipeline, it is not finished art.
-//   * jump / dodge / hurt / down have no pose in the master yet, so they fall
-//     back toward idle until real frames are generated.
-//   * the sword and shield are BAKED IN here because the master's action poses
-//     hold them. Production frames must be authored empty-handed so the
-//     per-frame `hand` / `shield` anchors can carry equipment instead.
+//     python3 tools/build_actor_sheet.py --manifest tools/actor_manifests/traveller.json
+// The phase-A Warrior look-dev sheet. It predates the hero art that was
+// cleared for the Spine rebuild and is registered under its OWN id, never a
+// class id, so nothing selects it by picking a class.
 registerActorSprite('warrior_sprite', {
   sheet: 'assets/actors/warrior_phase_a.png',
   frameWidth: 24,
@@ -109,18 +90,6 @@ registerActorSprite('warrior_sprite', {
   },
 });
 
-// -------------------------------------------------------------- traveller
-// The adventurer camped by the arrival point. Cut from the same approved
-// master as the Warrior, but from the AXE pose on purpose: the player's
-// Warrior carries a sword, and a sword-bearer stood beside them reads as a
-// clone rather than as somebody else.
-//
-// This is the first NPC on the sheet-backed path. town.js now draws NPCs with
-// drawCharacter instead of drawActor, so any npc whose sprite id is NOT
-// registered here (villager, sage, ...) still renders procedurally exactly as
-// before -- registering is what opts one in.
-//
-//     python3 tools/build_actor_sheet.py --manifest tools/actor_manifests/traveller.json
 registerActorSprite('traveller', {
   sheet: 'assets/actors/traveller.png',
   frameWidth: 24,
@@ -212,88 +181,9 @@ registerActorSprite('goblin', {
 
 const HERO_SCALE = 1 / ACTOR_ZOOM;
 
-// All actions packed into one 4-column grid by tools/pack_hero_sheet.py.
-// idle 0-3, walk 4-7, then the reusable combat vocabulary.
-//
-// ATTACK is the approved Heavy Side Crush. The forward punch that shipped in
-// the original 16-frame sheet is deliberately NOT here: it was superseded
-// because the arm extended while the hips, knees and stance barely moved.
-registerActorSprite('paladin', {
-  sheet: 'assets/actors/paladin.png',
-  frameWidth: 34, frameHeight: 29, columns: 4,
-  anchorX: 17, anchorY: 29,
-  logicalHeight: 26,          // SPECS.paladin.h, so nameplates do not move
-  scale: HERO_SCALE,
-  shadowRadius: 7,
-  animations: {
-    idle:   { frames: [0, 1, 2, 3], fps: 6 },
-    walk:   { frames: [4, 5, 6, 7], fps: 10 },
-    attack: { frames: [8, 9, 10, 11], fps: 14, loop: false },
-    heavy:  { frames: [12, 13, 14, 15], fps: 11, loop: false },
-    brace:  { frames: [16, 17, 18, 19], fps: 12, loop: false },
-    cast:   { frames: [20, 21, 22, 23], fps: 10, loop: false },
-    slam:   { frames: [24, 25, 26, 27], fps: 12, loop: false },
-  },
-});
 
-registerActorSprite('rogue', {
-  sheet: 'assets/actors/rogue.png',
-  frameWidth: 32, frameHeight: 29, columns: 4,
-  anchorX: 16, anchorY: 29,
-  logicalHeight: 25,          // SPECS.rogue.h
-  scale: HERO_SCALE,
-  shadowRadius: 6,
-  animations: {
-    idle:   { frames: [0], fps: 4 },
-    walk:   { frames: [0, 1, 2, 3], fps: 10 },
-    attack: { frames: [4, 5, 6, 7], fps: 16, loop: false },
-    lunge:  { frames: [8, 9, 10, 11], fps: 16, loop: false },
-    dodge:  { frames: [12, 13, 14, 15], fps: 14, loop: false },
-    hurt:   { frames: [16, 17], fps: 10, loop: false },
-    down:   { frames: [18, 19], fps: 8, loop: false },
-    cast:   { frames: [20, 21, 22, 23], fps: 12, loop: false },
-  },
-});
-// ------------------------------------------------------------------ Warrior
-// Registered as 'warrior' (not 'warrior_sprite'), so the CLASSES table picks it
-// up and the player's Warrior finally uses the approved art everywhere.
-// 'warrior_sprite' above is left alone -- other things may still point at it.
-//
-// Cut from 03_sheet_emptyhanded_v2, the EMPTY-HANDED pass. The armed sheet has
-// the sword and shield painted into every frame, which would make an equipment
-// shop impossible; this one keeps the body weaponless like the other two.
-//
-// FACING. That sheet's walk faces LEFT. The engine mirrors only when
-// facing < 0, so it requires art that faces RIGHT — unmirrored art came out
-// backwards in BOTH directions. The frames are mirrored once at bake time
-// rather than corrected at draw time.
-//
-// IDLE is ONE front-facing frame, held static. The sheet offers two standing
-// poses and they are not the same body angle -- one is square-on, the other is
-// turned three-quarters. Alternating them made the Warrior rock between angles
-// while standing still, which reads as the character rotating on the spot. One
-// frame, no cycle.
-//
-// Only idle and walk: that sheet's attack rows are a level jab, not a swing,
-// and the Warrior's swing frames were never cut. Attack falls back to idle
-// until they are, which is the documented fallback rather than a broken pose.
-// Row 0 is the side view, row 1 the back, row 2 the front -- see
-// tools/pack_directions.py, which writes assets/actors/warrior_dirs.json with
-// these indices. A `*Up` / `*Down` animation is picked automatically when the
-// actor carries dir: 'up' / 'down'; without them he simply keeps the side view.
-registerActorSprite('warrior', {
-  sheet: 'assets/actors/warrior.png',
-  frameWidth: 26, frameHeight: 31, columns: 5,
-  anchorX: 13, anchorY: 31,
-  logicalHeight: 26,          // SPECS.warrior.h
-  scale: HERO_SCALE,
-  shadowRadius: 7,
-  animations: {
-    idle: { frames: [0], fps: 1 },      // single pose: a cycle here rotates him
-    walk: { frames: [1, 2, 3, 4], fps: 10 },
-    idleUp: { frames: [5], fps: 1 },
-    walkUp: { frames: [6, 7, 8, 9], fps: 10 },
-    idleDown: { frames: [10], fps: 1 },
-    walkDown: { frames: [11, 12, 13, 14], fps: 10 },
-  },
-});
+// The hand-authored and Gemini-generated hero sheets were cleared for the Spine
+// rebuild -- see git tag `pre-spine-reset` for the last state that had them.
+// With nothing registered under a class id, gfx/actors.js falls straight through
+// to the procedural renderer, which is what every unfinished class already does.
+// Re-register here when the Spine-driven sheets exist.

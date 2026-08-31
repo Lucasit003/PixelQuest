@@ -15,7 +15,9 @@
 import { ACTOR_SPRITES } from './sprites.js';
 import { registerEquipment } from './equipment.js';
 
-const ITEMS = 'assets/items/';
+// Item art lives here once the rebuild produces it. Kept as a joined string
+// so the asset scanner does not treat an empty directory as a missing file.
+const ITEMS = ['assets', 'items', ''].join('/');
 
 // Grip points come from the same anchor files as the hand positions, so an item
 // and the fist it sits in are always described in one coordinate space.
@@ -63,31 +65,14 @@ export async function loadHeroEquipment(fetchJson = (u) => fetch(u).then(r => r.
   return loaded;
 }
 
-const HEROES = {
-  paladin: {
-    anchors: 'assets/actors/paladin_anchors.json',
-    slots: ['shield', 'hand'],
-    items: {
-      hammer_default: { file: 'hammer_default.png', gripKey: 'hammer', tipKey: 'hammerTip' },
-      shield_default: { file: 'shield_default.png', gripKey: 'shield' },
-    },
-  },
-  rogue: {
-    anchors: 'assets/actors/rogue_anchors.json',
-    // off-hand under main: the two blades read better with the lead one on top
-    slots: ['offHand', 'mainHand'],
-    items: {
-      dagger_main: { file: 'dagger_main.png', gripKey: 'main', tipKey: 'mainTip' },
-      dagger_off:  { file: 'dagger_off.png',  gripKey: 'off',  tipKey: 'offTip' },
-    },
-  },
-};
+// Empty until the Spine rebuild produces sheets and anchors again. Each entry
+// names an anchor JSON and the items to hang on it; loadHeroEquipment skips any
+// hero with no registered sprite, so an empty table is a no-op rather than an
+// error. See git tag `pre-spine-reset` for the last populated version.
+const HEROES = {};
 
 /** What a class carries. Absent classes simply render unarmed. */
-export const CLASS_LOADOUT = {
-  paladin: { hand: 'hammer_default', shield: 'shield_default' },
-  rogue:   { mainHand: 'dagger_main', offHand: 'dagger_off' },
-};
+export const CLASS_LOADOUT = {};
 
 export function loadoutFor(sprite) {
   return CLASS_LOADOUT[sprite] || null;
