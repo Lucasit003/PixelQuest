@@ -66,7 +66,11 @@ const DEFS = {
     anims: {
       idle:   { row: 0, frames: 4, fps: 6, loop: true },
       walk:   { row: 1, frames: 6, fps: 10, loop: true },
-      attack: { row: 2, frames: 4, fps: 16, loop: false },
+      // rows 5-6: dagger attacks baked from the Spine rig (quick slash /
+      // lunge). Quick is the default melee; the old 4-frame row 2 stays in
+      // the sheet untouched. Lunge is wired for a future behavior stage.
+      attack: { row: 5, frames: 6, fps: 13, loop: false },
+      lunge:  { row: 6, frames: 6, fps: 12, loop: false },
       hurt:   { row: 3, frames: 2, fps: 10, loop: false },
       down:   { row: 4, frames: 4, fps: 8, loop: false },
     },
