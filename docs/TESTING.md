@@ -25,6 +25,7 @@ ESM so Node reads `src/*.js` the same way the browser does.
 | Save / load | `tests/save.test.js` | Round trip, missing saves, malformed data, version handling |
 | Academics | `tests/academics.test.js` | Question bank integrity, adaptive tier ladder, grading |
 | Game data | `tests/data.test.js` | Content validation — required fields, cross-references, unique ids |
+| Sprite actors | `tests/sprites.test.js` | Animation selection, frame timing, anchors, config validation |
 | Asset paths | `tests/assets.test.js` | Every `assets/…` path the source loads exists on disk |
 | RNG | `tests/rng.test.js` | Seeded reproducibility and helper ranges |
 
@@ -46,6 +47,9 @@ Workflow: make the change → `npm test` → run the game → visual/gameplay QA
 
 ## Notes for future sessions
 
+- `src/gfx/sprites.js` is the optional sheet-backed actor renderer; actors opt in
+  via `src/gfx/spriteCatalog.js`. Everything unlisted stays procedural. Art size
+  never feeds gameplay — hitboxes, reach and `logicalHeight` stay authored.
 - `src/game/enemyBehaviors.js` holds the enemy AI archetypes. A new enemy is an
   entry in `ENEMIES` with a `behavior` — combat.js never branches on enemy id.
   Bosses are the deliberate exception and stay scripted in `_updateBoss`.

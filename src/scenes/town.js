@@ -12,7 +12,7 @@
 // [E] prompt shows only at a building's entrance. Shops/inventory reuse the
 // existing overlay controllers.
 
-import { Input } from '../core/input.js';
+import { Input, FACE_DEADZONE } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { dialogue, UI, Toasts } from '../gfx/ui.js';
 import { clamp, lerp } from '../gfx/pixel.js';
@@ -25,6 +25,7 @@ import { DECOR_ART, drawButterfly, crystalGlow, lamp, brazier, bigTree } from '.
 import { MAP_W, MAP_H, ZOOM } from './town/dimensions.js';
 import { buildTown } from './town/layout.js';
 import { stripPlazaFrame, stripGlade } from './town/plazalife.js';
+import { buildPlazaDistricts, drawCrow } from './town/plazadistricts.js';
 import { openRoadGates } from './town/passability.js';
 import { drawHUD, drawNearPrompt, drawDebugOverview } from './town/hud.js';
 import { enterLocation, updateDialogue } from './town/interactions.js';
@@ -54,7 +55,7 @@ export class TownScene {
     this.dialogue = null;
     this.dialogueReveal = 0;
 
-    this.facing = 1; this.moving = false; this.walkT = 0;
+    this.facing = 1; this.dir = 'side'; this.moving = false; this.walkT = 0;
     this.camX = 0; this.camY = 0;
 
     this.currentDistrict = null;
@@ -65,6 +66,12 @@ export class TownScene {
     // Clears district planting that leans into the plaza frame while the site
     // is stripped for rebuilding. No-op once PLAZA_STRIP is off.
     stripPlazaFrame(this, this.plazaFocus);
+    // The four districts around the fountain: garden, market, farm, homes.
+    // Deliberately AFTER stripPlazaFrame — that filter and plaza.js's
+    // stripKeep() both hold this ground clear while the site is being
+    // rebuilt, and running last is what keeps this pass out of their way
+    // without editing either file. See plazadistricts.js.
+    this._districts = buildPlazaDistricts(this);
     // Cut a gate where a wall's collision closes a carriageway. Must run after
     // buildTown: roads, city and plaza are separate passes and only the
     // finished scene knows where they landed. See passability.js.
@@ -134,7 +141,13 @@ export class TownScene {
       const spd = 100 * (1 + this.hero.petBonus('moveSpeed'));
       this._tryMove(ax.x * spd * dt, 0);
       this._tryMove(0, ax.y * spd * dt);
-      if (ax.x !== 0) this.facing = ax.x > 0 ? 1 : -1;
+      if (Math.abs(ax.x) > FACE_DEADZONE) this.facing = ax.x > 0 ? 1 : -1;
+      // Which way he is turned relative to the camera. Vertical intent wins over
+      // horizontal so a mostly-up diagonal shows his back rather than his side;
+      // `facing` still carries left/right for the side view. This persists when
+      // he stops, so he keeps facing the way he was walking.
+      this.dir = Math.abs(ax.y) > Math.abs(ax.x)
+        ? (ax.y < 0 ? 'up' : 'down') : 'side';
       this.walkT += dt;
       if (Math.random() < dt * 4) this.particles.dust(this.px, this.py, 1);
     }
@@ -214,7 +227,7 @@ export class TownScene {
     // registered in gfx/spriteCatalog.js to its sheet, and falls straight back
     // to the procedural renderer for every id that is not. villager and sage
     // are unregistered, so they draw exactly as they did before.
-    for (const n of this.npcs) ents.push({ y: n.y, draw: (gg) => { contactShadow(gg, n.x, n.y, 6, 2); drawCharacter(gg, { x: n.x, y: n.y, facing: n.facing, sprite: n.sprite, weapon: n.sprite === 'warrior' ? 'sword' : (n.sprite === 'mage' ? 'staff' : 'none'), state: 'idle', animTime: this.t + n.x }); } });
+    for (const n of this.npcs) ents.push({ y: n.y, draw: (gg) => { contactShadow(gg, n.x, n.y, 6 * ACTOR_ZOOM, 2 * ACTOR_ZOOM); drawCharacter(gg, { x: n.x, y: n.y, facing: n.facing, sprite: n.sprite, weapon: n.sprite === 'warrior' ? 'sword' : (n.sprite === 'mage' ? 'staff' : 'none'), state: 'idle', animTime: this.t + n.x, scale: ACTOR_ZOOM }); } });
     for (const p of this.sanctuaryPets) ents.push({ y: p.y, draw: (gg) => drawPet(gg, p, p.x, p.y, this.t) });
     ents.push({ y: this.py, draw: (gg) => this._drawPlayer(gg) });
     ents.sort((a, b) => a.y - b.y);
@@ -234,6 +247,9 @@ export class TownScene {
     for (const [x, y] of this.braziers) brazier(g, x, y, this.t);
     for (const [x, y, hue, r] of this.crystalGlows) crystalGlow(g, x, y, this.t, hue, r);
     for (const b of this.butterflies) drawButterfly(g, b, this.t);
+    // Crows wheel above the farm. Same layer as the butterflies — both are
+    // airborne and belong over the depth-sorted props, not inside them.
+    for (const c of (this.crows || [])) drawCrow(g, c, this.t);
 
     this.particles.draw(g);
     this.toasts.draw(g);
@@ -258,9 +274,10 @@ export class TownScene {
     const pet = this.hero.pet();
     if (pet) drawPet(g, pet, this.px - this.facing * 14, this.py - 16, this.t);
     drawCharacter(g, {
-      x: this.px, y: this.py, z: 0, facing: this.facing,
+      x: this.px, y: this.py, z: 0, facing: this.facing, dir: this.dir,
       sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(),
       state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t,
+      scale: ACTOR_ZOOM,
     });
   }
 

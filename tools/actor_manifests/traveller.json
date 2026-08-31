@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "The traveller NPC at the spawn camp, cut from the approved master.",
+    "Uses the AXE variant (row2 fig4) deliberately: the player's Warrior carries",
+    "a sword, so an axe-bearer reads as a different person rather than a clone",
+    "standing next to you.",
+    "bodyHeight 18 = the measured drawn height of a procedural town actor at",
+    "scale 1.0, so he stands exactly as tall as the villagers beside him."
+  ],
+  "source": "assets/warrior weaw.png",
+  "output": "assets/actors/traveller.png",
+  "frameWidth": 24,
+  "frameHeight": 24,
+  "columns": 1,
+  "anchorX": 12,
+  "bodyHeight": 18,
+  "logicalHeight": 24,
+  "referencePose": [1084, 666, 1300, 907],
+  "alphaThreshold": 110,
+  "colors": 0,
+  "saturation": 1.6,
+  "contrast": 1.15,
+  "animations": { "idle": [[1084, 666, 1300, 907]] },
+  "fps": { "idle": 4 },
+  "oneShot": []
+}

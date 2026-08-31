@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — Rogue review</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.55 ui-monospace,Menlo,monospace; margin:0; padding:20px 24px 60px; }
+  h1 { font-size:16px; color:#ffd678; margin:0 0 6px; }
+  h2 { font-size:13px; color:#ffd678; margin:24px 0 6px; border-top:1px solid #3a3644; padding-top:10px; }
+  p  { margin:0 0 12px; color:#a8a4b0; max-width:1040px; }
+  .cap { color:#8c8898; margin:2px 0 8px; max-width:1040px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .strip { background:#3a3e4a; border:1px solid #4a4653; margin-bottom:6px; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<h1>Rogue — final review</h1>
+<p>
+  Five reusable body actions, every frame authored EMPTY-HANDED. Both daggers are
+  separate sprites carried on independent <code>mainHand</code> and
+  <code>offHand</code> anchors, so a future weapon replaces them without
+  regenerating any character art. Backstab and Assassinate share the LUNGE body —
+  their identity comes from VFX and timing, not from new frames.
+</p>
+<div id="out"></div>
+
+<script type="module">
+// Cache-busted on purpose: see DUAL_WIELD.md. A stale module here fails silently.
+const V = '?v=' + Date.now();
+const { registerActorSprite, ACTOR_SPRITES, getSheet } = await import('./src/gfx/sprites.js' + V);
+const { registerEquipment, drawActorEquipment } = await import('./src/gfx/equipment.js' + V);
+
+const SRC = 'assets/actors/_src/rogue_gemini/';
+const FH = 219;
+
+registerEquipment('dagger_main', { sprite: SRC + 'equipment/dagger_main.png', grip: [8, 56], tip: [8, 2] });
+registerEquipment('dagger_off',  { sprite: SRC + 'equipment/dagger_off.png',  grip: [6, 40], tip: [4, 2] });
+
+function action(id, sheet, cw, anim) {
+  registerActorSprite(id, {
+    sheet: SRC + 'anim/' + sheet + '.png',
+    frameWidth: cw, frameHeight: FH, columns: 4,
+    anchorX: cw / 2, anchorY: FH, logicalHeight: 56,
+    slots: ['offHand', 'mainHand'],
+    animations: {
+      idle: { frames: [0], fps: 1,
+        mainHand: [anim.mainHand[0]], mainHandAngle: [anim.mainHandAngle[0]],
+        offHand:  [anim.offHand[0]],  offHandAngle:  [anim.offHandAngle[0]] },
+      attack: Object.assign({ frames: [0,1,2,3], fps: 12, loop: false }, anim),
+    },
+  });
+  return ACTOR_SPRITES[id];
+}
+
+// heights 212/215/196/215 — flows forward through four hits
+const COMBO = action('r_combo', 'combo', 232, {
+  mainHand:      [[78, 150], [150, 96], [196, 116], [200, 96]],
+  mainHandAngle: [-70,       40,        95,         120],
+  offHand:       [[126, 128], [70, 112], [96, 140], [32, 98]],
+  offHandAngle:  [60,         -60,       30,        -120],
+  // the blades cross on the third beat, so the order flips there
+  slotOrder: [['offHand','mainHand'], ['mainHand','offHand'],
+              ['offHand','mainHand'], ['mainHand','offHand']],
+});
+
+// heights 191/215/199/212 — coil, explode, full extension, settle
+const LUNGE = action('r_lunge', 'lunge', 248, {
+  mainHand:      [[112, 136], [150, 108], [206, 126], [140, 130]],
+  mainHandAngle: [-40,        60,         92,         30],
+  offHand:       [[92, 142], [120, 124], [150, 146], [110, 140]],
+  offHandAngle:  [-20,       50,         80,         10],
+  offHandBehind: [true,      true,       false,      false],
+});
+
+// heights 185/149/166/215 — 149 is the tucked ball
+const ROLL = action('r_roll', 'roll', 232, {
+  mainHand:      [[130, 150], [140, 132], [126, 168], [150, 128]],
+  mainHandAngle: [-30,        140,        -10,        -35],
+  offHand:       [[96, 152], [100, 140], [92, 170], [82, 130]],
+  offHandAngle:  [20,        -160,       15,        25],
+  // tucked into a ball: both blades wrap behind him
+  mainHandBehind:[false,     true,       true,       false],
+  offHandBehind: [true,      true,       false,      false],
+});
+
+// heights 215/189/158/67 — 67 is the death pose, nearly flat
+const HURT = action('r_hurt', 'hurtdown', 248, {
+  mainHand:      [[168, 96], [150, 140], [160, 168], [186, 196]],
+  mainHandAngle: [140,       -30,        60,         96],
+  offHand:       [[86, 92], [104, 142], [104, 176], [80, 200]],
+  offHandAngle:  [-140,     20,         -40,        -100],
+  offHandBehind: [false,    false,      true,       true],
+});
+
+// heights 193/215/215/209 — arm arcs from behind the head to across the body
+const THROW = action('r_throw', 'throw', 232, {
+  mainHand:      [[128, 152], [150, 62], [200, 92], [96, 140]],
+  mainHandAngle: [-20,        -50,       80,        150],
+  offHand:       [[98, 148], [92, 140], [88, 136], [92, 142]],
+  offHandAngle:  [10,        6,         2,         8],
+});
+
+const EQ = { mainHand: 'dagger_main', offHand: 'dagger_off' };
+
+function drawFrame(g, C, step, x, y, scale, equipped, facing) {
+  const anim = C.animations.attack;
+  const actor = { x, y, z: 0, facing, scale, state: 'attack',
+                  animTime: step / anim.fps, equipped };
+  const sheet = getSheet(C.sheet);
+  const cols = C.columns, fw = C.frameWidth, fh = C.frameHeight;
+  drawActorEquipment(g, actor, C, 'behind');
+  if (sheet.ready) {
+    const f = anim.frames[step];
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(Math.round(x), Math.round(y));
+    if (scale !== 1) g.scale(scale, scale);
+    if (facing < 0) g.scale(-1, 1);
+    g.drawImage(sheet.img, (f % cols) * fw, Math.floor(f / cols) * fh, fw, fh,
+                -fw / 2, -fh, fw, fh);
+    g.restore();
+  }
+  drawActorEquipment(g, actor, C, 'front');
+}
+
+function strip(C, { scale = 1, equipped = EQ, facing = 1, pad = 8, bg = null, silhouette = false }) {
+  const fw = C.frameWidth, fh = C.frameHeight;
+  const cw = Math.round((fw * scale + pad) * 4);
+  const ch = Math.round(fh * scale + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch; c.className = 'strip';
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); }
+  for (let i = 0; i < 4; i++) {
+    const x = (fw * scale + pad) * i + (fw * scale) / 2 + pad / 2;
+    g.save(); g.beginPath();
+    g.rect((fw * scale + pad) * i, 0, fw * scale + pad, ch); g.clip();
+    drawFrame(g, C, i, x, ch - pad, scale, equipped, facing);
+    g.restore();
+  }
+  if (silhouette) {
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
+    g.globalCompositeOperation = 'source-over';
+  }
+  return c;
+}
+
+const out = document.getElementById('out');
+function section(t, cap, nodes) {
+  const h = document.createElement('h2'); h.textContent = t;
+  const p = document.createElement('div'); p.className = 'cap'; p.innerHTML = cap;
+  const r = document.createElement('div'); r.className = 'row';
+  nodes.forEach(n => r.appendChild(n));
+  out.append(h, p, r);
+}
+
+const ACTIONS = [
+  [COMBO, '4-HIT COMBO', 'heights 212 / 215 / 196 / 215 — flows forward through four beats'],
+  [LUNGE, 'PRECISION LUNGE', 'heights 191 / 215 / 199 / 212 — also the BACKSTAB and ASSASSINATE body'],
+  [ROLL,  'DODGE ROLL', 'heights 185 / <b>149</b> / 166 / 215 — 149 is the tucked ball'],
+  [HURT,  'HURT + DOWN', 'heights 215 / 189 / 158 / <b>67</b> — 67 is the death pose, nearly flat'],
+  [THROW, 'UTILITY THROW', 'heights 193 / 215 / 215 / 209 — arm arcs from behind the head to across the body'],
+];
+
+function build() {
+  out.innerHTML = '';
+  for (const [C, name, note] of ACTIONS) {
+    section(name + '  —  BODY ONLY (3x)', note + '   |   no daggers drawn at all',
+      [strip(C, { scale: 3, equipped: null })]);
+    section(name + '  —  EQUIPPED (3x)', 'both daggers on independent mainHand / offHand anchors',
+      [strip(C, { scale: 3 })]);
+  }
+  section('ALL FIVE at TRUE 1x — facing right', 'the size this ships at',
+    ACTIONS.map(([C]) => strip(C, { scale: 1, bg: '#575b68' })));
+  section('ALL FIVE at TRUE 1x — facing LEFT', 'anchors, angles and draw order all mirror automatically',
+    ACTIONS.map(([C]) => strip(C, { scale: 1, facing: -1, bg: '#3d5232' })));
+  section('SILHOUETTE at 2x', 'each action has to read as a black shape',
+    ACTIONS.map(([C]) => strip(C, { scale: 2, silhouette: true })));
+}
+
+build();
+let n = 0;
+const t = setInterval(() => { build(); if (++n > 40) clearInterval(t); }, 220);
+</script>
+</body>
+</html>

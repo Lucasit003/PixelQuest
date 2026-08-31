@@ -24,6 +24,22 @@ function jsFiles(dir) {
   return out;
 }
 
+// Comments routinely contain example paths and commented-out config, which are
+// not references the game actually loads. Strip them before scanning. `://` is
+// protected so a URL in a string is not mistaken for a line comment.
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => {
+      for (let i = 0; i < line.length - 1; i++) {
+        if (line[i] === '/' && line[i + 1] === '/' && line[i - 1] !== ':') return line.slice(0, i);
+      }
+      return line;
+    })
+    .join('\n');
+}
+
 // Pull every `assets/...` path out of a source file, whether it sits in a plain
 // string or a template literal. Paths built with ${} are reported as the static
 // prefix so the directory can be checked instead of a filename that only exists
@@ -49,7 +65,7 @@ test('the source tree is where it is expected to be', () => {
 test('every asset the game loads by name exists on disk', () => {
   const missing = [];
   for (const file of files) {
-    const source = readFile(file);
+    const source = stripComments(readFile(file));
     for (const ref of assetRefs(source)) {
       if (ref.dynamic) continue;
       if (!existsSync(join(ROOT, ref.path))) {
@@ -63,7 +79,7 @@ test('every asset the game loads by name exists on disk', () => {
 test('every asset folder built up at runtime exists and has files in it', () => {
   const empty = [];
   for (const file of files) {
-    const source = readFile(file);
+    const source = stripComments(readFile(file));
     for (const ref of assetRefs(source)) {
       if (!ref.dynamic) continue;
       const dir = join(ROOT, ref.path.endsWith('/') ? ref.path : dirname(ref.path));

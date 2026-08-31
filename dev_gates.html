@@ -1,0 +1,37 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>gates</title>
+<style>body{background:#14100f;color:#ddd;font:10px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { TownScene }=await import('./src/scenes/town.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const sc=new TownScene(Hero.create('warrior'),{});
+sc.enter({width:480,height:270});
+await new Promise(r=>setTimeout(r,1800));
+const out=['openRoadGates result: '+JSON.stringify(sc._gates)];
+const FC=sc.plazaFocus, C=4, cov=sc.roadCov;
+const onRoad=(x,y)=>cov.has(Math.floor(x/C)+','+Math.floor(y/C));
+let still=0;
+for(const s of sc.solids){
+  if(!Number.isFinite(s.x)) continue;
+  let h=0,t=0;
+  for(let y=s.y;y<s.y+s.h;y+=C) for(let x=s.x;x<s.x+s.w;x+=C){t++; if(onRoad(x,y))h++;}
+  if(t&&h/t>0.5) still++;
+}
+out.push('solids still >50% on road: '+still+'  (was 7)');
+out.push('total solids now: '+sc.solids.length);
+// sanity: buildings must still block
+let blockOK=0, blockTot=0;
+for(const l of sc.locations){
+  if(!l.solid) continue; blockTot++;
+  const s=l.solid, cx=s.x+s.w/2, cy=s.y+s.h/2;
+  if(sc.solids.some(o=>Number.isFinite(o.x)&&cx>o.x&&cx<o.x+o.w&&cy>o.y&&cy<o.y+o.h)) blockOK++;
+}
+out.push('building centres still inside a solid: '+blockOK+'/'+blockTot);
+document.getElementById('out').textContent=out.join('\n');
+</script></body></html>

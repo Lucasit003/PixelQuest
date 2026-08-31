@@ -1,0 +1,72 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>declutter</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { CombatScene }=await import('./src/scenes/combat.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const W=480,H=270;
+const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+const g=cv.getContext('2d',{willReadFrequently:true});
+const out=[];const say=s=>{out.push(s);document.getElementById('out').textContent=out.join('\n');};
+const TAG = new URLSearchParams(location.search).get('tag') || 'x';
+window.__arenaMode = new URLSearchParams(location.search).get('mode') || 'rebuilt';
+const sc=new CombatScene(Hero.create('warrior'), ()=>{});
+sc.enter({ width:W, height:H, addShake(){}, shakeOffset(){ return {x:0,y:0}; } });
+await new Promise(r=>setTimeout(r,2600));
+
+// FIXED camera + fixed cast, so before/after overlay exactly
+function stage(){
+  sc.camX=500; sc.currentGate=2; sc.enemies=[]; sc.messageT=0; sc.message=null;
+  const p=sc.player||sc.p; if(p){p.x=sc.camX+140; p.depth=214;}
+  try{
+    sc._spawnEnemy('goblin',   sc.camX+250, 186);
+    sc._spawnEnemy('goblin',   sc.camX+330, 232);
+    sc._spawnEnemy('skeleton', sc.camX+200, 246);
+    sc._spawnEnemy('slime',    sc.camX+300, 160);
+  }catch(e){say('spawn: '+e.message);}
+  sc.messageT=0; sc.message=null;
+}
+async function shot(id, prep){
+  if(prep) prep();
+  for(let i=0;i<8;i++){ sc.t=2.4; g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g); }
+  const bl=await new Promise(r=>cv.toBlob(r,'image/png'));
+  await fetch('http://127.0.0.1:8479/dc_'+TAG+'_'+id+'.png',{method:'POST',body:bl});
+  say(id);
+}
+// --- counted frame (no actors, so the count is scenery only)
+stage(); sc.enemies=[];
+window.__arenaCount={total:0,onScreen:0,floor:0,floorCentral:0,mid:0,back:0,camX:sc.camX,W:W};
+sc.t=2.4; g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g);
+const c=window.__arenaCount; window.__arenaCount=null;
+const txt='onScreen='+c.onScreen+' floor='+c.floor+' floorCentral='+c.floorCentral+' mid='+c.mid+' back='+c.back;
+await fetch('http://127.0.0.1:8479/counts_'+TAG+'.txt',{method:'POST',body:txt});
+say(txt);
+
+await shot('scene', ()=>stage());
+// Exact actor mask: same frame with the cast removed. Diffing the two gives a
+// pixel-perfect silhouette of every combatant, which is a real readability
+// test rather than a guess at their footprints.
+await shot('empty', ()=>{ stage(); sc.enemies=[]; const p=sc.player||sc.p; if(p) p.x=-9999; });
+// PHASE 9 — chaos test: 8 enemies plus live projectiles, particles and a
+// damage number, to check readability when the screen is at its busiest.
+await shot('chaos', ()=>{
+  stage(); sc.enemies=[];
+  const K=['goblin','goblin','skeleton','goblin','skeleton','goblin','slime','skeleton'];
+  for(let i=0;i<8;i++){
+    try{ sc._spawnEnemy(K[i], sc.camX+110+ (i%4)*95, 158+Math.floor(i/4)*46+((i*17)%20)); }catch(e){}
+  }
+  try{
+    for(let i=0;i<24;i++) sc.particles.spawn({x:sc.camX+250+((i*37)%120), y:190+((i*23)%50),
+      kind:'ember', color:i%2?'#ffd36e':'#c2b2ff', vx:0, vy:-8, life:0.6, size:1});
+    sc.toasts.add && sc.toasts.add('24', sc.camX+250, 180);
+  }catch(e){}
+  sc.messageT=0; sc.message=null;
+});
+say('DONE');
+</script></body></html>

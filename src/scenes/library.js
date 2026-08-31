@@ -17,7 +17,7 @@
 // enter()). The upper-left archway and the locked door in the right wing are
 // drawn in the art but not yet interactive — hooks for later.
 
-import { Input } from '../core/input.js';
+import { Input, FACE_DEADZONE } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { panel, dialogue, UI, Toasts } from '../gfx/ui.js';
@@ -51,7 +51,7 @@ export class LibraryScene {
     // solids too; this clamp is only a backstop.
     this.room = { x: 10, y: 40, w: 460, h: 220 };
     // spawn just inside the front door, on the mat at the bottom centre
-    this.px = 240; this.py = 238; this.facing = 1;
+    this.px = 240; this.py = 238; this.facing = 1; this.dir = 'side';
     this.moving = false; this.walkT = 0;
 
     this.spots = [
@@ -138,7 +138,13 @@ export class LibraryScene {
     if (this.moving) {
       this._tryMove(ax.x * 78 * dt, 0);
       this._tryMove(0, ax.y * 78 * dt);
-      if (ax.x !== 0) this.facing = ax.x > 0 ? 1 : -1;
+      if (Math.abs(ax.x) > FACE_DEADZONE) this.facing = ax.x > 0 ? 1 : -1;
+      // Which way he is turned relative to the camera. Vertical intent wins over
+      // horizontal so a mostly-up diagonal shows his back rather than his side;
+      // `facing` still carries left/right for the side view. This persists when
+      // he stops, so he keeps facing the way he was walking.
+      this.dir = Math.abs(ax.y) > Math.abs(ax.x)
+        ? (ax.y < 0 ? 'up' : 'down') : 'side';
       this.walkT += dt;
     }
 
@@ -190,7 +196,7 @@ export class LibraryScene {
 
     if (INTERIOR_READY) g.drawImage(INTERIOR_IMG, 0, IMG_Y, IMG_W, IMG_H);
 
-    drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
+    drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, dir: this.dir, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
 
     this.particles.draw(g);
     this.toasts.draw(g);

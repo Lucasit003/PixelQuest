@@ -1,0 +1,43 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>ground</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { CombatScene }=await import('./src/scenes/combat.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const W=480,H=270;
+const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+const g=cv.getContext('2d',{willReadFrequently:true});
+const out=[];const say=s=>{out.push(s);document.getElementById('out').textContent=out.join('\n');};
+const sc=new CombatScene(Hero.create('warrior'), ()=>{});
+sc.enter({ width:W, height:H, addShake(){}, shakeOffset(){ return {x:0,y:0}; } });
+await new Promise(r=>setTimeout(r,2800));
+async function shot(id, prep){
+  sc.camX=500; sc.currentGate=2; sc.enemies=[]; sc.messageT=0; sc.message=null;
+  const p=sc.player||sc.p; if(p){p.x=sc.camX+150;p.depth=214;}
+  if(prep) prep();
+  for(let i=0;i<10;i++){ sc.t=3.1; g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g); }
+  const bl=await new Promise(r=>cv.toBlob(r,'image/png'));
+  await fetch('http://127.0.0.1:8479/gd_'+id+'.png',{method:'POST',body:bl});
+  say(id);
+}
+await shot('cast', ()=>{ try{ sc._spawnEnemy('goblin', sc.camX+270,196);
+  sc._spawnEnemy('slime', sc.camX+360,226);}catch(e){} sc.messageT=0; sc.message=null; });
+await shot('busy', ()=>{ sc.enemies=[];
+  const K=['goblin','skeleton','goblin','skeleton','goblin','slime'];
+  for(let i=0;i<6;i++){ try{ sc._spawnEnemy(K[i], sc.camX+120+(i%3)*110, 165+Math.floor(i/3)*52+((i*13)%18)); }catch(e){} }
+  sc.messageT=0; sc.message=null; });
+// perf with the ground bake in place
+function bench(fn,n){for(let i=0;i<20;i++)fn();const t0=performance.now();
+  for(let i=0;i<n;i++)fn();return (performance.now()-t0)/n;}
+const full=bench(()=>{g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,W,H);sc.draw(g);},120);
+await fetch('http://127.0.0.1:8479/gd_perf.txt',{method:'POST',
+  body:'full frame draw: '+full.toFixed(2)+' ms  (60fps budget 16.67 ms)'});
+say('perf '+full.toFixed(2)+'ms');
+say('DONE');
+</script></body></html>

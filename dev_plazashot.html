@@ -1,0 +1,61 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Plaza review shots</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre-wrap}</style></head>
+<body><div id="out">running…</div>
+<script type="module">
+// The plaza review loop: the fixed camera set, so successive passes overlay and
+// can be compared directly instead of being re-framed by eye each time.
+// Offsets are from plazaFocus; the dy nudge accounts for the scene deriving its
+// camera from the player rather than from a point.
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+let __s=0x9e3779b9;const rs=(s)=>{__s=s>>>0;};
+Math.random=function(){__s|=0;__s=(__s+0x6D2B79F5)|0;let t=Math.imul(__s^(__s>>>15),1|__s);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};
+performance.now=()=>4200;
+const b='?v='+Date.now();
+window.__plazaCounts=true;
+const { TownScene }=await import('./src/scenes/town.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const W=480,H=270;
+const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+const g=cv.getContext('2d',{willReadFrequently:true});
+const sc=new TownScene(Hero.create('warrior'),{});
+sc.enter({width:W,height:H});
+await new Promise(r=>setTimeout(r,2600));
+const FC=sc.plazaFocus;
+const SHOTS=[
+  ['wide',   0,    0,   0.55],
+  ['play',   0,    60,  1.60],
+  ['nw',    -252, -148, 0.85],
+  ['ne',     262, -178, 0.85],
+  ['sw',    -238,  182, 0.85],
+  ['se',     236,  152, 0.85],
+];
+const out=[];const say=(s)=>{out.push(s);document.getElementById('out').textContent=out.join('\n');};
+// What actually landed. put() rejects far more often than you expect, so a
+// pass that "did nothing" has usually placed zero props rather than bad ones.
+const nm=(re)=>sc.decor.filter(d=>re.test(d.name)).length+sc.groundDecor.filter(d=>re.test(d.name)).length;
+say('butterflies '+sc.butterflies.length+'   arch '+nm(/^myst_arch_vine/)+'   topiary '+nm(/^topiary/)
+    +'   pebbles '+nm(/^pebbles/)+'   flowers '+nm(/^flowers_/)+'   boxes/planters '+nm(/^(flower_box|planter)/)
+    +'   flowerbed-tree '+nm(/^tree_flowerbed/));
+function frame(dx,dy,z){
+  rs(0x1234); window.__noCull=false; window.__townZoom=z; window.__townNight=false;
+  sc.px=FC.x+dx; sc.py=FC.y+dy+(270/z)*0.12; sc.t=7.5;
+  g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g);
+  return g.getImageData(0,0,W,H).data;
+}
+const hash=(p)=>{let h=0x811c9dc5;for(let i=0;i<p.length;i++){h^=p[i];h=Math.imul(h,0x01000193);}return h>>>0;};
+for(const [id,dx,dy,z] of SHOTS){
+  // Chrome skips a drawImage whose decoded texture is not resident, so one draw
+  // can be missing whole tiles the next one has. Only capture once three
+  // consecutive frames are byte-identical.
+  let prev=0,run=0,draws=0;
+  for(let i=0;i<40 && run<3;i++){ const hh=hash(frame(dx,dy,z)); draws++; if(hh===prev)run++; else {run=1;prev=hh;} }
+  const bl=await new Promise(r=>cv.toBlob(r,'image/png'));
+  await fetch('http://127.0.0.1:8479/plaza_'+id+'.png',{method:'POST',body:bl});
+  say(id.padEnd(6)+' stable after '+draws+' draws');
+}
+say('DONE');
+</script></body></html>

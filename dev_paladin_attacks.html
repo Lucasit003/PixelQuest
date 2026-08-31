@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — every Paladin attack</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.55 ui-monospace,Menlo,monospace; margin:0; padding:20px 24px 60px; }
+  h1 { font-size:16px; color:#ffd678; margin:0 0 6px; }
+  h2 { font-size:13px; color:#ffd678; margin:26px 0 6px; border-top:1px solid #3a3644; padding-top:10px; }
+  p  { margin:0 0 12px; color:#a8a4b0; max-width:1020px; }
+  .cap { color:#8c8898; margin:2px 0 10px; max-width:1020px; }
+  .ship { color:#7ad17a; }
+  .legacy { color:#e8a04a; }
+  canvas { image-rendering: pixelated; display:block; }
+  .strip { background:#3a3e4a; border:1px solid #4a4653; margin-bottom:6px; }
+  .row { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<h1>Every Paladin attack that exists</h1>
+<p>
+  One production attack, one legacy pose set, and one piece of test scaffolding.
+  Nothing here is a combo or a heavy variant — those have not been generated.
+  Every row runs through the real engine: empty-handed body sheet, equipment
+  attached at per-frame anchors, trail computed from the hammer tip.
+</p>
+<div id="out"></div>
+
+<script type="module">
+import { registerActorSprite, ACTOR_SPRITES, getSheet } from './src/gfx/sprites.js';
+import { registerEquipment, drawActorEquipment } from './src/gfx/equipment.js';
+import { drawSwingTrail } from './src/gfx/weaponTrail.js';
+
+const SRC = 'assets/actors/_src/paladin_gemini/';
+
+registerEquipment('hammer_default', {
+  sprite: SRC + 'equipment/hammer_default.png',
+  grip: [16, 67], tip: [14, 10],
+});
+registerEquipment('shield_default', {
+  sprite: SRC + 'equipment/shield_default.png',
+  grip: [25, 30],
+});
+
+// ------------------------------------------- 1. HEAVY SIDE CRUSH (production)
+registerActorSprite('crush', {
+  sheet: SRC + 'anim/heavy_side_crush.png',
+  frameWidth: 264, frameHeight: 219, columns: 4,
+  anchorX: 132, anchorY: 219, logicalHeight: 56,
+  animations: {
+    idle: { frames: [0], fps: 1,
+      hand: [[61, 62]], handAngle: [-35], handBehind: [true],
+      shield: [[98, 112]], shieldAngle: [-16] },
+    attack: {
+      frames: [0, 1, 2, 3], fps: 12, loop: false,
+      hand:        [[61, 62], [77, 112], [188, 112], [184, 130]],
+      handAngle:   [-35,      -110,      -195,        -250],
+      handBehind:  [true,     true,      false,       false],
+      shield:      [[98, 112], [90, 116], [82, 124], [92, 120]],
+      shieldAngle: [-16,       -6,        10,        -4],
+      trail:       [0,         0.4,       1,         0.55],
+    },
+  },
+});
+
+// -------------------------------------------- 2. LEGACY FORWARD PUNCH
+// The attack that shipped in the original 16-frame sheet. Kept for comparison:
+// the arm extends but the hips, knees and stance barely move, which is exactly
+// the failure the Heavy Side Crush was built to fix.
+registerActorSprite('legacy', {
+  sheet: SRC + '15_paladin_sheet_16frames.png',
+  frameWidth: 164, frameHeight: 219, columns: 6,
+  anchorX: 82, anchorY: 219, logicalHeight: 56,
+  animations: {
+    idle: { frames: [0], fps: 1,
+      hand: [[118, 170]], handAngle: [-4],
+      shield: [[46, 116]], shieldAngle: [-6] },
+    attack: {
+      frames: [12, 13, 14, 15], fps: 12, loop: false,
+      hand:        [[92,102],[128,112],[138,114],[110,124]],
+      handAngle:   [-46,     20,       70,       -6],
+      handBehind:  [true,    false,    false,    false],
+      shield:      [[52,104],[50,108],[49,110],[50,112]],
+      shieldAngle: [-14,     -6,      4,       -6],
+      trail:       [0,       0.35,    1,       0.5],
+    },
+  },
+});
+
+const EQ = { hand: 'hammer_default', shield: 'shield_default' };
+
+function drawFrame(g, C, state, step, x, y, scale, equipped, facing = 1) {
+  const anim = C.animations[state];
+  const actor = { x, y, z: 0, facing, scale, state,
+                  animTime: step / (anim.fps || 10), equipped };
+  const sheet = getSheet(C.sheet);
+  const cols = C.columns, fw = C.frameWidth, fh = C.frameHeight;
+  if (equipped) drawSwingTrail(g, C, actor, step, { width: 2 * scale, span: 2, alpha: 0.20 });
+  drawActorEquipment(g, actor, C, 'behind');
+  if (sheet.ready) {
+    const f = anim.frames[step];
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(Math.round(x), Math.round(y));
+    if (scale !== 1) g.scale(scale, scale);
+    if (facing < 0) g.scale(-1, 1);
+    g.drawImage(sheet.img, (f % cols) * fw, Math.floor(f / cols) * fh, fw, fh,
+                -fw / 2, -fh, fw, fh);
+    g.restore();
+  }
+  drawActorEquipment(g, actor, C, 'front');
+}
+
+function strip(C, { state = 'attack', scale = 1, equipped = EQ, bg = null,
+                    facing = 1, pad = 8, silhouette = false }) {
+  const fw = C.frameWidth, fh = C.frameHeight;
+  const steps = C.animations[state].frames.map((_, i) => i);
+  const cw = Math.round((fw * scale + pad) * steps.length);
+  const ch = Math.round(fh * scale + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch; c.className = 'strip';
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); }
+  steps.forEach((s, i) => {
+    const x = (fw * scale + pad) * i + (fw * scale) / 2 + pad / 2;
+    g.save();
+    g.beginPath();
+    g.rect((fw * scale + pad) * i, 0, fw * scale + pad, ch);
+    g.clip();
+    drawFrame(g, C, state, s, x, ch - pad, scale, equipped, facing);
+    g.restore();
+  });
+  if (silhouette) {
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
+    g.globalCompositeOperation = 'source-over';
+  }
+  return c;
+}
+
+const out = document.getElementById('out');
+function section(title, caption, nodes) {
+  const h = document.createElement('h2'); h.innerHTML = title;
+  const p = document.createElement('div'); p.className = 'cap'; p.innerHTML = caption;
+  const row = document.createElement('div'); row.className = 'row';
+  nodes.forEach(n => row.appendChild(n));
+  out.append(h, p, row);
+}
+
+const CRUSH = ACTOR_SPRITES.crush, LEGACY = ACTOR_SPRITES.legacy;
+
+function build() {
+  out.innerHTML = '';
+
+  section('ATTACK 1 — Heavy Side Crush  ' +
+          '<span class="ship">[PRODUCTION]</span>',
+    'The only finished attack. Body heights 215 / 210 / 189 / 199 — he drops into the strike. ' +
+    'Head travels ~300px while the fist travels ~130px.',
+    [strip(CRUSH, {scale: 4, equipped: null}),
+     strip(CRUSH, {scale: 4})]);
+
+  section('ATTACK 1 — at true 1x, mirrored, and as silhouette',
+    'windup &rarr; swing &rarr; IMPACT &rarr; recovery, readable with no labels.',
+    [strip(CRUSH, {scale: 1}),
+     strip(CRUSH, {scale: 1, facing: -1}),
+     strip(CRUSH, {scale: 3, silhouette: true})]);
+
+  section('ATTACK 2 — legacy forward punch  ' +
+          '<span class="legacy">[SUPERSEDED — not production]</span>',
+    'What the original 16-frame sheet shipped. The arm extends but the hips, knees and stance ' +
+    'barely move — the hammer swings past a nearly static man. This is the failure the ' +
+    'Heavy Side Crush exists to fix; shown here only as the before-picture.',
+    [strip(LEGACY, {scale: 4, equipped: null}),
+     strip(LEGACY, {scale: 4})]);
+
+  section('Side by side at true 1x',
+    'Crush on top, legacy below. Same equipment, same engine, same scale.',
+    [strip(CRUSH, {scale: 2, bg: '#575b68'}),
+     strip(LEGACY, {scale: 2, bg: '#575b68'})]);
+}
+
+build();
+let n = 0;
+const t = setInterval(() => { build(); if (++n > 14) clearInterval(t); }, 260);
+</script>
+</body>
+</html>

@@ -138,8 +138,10 @@ test('every ability is complete and points at real data', () => {
 
     assert.ok(isFiniteNumber(ab.mana) && ab.mana >= 0, `ability ${id} has a bad mana cost`);
     assert.ok(isFiniteNumber(ab.cd) && ab.cd > 0, `ability ${id} has a bad cooldown`);
-    assert.ok(['melee', 'projectile', 'aoe', 'chain', 'buff'].includes(ab.kind),
-      `ability ${id} has unknown kind "${ab.kind}"`);
+    // mark / heal / aura / totem arrived with the class signature mechanics:
+    // a target debuff, a real heal, a defensive field and a placed entity.
+    assert.ok(['melee', 'projectile', 'aoe', 'chain', 'buff', 'mark', 'heal', 'aura', 'totem']
+      .includes(ab.kind), `ability ${id} has unknown kind "${ab.kind}"`);
   }
 });
 
@@ -147,7 +149,31 @@ test('each ability kind carries the fields its behaviour needs', () => {
   for (const [id, ab] of Object.entries(ABILITIES)) {
     if (ab.kind === 'buff') {
       assert.ok(ab.dur > 0, `buff ${id} has no duration`);
-      assert.ok(ab.atkMult || ab.shield, `buff ${id} does nothing`);
+      assert.ok(ab.atkMult || ab.shield || ab.speedMult || ab.rageScaled,
+        `buff ${id} does nothing`);
+      continue;
+    }
+    if (ab.kind === 'mark') {
+      assert.ok(ab.dur > 0, `mark ${id} has no duration`);
+      assert.ok(ab.range > 0, `mark ${id} has no range to find a target in`);
+      continue;
+    }
+    if (ab.kind === 'heal') {
+      assert.ok(ab.heal > 0, `heal ${id} restores nothing`);
+      continue;
+    }
+    if (ab.kind === 'aura') {
+      assert.ok(ab.dur > 0, `aura ${id} has no duration`);
+      assert.ok(ab.aura && Object.keys(ab.aura).length, `aura ${id} has no effect`);
+      continue;
+    }
+    if (ab.kind === 'totem') {
+      assert.ok(ab.totem, `totem ${id} has no totem definition`);
+      assert.ok(ab.totem.life > 0, `totem ${id} would expire instantly`);
+      assert.ok(ab.totem.radius > 0, `totem ${id} affects nothing`);
+      // a totem either pulses damage or projects a defensive field
+      assert.ok(ab.totem.pulse > 0 || ab.totem.damageTaken,
+        `totem ${id} neither attacks nor protects`);
       continue;
     }
     assert.ok(isFiniteNumber(ab.dmg) && ab.dmg > 0, `ability ${id} deals no damage`);

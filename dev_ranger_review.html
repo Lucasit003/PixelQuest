@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — Ranger review</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.55 ui-monospace,Menlo,monospace; margin:0; padding:20px 24px 60px; }
+  h1 { font-size:16px; color:#ffd678; margin:0 0 6px; }
+  h2 { font-size:13px; color:#ffd678; margin:24px 0 6px; border-top:1px solid #3a3644; padding-top:10px; }
+  p  { margin:0 0 12px; color:#a8a4b0; max-width:1040px; }
+  .cap { color:#8c8898; margin:2px 0 8px; max-width:1040px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .strip { background:#3a3e4a; border:1px solid #4a4653; margin-bottom:6px; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+  code { color:#cfc8dc; }
+</style>
+</head>
+<body>
+<h1>Ranger — bow mechanism review</h1>
+<p>
+  The body sheet is authored <b>empty-handed</b>: there is no bow, arrow or
+  string pixel anywhere in it. Everything below the body comes from the
+  equipment layer — the bow on <code>mainHand</code>, the arrow on
+  <code>offHand</code>, the quiver on <code>back</code> in the behind pass — and
+  the <b>bowstring is computed</b>, stroked limb&nbsp;→&nbsp;nock&nbsp;→&nbsp;limb
+  every frame, so it bends by exactly how far he has drawn.
+</p>
+<div id="out"></div>
+
+<script type="module">
+// Cache-busted on purpose: a dev server with no cache headers will happily run
+// a stale copy of a module you just wrote, and the failure is silent.
+const V = '?v=' + Date.now();
+const { registerActorSprite, ACTOR_SPRITES, getSheet } = await import('./src/gfx/sprites.js' + V);
+const { registerEquipment, drawActorEquipment, getItemImage, equipmentConfig } =
+  await import('./src/gfx/equipment.js' + V);
+const { drawBowString, shotOrigin } = await import('./src/gfx/bowString.js' + V);
+const { attachmentAnchor } = await import('./src/gfx/sprites.js' + V);
+// The real town ground, so he is judged against what the player will see and
+// not against a flat studio grey that hides every value problem.
+const GROUND = await new Promise(ok => { const i = new Image();
+  i.onload = () => ok(i); i.onerror = () => ok(null); i.src = 'assets/ground/grass_02.png' + V; });
+
+const SRC = 'assets/actors/_src/ranger_gemini/';
+const items = await (await fetch(SRC + 'equipment/items.json' + V)).json();
+
+for (const [id, it] of Object.entries(items)) {
+  registerEquipment(id, {
+    sprite: SRC + it.sprite,
+    grip: it.grip,
+    ...(it.tip ? { tip: it.tip } : {}),
+    ...(it.limbTop ? { limbTop: it.limbTop, limbBottom: it.limbBottom } : {}),
+  });
+}
+
+// The sheet's cell width is read from the image so a regenerated action does not
+// silently shear every frame by a few pixels.
+async function sheetSize(url) {
+  const img = new Image();
+  await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = url; });
+  return { w: img.naturalWidth, h: img.naturalHeight };
+}
+
+const BOWSHEET = SRC + 'anim/shot_core.png';
+const dim = await sheetSize(BOWSHEET + V);
+const CW = dim.w / 4, FH = dim.h;
+
+// Anchors are authored in SOURCE pixels against this cell. `nock` is where his
+// fingers pinch the string -- slightly ahead of the fist, which is visible at
+// full draw. `muzzle` is geometry only and is never drawn.
+const BOW = {
+  frames: [0, 1, 2, 3], fps: 12, loop: false,
+
+  // Read off a source-coordinate grid over the frames (tools grid.png), not
+  // estimated: the fists are at these pixels. Cell is 187x219.
+  //   f0 READY   front fist low at his side
+  //   f1 NOCK    front arm up and forward, rear fist at the chest
+  //   f2 DRAW    front arm out right, rear fist high and back
+  //   f3 RELEASE front arm extended, rear hand open behind
+  mainHand:      [[128, 134], [135,  62], [178,  66], [168,  62]],
+  mainHandAngle: [   2,          -4,          0,          3],
+
+  offHand:       [[ 95, 130], [ 78,  85], [ 40,  30], [ 41, 108]],
+  offHandAngle:  [   0,           0,          0,          0],
+
+  // THE ARROW'S WHOLE LIFETIME IS THIS ARRAY. It does not exist before the nock
+  // stage and it does not exist after the release, because those frames have no
+  // anchor at all and attachmentAnchor returns null. The brief's rule is
+  // structural here rather than a timing convention someone has to remember.
+  arrow:         [null,       [ 80,  85], [ 44,  32], null],
+  arrowAngle:    [null,          -4,          0,       null],
+
+  // where his fingers pinch the string, a little ahead of the fist
+  nock:          [[ 95, 130], [ 82,  84], [ 46,  32], null],
+
+  back:          [[ 92,  92], [ 80,  88], [ 78,  86], [ 80,  88]],
+  backAngle:     [   8,           8,          7,          8],
+  backBehind:    [true,       true,       true,       true],
+};
+
+registerActorSprite('ranger', {
+  sheet: BOWSHEET,
+  frameWidth: CW, frameHeight: FH, columns: 4,
+  anchorX: CW / 2, anchorY: FH, logicalHeight: 56,
+  slots: ['back', 'mainHand', 'arrow', 'offHand'],
+  animations: {
+    idle: { frames: [0], fps: 1,
+      mainHand: [BOW.mainHand[0]], mainHandAngle: [BOW.mainHandAngle[0]],
+      nock: [BOW.nock[0]], back: [BOW.back[0]], backBehind: [true] },
+    attack: BOW,
+  },
+});
+const C = ACTOR_SPRITES.ranger;
+// offHand carries NO item: it is the drawing hand, and the arrow rides its own
+// slot so it can vanish on the loose frame independently of the hand.
+const EQ = { mainHand: 'bow_short', arrow: 'arrow', back: 'quiver' };
+
+function drawFrame(g, step, x, y, scale, equipped, facing, opts = {}) {
+  const anim = C.animations.attack;
+  const actor = { x, y, z: 0, facing, scale, state: 'attack',
+                  animTime: step / anim.fps, equipped };
+  const sheet = getSheet(C.sheet);
+  drawActorEquipment(g, actor, C, 'behind');
+  if (sheet.ready && !opts.noBody) {
+    const f = anim.frames[step];
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(Math.round(x), Math.round(y));
+    if (scale !== 1) g.scale(scale, scale);
+    if (facing < 0) g.scale(-1, 1);
+    g.drawImage(sheet.img, (f % 4) * CW, 0, CW, FH, -CW / 2, -FH, CW, FH);
+    g.restore();
+  }
+  drawActorEquipment(g, actor, C, 'front');
+  if (equipped) drawBowString(g, C, actor, { width: 1.2 });
+  if (opts.anchors) {
+    // Every slot the frame defines, in its own colour. A weapon that "jumps"
+    // is almost always an anchor that jumped, and this is where you see it.
+    const SLOTS = [['mainHand', '#ffd678'], ['offHand', '#7ad17a'],
+                   ['arrow', '#8ac6ff'], ['nock', '#ff6b6b'], ['back', '#c89cff']];
+    g.save();
+    g.lineWidth = 1.5;
+    for (const [slot, col] of SLOTS) {
+      const a = attachmentAnchor(C, actor, slot);
+      if (!a) continue;
+      g.strokeStyle = col;
+      g.beginPath(); g.arc(a.x, a.y, 3.5, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.moveTo(a.x - 6, a.y); g.lineTo(a.x + 6, a.y);
+      g.moveTo(a.x, a.y - 6); g.lineTo(a.x, a.y + 6); g.stroke();
+    }
+    g.restore();
+  }
+  if (opts.marks) {
+    const s = shotOrigin(C, actor);
+    if (s) {
+      g.save();
+      g.strokeStyle = '#ff6b6b'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(s.x, s.y, 4, 0, Math.PI * 2); g.stroke();
+      // the direction an arrow would fly, taken from the string geometry
+      const r = s.angle * Math.PI / 180;
+      g.beginPath(); g.moveTo(s.x, s.y);
+      g.lineTo(s.x + Math.cos(r) * 34, s.y + Math.sin(r) * 34); g.stroke();
+      g.restore();
+    }
+  }
+}
+
+function strip({ scale = 1, equipped = EQ, facing = 1, pad = 8, bg = null,
+                 silhouette = false, marks = false, noBody = false,
+                 anchors = false, ground = false } = {}) {
+  const cw = Math.round((CW * scale + pad) * 4);
+  const ch = Math.round(FH * scale + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch; c.className = 'strip';
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); }
+  if (ground && GROUND) {
+    const p = g.createPattern(GROUND, 'repeat');
+    g.save(); g.imageSmoothingEnabled = false;
+    g.scale(scale, scale); g.fillStyle = p;
+    g.fillRect(0, 0, cw / scale, ch / scale); g.restore();
+  }
+  for (let i = 0; i < 4; i++) {
+    const x = (CW * scale + pad) * i + (CW * scale) / 2 + pad / 2;
+    g.save(); g.beginPath();
+    g.rect((CW * scale + pad) * i, 0, CW * scale + pad, ch); g.clip();
+    drawFrame(g, i, x, ch - pad, scale, equipped, facing, { marks, noBody, anchors });
+    g.restore();
+  }
+  if (silhouette) {
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
+    g.globalCompositeOperation = 'source-over';
+  }
+  return c;
+}
+
+const out = document.getElementById('out');
+function section(t, cap, nodes) {
+  const h = document.createElement('h2'); h.innerHTML = t;
+  const p = document.createElement('div'); p.className = 'cap'; p.innerHTML = cap;
+  const r = document.createElement('div'); r.className = 'row';
+  nodes.forEach(n => r.appendChild(n));
+  out.append(h, p, r);
+}
+
+function build() {
+  out.innerHTML = '';
+  section('BODY ONLY — 2x',
+    'nock, raise, full draw, loose. No bow, no arrow, no string: this is what the sheet actually contains.',
+    [strip({ scale: 2, equipped: null })]);
+  section('EQUIPPED — 2x',
+    'bow on <code>mainHand</code>, arrow on <code>arrow</code>, quiver on <code>back</code> behind the body, string computed.',
+    [strip({ scale: 2 })]);
+  section('EQUIPMENT ONLY — 2x',
+    'the body hidden, so you can see the bow rotate and the string deepen on its own.',
+    [strip({ scale: 2, noBody: true })]);
+  section('SHOT ORIGIN — 2x',
+    'the red ring is <code>shotOrigin</code> and the line is the direction an arrow leaves in — both derived from the string, not authored.',
+    [strip({ scale: 2, marks: true })]);
+  section('ANCHORS — 2x',
+    'every slot the frame defines: <span style="color:#ffd678">mainHand</span>, '
+    + '<span style="color:#7ad17a">offHand</span>, <span style="color:#8ac6ff">arrow</span>, '
+    + '<span style="color:#ff6b6b">nock</span>, <span style="color:#c89cff">back</span>. '
+    + 'A bow that jumps is an anchor that jumped.',
+    [strip({ scale: 2, anchors: true })]);
+  section('ON THE GAME BACKGROUND — 2x and true 1x',
+    'the real town grass, not a studio grey — values have to hold against what the player actually sees.',
+    [strip({ scale: 2, ground: true }), strip({ scale: 1, ground: true })]);
+  section('TRUE 1x — facing right, then left',
+    'anchors, angles and the string all mirror automatically.',
+    [strip({ scale: 1, bg: '#575b68' }), strip({ scale: 1, facing: -1, bg: '#3d5232' })]);
+  section('SILHOUETTE — 2x',
+    'each frame has to read as a black shape.',
+    [strip({ scale: 2, silhouette: true })]);
+}
+
+function allReady() {
+  if (!getSheet(C.sheet).ready) return false;
+  for (const id of Object.keys(items)) {
+    const it = equipmentConfig(id);
+    if (!it || !getItemImage(it.sprite).ready) return false;
+  }
+  return true;
+}
+build();
+let n = 0;
+const t = setInterval(() => {
+  build();
+  if (allReady() && n > 4) clearInterval(t);
+  if (++n > 60) clearInterval(t);
+}, 200);
+</script>
+</body>
+</html>

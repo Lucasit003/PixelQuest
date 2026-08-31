@@ -1,0 +1,8 @@
+[
+  { "name": "market_stall",  "height": 44 },
+  { "name": "banner_shield", "height": 38 },
+  { "name": "handcart",      "height": 22 },
+  { "name": "laundry_line",  "height": 24 },
+  { "name": "cat_sitting",   "height": 11 },
+  { "name": "barrel_apples", "height": 18 }
+]

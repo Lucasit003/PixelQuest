@@ -1,0 +1,60 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>grove</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { CombatScene }=await import('./src/scenes/combat.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const W=480,H=270;
+const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+const g=cv.getContext('2d',{willReadFrequently:true});
+const out=[];const say=s=>{out.push(s);document.getElementById('out').textContent=out.join('\n');};
+const sc=new CombatScene(Hero.create('warrior'), ()=>{});
+sc.enter({ width:W, height:H, addShake(){}, shakeOffset(){ return {x:0,y:0}; } });
+await new Promise(r=>setTimeout(r,2400));
+async function shot(id, prep){
+  if(prep) prep();
+  for(let i=0;i<8;i++){ sc.t=2.4; g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g); }
+  const bl=await new Promise(r=>cv.toBlob(r,'image/png'));
+  await fetch('http://127.0.0.1:8479/fa_'+id+'.png',{method:'POST',body:bl});
+  say(id);
+}
+const P=()=>sc.player||sc.p;
+// gate i => camX = clamp(gates[i].x - W/2)
+function goGate(i){
+  const gx=sc.gates[i].x;
+  sc.camX=Math.max(0, Math.min(gx-W/2, (sc.worldEnd||1540)-W));
+  sc.currentGate=i;
+  const p=P(); if(p){p.x=sc.camX+150; p.depth=208;}
+  sc.enemies=[]; try{sc._spawnGate(i);}catch(e){say('spawn'+i+': '+e.message);}
+  sc.messageT=0; sc.message=null;
+}
+await shot('1_wave1', ()=>{ goGate(0); sc.messageT=1.4; sc.messageDur=1.8; sc.message='WAVE 1'; sc.messageSub='3 ENEMIES'; });
+await shot('2_wave2', ()=>goGate(1));
+await shot('3_wave3', ()=>{ goGate(2);
+  // enemies mid-fight, on screen, so readability can be judged
+  for(let i=0;i<4;i++){ try{ const e=sc._spawnEnemy(i%2?'goblin':'skeleton', sc.camX+120+i*70, 170+i*22);}catch(err){} } });
+await shot('4_bossentrance', ()=>{ goGate(4); sc.messageT=0; sc.message=null;
+  if(sc.boss){ sc.boss.x=sc.camX+sc.W-34; sc.boss.facing=-1; } });
+await shot('5_bossfight', ()=>{ sc.messageT=2.3; sc.messageDur=2.6; sc.message='THE GOBLIN KING'; sc.messageSub='FOREST TYRANT';
+  if(sc.boss){ sc.boss.x=sc.camX+330; } });
+await shot('6_bossclean', ()=>{ sc.messageT=0; sc.message=null; if(sc.boss) sc.boss.x=sc.camX+330; });
+await shot('7_slimecheck', ()=>{ goGate(0); sc.enemies=[];
+  try{ sc._spawnEnemy('slime_blue', sc.camX+180, 200); sc._spawnEnemy('slime', sc.camX+280, 205);}catch(e){say('slime: '+e.message);} });
+// ---- performance: cost of one full world draw, forest arena vs the old backdrop
+goGate(2); sc.messageT=0;
+function bench(fn, n){ for(let i=0;i<20;i++) fn(); const t0=performance.now();
+  for(let i=0;i<n;i++) fn(); return (performance.now()-t0)/n; }
+const full = bench(()=>{ g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g); }, 120);
+const world = bench(()=>{ g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H);
+  g.save(); g.translate(-Math.round(sc.camX),0); sc._drawWorld(g); g.restore(); }, 120);
+await fetch('http://127.0.0.1:8479/perf.txt',{method:'POST',
+  body:'full frame draw: '+full.toFixed(2)+' ms\nworld (forest arena) only: '+world.toFixed(2)+' ms\nbudget at 60fps: 16.67 ms'});
+say('perf full='+full.toFixed(2)+'ms world='+world.toFixed(2)+'ms');
+say('DONE');
+</script></body></html>

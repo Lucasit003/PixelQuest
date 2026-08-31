@@ -1,0 +1,43 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>road bands</title>
+<style>body{background:#14100f;color:#ddd;font:10px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { TownScene }=await import('./src/scenes/town.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const sc=new TownScene(Hero.create('warrior'),{});
+sc.enter({width:480,height:270});
+await new Promise(r=>setTimeout(r,1800));
+const FC=sc.plazaFocus;
+const cov=sc.roadCov;
+const out=['road coverage cells: '+(cov?cov.size:0),''];
+// walk straight DOWN the south road and report every cell's family / edge / wash
+const C=4;
+// find the column with the most road coverage in the band we want to walk
+let x=null, bestN=0;
+for(let xx=FC.x-200; xx<FC.x+200; xx+=C){
+  let n=0;
+  for(let y=FC.y+120; y<FC.y+420; y+=C) if(cov.get(Math.floor(xx/C)+','+Math.floor(y/C))) n++;
+  if(n>bestN){bestN=n; x=Math.round(xx/C)*C;}
+}
+out.push('best column has '+bestN+' road cells over 300 units');
+out.push('walking down x='+x+' (dx '+Math.round(x-FC.x)+'), rows are world y:');
+out.push('   worldY   dy   fam        edge  wash?');
+let last=null, runs=[];
+for(let y=FC.y+120; y<FC.y+420; y+=C){
+  const cell=cov.get(Math.floor(x/C)+','+Math.floor(y/C));
+  if(!cell){ continue; }
+  const key=cell.fam+'|'+cell.edge+'|'+(cell.wash||'-');
+  if(key!==last){ runs.push({y, dy:Math.round(y-FC.y), fam:cell.fam, edge:cell.edge, wash:cell.wash||'-'}); last=key; }
+}
+for(const r of runs) out.push('   '+String(r.y).padStart(6)+' '+String(r.dy).padStart(5)+'   '+String(r.fam).padEnd(10)+' '+String(r.edge).padEnd(5)+' '+r.wash);
+out.push('');
+out.push('distinct families on this line: '+[...new Set(runs.map(r=>r.fam))].join(', '));
+out.push('changes of state down 300 units: '+runs.length);
+document.getElementById('out').textContent=out.join('\n');
+</script></body></html>

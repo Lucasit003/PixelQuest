@@ -6,13 +6,15 @@
 // Flow: forest waves -> mini-boss (Bone Archer + skeletons) -> Goblin King with
 // four phases -> loot. The camera scrolls as the player clears each gate.
 
-import { Input } from '../core/input.js';
+import { Input, FACE_DEADZONE } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { panel, bar, heading, UI, Toasts } from '../gfx/ui.js';
 import { rect, rectOutline, clamp, clamp01, lerp, disc, shadow } from '../gfx/pixel.js';
 import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
+import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
+import { drawForestArena } from '../gfx/forestArena.js';
 import { Particles } from '../gfx/particles.js';
 import { resolveFx, playAbilityFx, CLASS_FX } from '../gfx/abilityFx.js';
 import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
@@ -22,8 +24,18 @@ import {
 import {
   meleeBaseDamage, meleeKnockback, finalHitDamage, abilityBaseDamage,
   enemyDamageAfterDefense, playerDamageAfterDefense, absorbWithShield,
-  bossPhaseIndex, CHAIN_FALLOFF,
+  bossPhaseIndex, CHAIN_FALLOFF, chainTargets, CHAIN_HOP_RANGE, abilityPower,
 } from '../game/combatMath.js';
+import {
+  MOMENTUM_DECAY, MOMENTUM_PER_STACK, MOMENTUM_FINISHER_PER_STACK,
+  momentumGain, addMomentum, momentumMultiplier,
+  FLOW_DECAY, addFlow, flowMultiplier,
+  EXPOSED_DUR, critChanceAgainst, exposureMultiplier, poisonTick,
+  MARK_DUR, markMultiplier,
+  bankGuard, spendGuard,
+  rageMultiplier, selfDamageAllowed, executeMultiplier,
+  TOTEM_LIMIT, makeTotem, totemTick, totemPlacement,
+} from '../game/classMechanics.js';
 import { resolveBehavior, tuningFor } from '../game/enemyBehaviors.js';
 
 // Arena depth band (the "floor" the actors walk on).
@@ -32,7 +44,9 @@ const DEPTH_MAX = 250;
 
 // Render-only scale bump for actors so they read clearly in the arena. Collision
 // math still uses the unscaled reach/width constants — this only affects drawing.
-const ACTOR_SCALE = 1.4;
+// The value now comes from gfx/actorScale.js so town and combat stay in step;
+// it was a bare 1.4 before the heroes were scaled up for detail.
+const ACTOR_SCALE = COMBAT_ACTOR_SCALE;
 
 // How long an enemy keeps its 'attack' pose after committing to a swing. This
 // is an ANIMATION length, not a combat one — it must stay well under the
@@ -64,10 +78,12 @@ export class CombatScene {
     this.worldEnd = 1400;          // total scroll length to the boss arena
     this.enemies = [];
     this.projectiles = [];
+    this.totems = [];   // Summoner: placed, stationary, expire on their own
     this.drops = [];
     this.hitStop = 0;              // freeze frames on big hits
     this.slowmo = 0;
     this.message = null; this.messageT = 0; this.messageSub = null; this.messageDur = 1;
+    this.bossIntroT = 0;   // counts down while the Goblin King walks in
     this.state = 'play';          // play | victory | defeat | reward
     this.rewardData = null;
     this.rewardTimer = 0;
@@ -82,6 +98,7 @@ export class CombatScene {
       { at: 12.5, text: '1-4  -  ABILITIES', shown: false },
     ];
     this.activeTip = null; this.activeTipT = 0;
+    this.awaitingArena = false; this.arenaPrompt = false; this.inArena = false;
     this.waveNum = 0; this.waveTotal = 0;
     this.clearFlash = 0;
 
@@ -101,6 +118,13 @@ export class CombatScene {
       // and is nudged by dodge/heavy/jump for feedback, but never gates actions,
       // so combat balance is unchanged.
       sta: 100, maxSta: 100, dispSta: 100, staPulse: 0,
+      // Class signature resources. Each is one number the loop already ticks —
+      // there is no passive framework behind these. A class that does not use
+      // its resource simply leaves it at zero.
+      momentum: 0, momentumT: 0,   // Warrior: built by landing hits, spent by Sundering Blow
+      flow: 0, flowT: 0,           // Mage: built by Ember Dart, spent by Fireball / Barrage
+      guard: 0,                    // Paladin: damage the Guard absorbed, owed back as holy
+      primedExposed: false,        // Rogue: Vanish doubles the next Backstab's opening
       trail: [],
       isPlayer: true,
     };
@@ -130,8 +154,10 @@ export class CombatScene {
       { x: 220, spawns: [['goblin', 2], ['slime', 1]] },
       { x: 480, spawns: [['goblin', 2], ['slime', 2]] },
       { x: 740, spawns: [['skeleton', 2], ['goblin', 1]] },
-      { x: 980, spawns: [['skeleton_archer', 1], ['skeleton', 2], ['slime_blue', 1]], mini: true },
-      { x: 1300, boss: 'goblin_king' },
+      // Three waves through the wood, then the hall. The mini-boss wave that
+      // used to sit at 980 is gone: the walk now ends at the keep gate, and the
+      // king is fought inside rather than in a fourth stretch of forest.
+      { x: 1240, boss: 'goblin_king', arena: true },
     ];
   }
 
@@ -141,9 +167,9 @@ export class CombatScene {
     this.gateCleared = false;
     if (gate.boss) {
       this._spawnBoss(gate.boss);
-      this._setMessage('THE GOBLIN KING', 2.4);
-      Audio.bossRoar();
-      this.game.addShake(6);
+      // The title and the roar land when he reaches the clearing, not at the
+      // instant he spawns off-screen. _updateBossIntro fires them.
+      this.bossIntroT = this.inArena ? 2.1 : 1.25;
     } else {
       for (const [type, count] of gate.spawns) {
         for (let n = 0; n < count; n++) {
@@ -182,13 +208,29 @@ export class CombatScene {
     const lvScale = 1 + (this.hero.s.level - 1) * 0.05;
     this.boss = {
       type, def, sprite: def.sprite,
-      x: this.camX + this.W - 60, depth: 200, z: 0, vz: 0, facing: -1,
+      // Off-screen right: the existing walk AI brings him in, which gives the
+      // fight an entrance instead of the boss simply being there. Position
+      // only — no change to stats, AI or timers.
+      x: this.camX + this.W + 44, depth: 200, z: 0, vz: 0, facing: -1,
+      seated: false, riseT: 0,
       hp: Math.round(def.hp * lvScale), maxHp: Math.round(def.hp * lvScale),
       state: 'idle', animTime: 0, animDuration: 0,
       flash: 0, attackTimer: 2, hurtTimer: 0, knockVx: 0, knockVdepth: 0,
       stunned: 0, frozen: 0, scale: 1.6, w: def.w, isBoss: true,
       phaseIdx: 0, phaseAnnounced: -1, summonTimer: 3,
     };
+    // In the hall he is already here, on the dais at the end of the carpet, and
+    // the fight starts when he gets up. Placeholder staging only: no stats, AI
+    // or timers are touched, so a real seated build can replace it cleanly.
+    if (this.inArena) {
+      const b = this.boss;
+      b.x = 1345;            // the dais, at the top of the steps
+      b.depth = 152;         // as far back as the field allows
+      b.z = 16;              // raised, so he reads as up on the platform
+      b.seated = true;
+      b.facing = -1;
+      b.state = 'idle';
+    }
     this.enemies.push(this.boss);
   }
 
@@ -198,6 +240,9 @@ export class CombatScene {
 
   update(dt, game) {
     this.t += dt;
+    this._updateBossIntro(dt);
+    this._updateBossRise(dt);
+    this._updateArenaGate();
 
     // pause toggle takes priority so you can always unpause
     if (Input.pressed('menu') && this.state === 'play') {
@@ -222,6 +267,7 @@ export class CombatScene {
     this._updatePresentation(dt);
     this._updatePlayer(sdt);
     this._updateEnemies(sdt);
+    this._updateTotems(sdt);
     this._updateProjectiles(sdt);
     this._updateDrops(sdt);
     this._updateCamera(sdt);
@@ -277,10 +323,44 @@ export class CombatScene {
 
     this.currentGate++;
     if (this.currentGate >= this.gates.length) return;
+    // The hall is entered, not scrolled into. Clearing the last wave outside
+    // leaves the player standing at the keep gate with the way open; the boss
+    // does not exist until they choose to walk in.
+    if (this.gates[this.currentGate].arena) {
+      this.awaitingArena = true;
+      this._setMessage('THE GATE IS OPEN', 1.8);
+      return;
+    }
     // scroll camera to next gate, then spawn
     this._scrollTarget = Math.min(this.gates[this.currentGate].x - this.W / 2, this.worldEnd - this.W);
     this._scrollTarget = Math.max(0, this._scrollTarget);
     this._pendingSpawn = this.currentGate;
+  }
+
+  // The gate stands at the right-hand end of the walk. The prompt appears only
+  // once the player has actually gone to it, so the last stretch is still
+  // theirs to cross rather than a cutscene.
+  _updateArenaGate() {
+    if (!this.awaitingArena || this.inArena) { this.arenaPrompt = false; return; }
+    const p = this.p;
+    this.arenaPrompt = !!p && p.x > this.camX + this.W - 120;
+  }
+
+  _enterArena() {
+    this.awaitingArena = false;
+    this.arenaPrompt = false;
+    this.inArena = true;
+    Audio.door();
+    this.game.addShake(3);
+    // The hall is drawn at a fixed anchor, so the camera has to be standing in
+    // it before anything else happens — scrolling there would fly the view
+    // through the keep wall. Cut, like stepping through a door.
+    this.camX = Math.max(0, Math.min(1240 - this.W / 2, this.worldEnd - this.W));
+    this._scrollTarget = undefined;
+    // Put the player just inside the doorway, on the flagstones, and let the
+    // boss walk in from the far side as he already does.
+    if (this.p) { this.p.x = this.camX + 96; this.p.depth = 210; }
+    this._spawnGate(this.currentGate);
   }
 
   // ------------------------------------------------------------- player
@@ -293,6 +373,15 @@ export class CombatScene {
     if (p.dodgeCd > 0) p.dodgeCd -= dt;
     if (p.comboTimer > 0) p.comboTimer -= dt; else p.comboStep = 0;
     for (const k in p.cooldowns) if (p.cooldowns[k] > 0) p.cooldowns[k] -= dt;
+
+    // Momentum drains when the Warrior stops landing hits. Iron Bulwark holds
+    // it: that is the whole reason to press the button.
+    if (p.momentum > 0 && !p.buffs.hold) {
+      p.momentumT -= dt;
+      if (p.momentumT <= 0) p.momentum = 0;
+    }
+    // Flow is gentler — it only lapses if the Mage stops casting entirely.
+    if (p.flow > 0) { p.flowT -= dt; if (p.flowT <= 0) p.flow = 0; }
 
     // buffs tick down
     for (const b in p.buffs) { p.buffs[b].t -= dt; if (p.buffs[b].t <= 0) delete p.buffs[b]; }
@@ -319,13 +408,16 @@ export class CombatScene {
     // --- movement
     if (!busy || p.state === 'jump') {
       const ax = Input.axis();
-      const spd = p.speed * (p.buffs.speed ? 1.4 : 1) * (1 + this.hero.petBonus('moveSpeed'));
+      // Honour the ability's own speedMult instead of a flat 1.4 — the authored
+      // values range from Sanctuary's 0.9 slow to Vanish's 1.6 sprint.
+      const spdMult = p.buffs.speed ? (p.buffs.speed.mult ?? 1.4) : 1;
+      const spd = p.speed * spdMult * (1 + this.hero.petBonus('moveSpeed'));
       if (ax.x !== 0 || ax.y !== 0) {
         p.x += ax.x * spd * dt;
         p.depth += ax.y * spd * 0.7 * dt;
         p.depth = clamp(p.depth, DEPTH_MIN, DEPTH_MAX);
         p.x = clamp(p.x, this.camX + 8, this.camX + this.W - 8);
-        if (ax.x !== 0) p.facing = ax.x > 0 ? 1 : -1;
+        if (Math.abs(ax.x) > FACE_DEADZONE) p.facing = ax.x > 0 ? 1 : -1;
         if (p.z === 0 && p.state !== 'jump') p.state = 'walk';
         if (p.z === 0 && Math.random() < dt * 6) this.particles.dust(p.x, p.depth, 1);
       } else if (p.z === 0 && p.state === 'walk') {
@@ -382,7 +474,13 @@ export class CombatScene {
     if (Input.pressed('special')) this._useAbility(0);
 
     // --- quick potions (E = health, handled minimally)
-    if (Input.pressed('interact')) this._quaffHealth();
+    // E is the potion key everywhere except standing in the open gate, where it
+    // is the only thing it can sensibly mean. Guarded on the prompt actually
+    // being up so a mistimed press never silently swallows a heal.
+    if (Input.pressed('interact')) {
+      if (this.arenaPrompt) this._enterArena();
+      else this._quaffHealth();
+    }
 
     // resolve attack windows
     if (p.state === 'attack' || p.state === 'heavy') {
@@ -442,8 +540,18 @@ export class CombatScene {
     const cls = this.hero.cls();
     const heavy = p.state === 'heavy';
     const reach = cls.reach + (heavy ? 10 : 0);
+
+    // A ranged class looses a shot at the same point in the swing that a melee
+    // class connects. Everything else about the attack is untouched — combo
+    // step, animation, hit window, dodge and cooldowns are shared — so the bow
+    // is a different delivery of the same attack, not a parallel system.
+    if (cls.ranged) { this._loosBasicShot(cls, heavy); return; }
+    // cls.combo is the class's authored per-step curve. Only its LENGTH was
+    // read before, so every class ramped identically and the numbers themselves
+    // — a Berserker finishing on 32, a Rogue's four smaller steps — did nothing.
     const dmg = meleeBaseDamage(this.hero.attack, {
-      heavy, comboStep: p.comboStep, rageMult: p.buffs.rage ? p.buffs.rage.mult : 1,
+      heavy, comboStep: p.comboStep, combo: cls.combo,
+      rageMult: p.buffs.rage ? p.buffs.rage.mult : 1,
     });
 
     for (const e of this.enemies) {
@@ -455,12 +563,15 @@ export class CombatScene {
       if (Math.abs(e.depth - p.depth) > 18) continue;
 
       p.hitList.add(e);
-      const crit = Math.random() < this.hero.crit;
+      // Exposure raises the Rogue's crit chance against this target rather than
+      // adding a separate damage stat — the class's 16% base finally matters.
+      const crit = Math.random() < critChanceAgainst(this.hero.crit, { exposed: e.exposed > 0 });
       const finalDmg = finalHitDamage(dmg, { crit, variance: rand(0.9, 1.1) });
       const kb = meleeKnockback({ heavy, comboStep: p.comboStep });
       this._damageEnemy(e, finalDmg, p.facing, kb, {
         crit, launch: heavy, air: e.z > 0 || heavy,
       });
+      this._buildMomentum({ heavy });
 
       if (heavy) { this.hitStop = 0.08; this.game.addShake(3); Audio.heavyHit(); }
       else Audio.hit();
@@ -483,43 +594,136 @@ export class CombatScene {
     p.state = 'cast'; p.animTime = 0; p.attackTimer = 0; p.animDuration = 0.4;
     Audio.cast();
 
-    const power = this.hero.magic || this.hero.attack;
+    // Each ability names the stat it draws on (see `scaling` in data.js). This
+    // used to read `magic || attack`, and since no class has zero magic the
+    // attack half was unreachable — a Berserker with 4 magic and 27 attack
+    // scaled every ability off the 4.
+    let power = abilityPower(this.hero, ab);
+    // Signature resources are read once, at the moment of the cast.
+    power += this._spendGuard(ab);                       // Paladin
+    const boost = this._spendMomentum(ab) * this._spendFlow(ab);   // Warrior, Mage
+    if (ab.buildsFlow) {                                 // Mage
+      p.flow = addFlow(p.flow, ab.buildsFlow);
+      p.flowT = FLOW_DECAY;
+    }
+
     switch (ab.kind) {
-      case 'projectile': this._castProjectile(ab, power); break;
-      case 'aoe': this._castAoe(ab, power); break;
-      case 'melee': this._castMeleeAbility(ab, power); break;
-      case 'chain': this._castChain(ab, power); break;
+      case 'projectile': this._castProjectile(ab, power, boost); break;
+      case 'aoe': this._castAoe(ab, power, boost); break;
+      case 'melee': this._castMeleeAbility(ab, power, boost); break;
+      case 'chain': this._castChain(ab, power, boost); break;
       case 'buff': this._castBuff(ab); break;
+      case 'mark': this._castMark(ab); break;
+      case 'heal': this._castHeal(ab); break;
+      case 'aura': this._castAura(ab); break;
+      case 'totem': this._placeTotem(ab); break;
     }
   }
 
-  _castProjectile(ab, power) {
+  /** Mage: a spender takes the whole Flow bar. */
+  _spendFlow(ab) {
     const p = this.p;
-    const dmg = abilityBaseDamage(ab, power, { fireBonus: this.hero.petBonus('fireDmg') });
+    if (!ab.spendsFlow || !p.flow) return 1;
+    const mult = flowMultiplier(p.flow);
+    this.toasts.push(`FLOW x${p.flow}`, p.x, p.depth - 40, '#c2b2ff', { crit: true });
+    p.flow = 0;
+    return mult;
+  }
+
+  /** Ranger: name a target. The mark lives on the enemy, not on the Ranger. */
+  _castMark(ab) {
+    const p = this.p;
+    let best = null; let bestD = Infinity;
+    for (const e of this.enemies) {
+      if (e.hp <= 0) continue;
+      const d = Math.hypot(e.x - p.x, e.depth - p.depth);
+      if (d < bestD && d <= (ab.range || 240)) { best = e; bestD = d; }
+    }
+    if (!best) { this.toasts.push('No target', p.x, p.depth - 34, UI.inkDim); return null; }
+    best.marked = ab.dur || MARK_DUR;
+    this.toasts.push('MARKED', best.x, best.depth - 30, '#b8e8a8', { crit: true });
+    this.particles.ring(best.x, best.depth, '#b8e8a8', 18);
+    return best;
+  }
+
+  /** Paladin: an actual heal, which the class had none of. */
+  _castHeal(ab) {
+    const p = this.p;
+    const before = p.hp;
+    p.hp = Math.min(p.maxHp, p.hp + ab.heal);
+    this.toasts.push(`+${Math.round(p.hp - before)}`, p.x, p.depth - 34, UI.good, { crit: true });
+    this.particles.pickup(p.x, p.depth - 16, '#ffe9a8');
+    this._playFx(ab, p.x, p.depth, 20);
+  }
+
+  /** Paladin: a defensive field on the caster. Solo now, party-ready later. */
+  _castAura(ab) {
+    const p = this.p;
+    p.buffs.aura = { t: ab.dur, ...ab.aura };
+    this._playFx(ab, p.x, p.depth, 40);
+    this.toasts.push(ab.name + '!', p.x, p.depth - 34, '#ffe9a8');
+  }
+
+  _castProjectile(ab, power, boost = 1) {
+    const p = this.p;
+    const dmg = abilityBaseDamage(ab, power, { fireBonus: this.hero.petBonus('fireDmg') }) * boost;
     this.projectiles.push({
       x: p.x + p.facing * 12, depth: p.depth, z: 14,
       vx: p.facing * ab.speed, life: ab.range / ab.speed,
       dmg: Math.round(dmg), owner: 'player', element: ab.element,
       color: this._abilityFx(ab).color, color2: this._abilityFx(ab).color2,
       pierce: 1, hit: new Set(), r: 4,
+      // carried so the hit can apply the ability's own rider
+      poison: ab.poison || null, precision: !!ab.precision, homing: !!ab.homing,
     });
     this._playFx(ab, p.x, p.depth, ab.range || 40);
   }
 
-  _castAoe(ab, power) {
+  /**
+   * Where an area effect goes off. Every AoE today is a burst centred on the
+   * caster, and that stays the default. The seam exists so a placed effect —
+   * a trap, a totem, a targeted blast — can name a different origin later
+   * without every existing ability changing behaviour.
+   */
+  _aoeOrigin(ab) {
     const p = this.p;
-    const dmg = abilityBaseDamage(ab, power);
-    this._playFx(ab, p.x, p.depth, ab.range);
-    this.hitStop = 0.06;
+    switch (ab.origin) {
+      case 'ahead': return { x: p.x + p.facing * (ab.offset ?? 40), depth: p.depth };
+      case 'self':
+      default:      return { x: p.x, depth: p.depth };
+    }
+  }
+
+  /**
+   * Apply one area hit at a point. Split out from _castAoe so a persistent
+   * area (a burning patch, a totem pulse) can call the same resolution on a
+   * timer instead of duplicating it.
+   */
+  _applyAoeBurst(ab, dmg, ox, oy) {
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
-      const d = Math.hypot(e.x - p.x, e.depth - p.depth);
-      if (d <= ab.range) {
-        const dir = e.x >= p.x ? 1 : -1;
-        this._damageEnemy(e, Math.round(dmg * rand(0.9, 1.1)), dir, ab.kb || 100, { launch: true, air: true });
-        if (ab.freeze) { e.frozen = ab.freeze; }
-      }
+      if (Math.hypot(e.x - ox, e.depth - oy) > ab.range) continue;
+      const dir = e.x >= ox ? 1 : -1;
+      this._damageEnemy(e, Math.round(dmg * rand(0.9, 1.1)), dir, ab.kb || 100, { launch: true, air: true });
+      if (ab.freeze) e.frozen = ab.freeze;
+      // An AoE's stun was read from the data but never applied, so
+      // Earthshatter, Static Field and Wrath of Dawn all carried a stun that
+      // did nothing.
+      if (ab.stun) e.stunned = Math.max(e.stunned, ab.stun);
     }
+  }
+
+  _castAoe(ab, power, boost = 1) {
+    const p = this.p;
+    const dmg = abilityBaseDamage(ab, power) * boost;
+    // Smoke Bomb is an escape: it buys untouchable seconds and a sprint, and
+    // its damage is incidental.
+    if (ab.invuln) p.invuln = Math.max(p.invuln, ab.invuln);
+    if (ab.kind === 'aoe' && ab.speedMult) p.buffs.speed = { t: ab.dur || 2, mult: ab.speedMult };
+    const at = this._aoeOrigin(ab);
+    this._playFx(ab, at.x, at.depth, ab.range);
+    this.hitStop = 0.06;
+    this._applyAoeBurst(ab, dmg, at.x, at.depth);
   }
 
   /** The look of an ability, resolved from its own vfx, its element, then its class. */
@@ -530,31 +734,64 @@ export class CombatScene {
                   x, y, this.p.facing, range);
   }
 
-  _castMeleeAbility(ab, power) {
+  _castMeleeAbility(ab, power, boost = 1) {
     const p = this.p;
-    const dmg = abilityBaseDamage(ab, power);
+    let dmg = abilityBaseDamage(ab, power) * boost;
+    if (ab.rageScaled) dmg *= this._rageMultiplier();
     this._playFx(ab, p.x, p.depth, ab.range || 40);
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
       const dx = e.x - p.x;
       if ((p.facing > 0 && dx < 0) || (p.facing < 0 && dx > 0)) continue;
       if (Math.abs(dx) > ab.range || Math.abs(e.depth - p.depth) > 22) continue;
-      this._damageEnemy(e, Math.round(dmg), p.facing, ab.kb || 120, { launch: true });
+      let hit = dmg;
+      let crit = false;
+      // Assassinate cashes in the opening Backstab made.
+      if (ab.consumesExposed && e.exposed > 0) {
+        hit *= exposureMultiplier(true); e.exposed = 0; crit = true;
+      }
+      // Execute finishes anything already close to the end.
+      if (ab.executes) hit *= executeMultiplier(e.hp / Math.max(1, e.maxHp));
+      this._damageEnemy(e, Math.round(hit), p.facing, ab.kb || 120, { launch: true, crit });
+      // Backstab opens the target up instead of just hitting it.
+      if (ab.appliesExposed) {
+        e.exposed = EXPOSED_DUR * (p.primedExposed ? 2 : 1);
+        p.primedExposed = false;
+        this.particles.ring(e.x, e.depth, '#c9b8ff', 14);
+      }
       if (ab.stun) e.stunned = ab.stun;
     }
   }
 
-  _castChain(ab, power) {
+  _castChain(ab, power, boost = 1) {
     const p = this.p;
-    let dmg = abilityBaseDamage(ab, power);
-    // find nearest, then chain to nearest others
-    const targets = this.enemies.filter((e) => e.hp > 0)
-      .sort((a, b) => Math.hypot(a.x - p.x, a.depth - p.depth) - Math.hypot(b.x - p.x, b.depth - p.depth))
-      .slice(0, ab.chains);
+    let dmg = abilityBaseDamage(ab, power) * boost;
+    // A real chain: the first link must be within the ability's range of the
+    // caster, and every hop after it is measured from the PREVIOUS target. The
+    // old version sorted every living enemy by distance to the player and took
+    // the first N, which ignored range entirely and let a chain cross the arena.
+    // Ancestral Chorus answers from every totem the Summoner holds, so the
+    // chain starts where the totems are rather than where the caster is.
+    const roots = (ab.fromTotems && this.totems.length)
+      ? this.totems.map((t) => ({ x: t.x, depth: t.depth }))
+      : [{ x: p.x, depth: p.depth }];
+    const seen = new Set();
+    const targets = [];
+    for (const root of roots) {
+      for (const e of chainTargets(root, this.enemies, {
+        chains: ab.chains, range: ab.range ?? Infinity, hopRange: ab.hopRange ?? CHAIN_HOP_RANGE,
+      })) if (!seen.has(e)) { seen.add(e); targets.push(e); }
+      if (targets.length >= ab.chains) break;
+    }
     let prev = { x: p.x, depth: p.depth - 12 };
     for (const e of targets) {
-      this._damageEnemy(e, Math.round(dmg), e.x >= p.x ? 1 : -1, 40, {});
-      e.stunned = Math.max(e.stunned, 0.4);
+      // Precision abilities punish a marked target; everything else ignores it.
+      const hit = dmg * markMultiplier(e.marked > 0, { precision: !!ab.precision });
+      this._damageEnemy(e, Math.round(hit), e.x >= p.x ? 1 : -1, 40, {});
+      // Chains used to stun every target for 0.4s, which no ability asked for
+      // and which quietly made every chain a crowd-control tool. Now only an
+      // ability that states a stun applies one.
+      if (ab.stun) e.stunned = Math.max(e.stunned, ab.stun);
       this._lightning = this._lightning || [];
       const cfx = this._abilityFx(ab);
       this._lightning.push({ x1: prev.x, y1: prev.depth, x2: e.x, y2: e.depth - 12, t: 0,
@@ -567,8 +804,27 @@ export class CombatScene {
 
   _castBuff(ab) {
     const p = this.p;
-    if (ab.atkMult) { p.buffs.rage = { t: ab.dur, mult: ab.atkMult }; if (ab.speedMult) p.buffs.speed = { t: ab.dur }; }
-    if (ab.shield) { p.buffs.shield = { t: ab.dur, amount: ab.shield }; p.shieldHp = ab.shield; }
+    // Independent effects. speedMult used to be nested inside the atkMult
+    // branch, so a buff that only changed speed did nothing at all — which is
+    // why Sanctuary's slow never applied.
+    // Blood Frenzy is worth more the closer to death the Berserker is.
+    if (ab.rageScaled) p.buffs.rage = { t: ab.dur, mult: this._rageMultiplier() };
+    else if (ab.atkMult) p.buffs.rage = { t: ab.dur, mult: ab.atkMult };
+    if (ab.speedMult) p.buffs.speed = { t: ab.dur, mult: ab.speedMult };
+    if (ab.shield) {
+      p.buffs.shield = { t: ab.dur, amount: ab.shield, banksGuard: !!ab.banksGuard };
+      p.shieldHp = ab.shield;
+    }
+    // Iron Bulwark holds Momentum in place instead of letting it drain.
+    if (ab.holdsMomentum) p.buffs.hold = { t: ab.dur };
+    // Vanish primes the next Backstab to open twice as wide.
+    if (ab.primesExposed) p.primedExposed = true;
+    // Bloodletting buys its power with health, floored so it cannot kill you.
+    if (ab.selfDamage) {
+      const cost = selfDamageAllowed(p.hp, p.maxHp, p.maxHp * ab.selfDamage);
+      p.hp -= cost;
+      if (cost > 0) this.toasts.push(`-${Math.round(cost)}`, p.x, p.depth - 30, '#ff6a5a', { vy: -24 });
+    }
     const fx = this._abilityFx(ab);
     this._playFx(ab, p.x, p.depth, 20);
     this.toasts.push(ab.name + '!', p.x, p.depth - 34, fx.color);
@@ -640,12 +896,31 @@ export class CombatScene {
       e.animTime += dt;
       if (e.flash > 0) e.flash -= dt * 4;
 
+      // The throne hold: he breathes and nothing else. Skipped here rather than
+      // marked `frozen`, because frozen draws the ice disc and this is not a
+      // status effect. Everything below — AI, movement, attack timers — is
+      // simply not reached until he stands.
+      if (e.seated) continue;
+
       if (e.hp <= 0) {
         // death fade
         e.deathT = (e.deathT || 0) + dt;
         e.alpha = clamp01(1 - e.deathT * 2.5);
         e.z += dt * 6; e.knockVx *= 0.9; e.x += e.knockVx * dt;
         continue;
+      }
+
+      // Target-side statuses. Exposed (Rogue) and Marked (Ranger) are read at
+      // the moment a hit resolves; poison damages on its own clock but goes
+      // through the normal damage path so it shares armour, toasts and death.
+      if (e.exposed > 0) e.exposed -= dt;
+      if (e.marked > 0) e.marked -= dt;
+      if (e.poison) {
+        const tick = poisonTick(e.poison, dt);
+        e.poison = tick.left;
+        if (tick.damage > 0 && e.hp > 0) {
+          this._damageEnemy(e, Math.max(1, Math.round(tick.damage)), 0, 0, { silent: true });
+        }
       }
 
       if (e.frozen > 0) { e.frozen -= dt; e.state = 'idle'; e.animTime = 0; continue; }
@@ -682,6 +957,118 @@ export class CombatScene {
     // cull fully-dead
     this.enemies = this.enemies.filter((e) => !(e.hp <= 0 && (e.alpha ?? 1) <= 0));
     if (this.boss && this.boss.hp <= 0 && (this.boss.alpha ?? 1) <= 0) { /* handled elsewhere */ }
+  }
+
+  // ======================================================= class mechanics
+  // Thin hooks. All the arithmetic lives in game/classMechanics.js; what is
+  // here is only the wiring to entities the scene already owns.
+
+  /** Warrior: landing a hit builds Momentum and refreshes its window. */
+  _buildMomentum({ heavy = false } = {}) {
+    const p = this.p;
+    if (this.hero.s.class !== 'warrior') return;
+    p.momentum = addMomentum(p.momentum, momentumGain({ heavy }));
+    p.momentumT = MOMENTUM_DECAY;
+  }
+
+  /** Warrior: a spender takes the whole bar. Returns the damage multiplier. */
+  _spendMomentum(ab) {
+    const p = this.p;
+    if (!ab.spendsMomentum || !p.momentum) return 1;
+    const perStack = ab.spendsMomentum === 'finisher'
+      ? MOMENTUM_FINISHER_PER_STACK : MOMENTUM_PER_STACK;
+    const mult = momentumMultiplier(p.momentum, perStack);
+    if (p.momentum >= 3) {
+      this.toasts.push(`MOMENTUM x${p.momentum}`, p.x, p.depth - 40, UI.gold, { crit: true });
+    }
+    p.momentum = 0;
+    return mult;
+  }
+
+  /** Paladin: a holy payoff cashes in what the Guard absorbed. */
+  _spendGuard(ab) {
+    const p = this.p;
+    if (!ab.spendsGuard || p.guard <= 0) return 0;
+    const { bonus, left } = spendGuard(p.guard, { share: ab.spendsGuard });
+    p.guard = left;
+    if (bonus >= 1) {
+      this.toasts.push(`+${Math.round(bonus)} GUARD`, p.x, p.depth - 40, '#ffe9a8', { crit: true });
+    }
+    return bonus;
+  }
+
+  /** Berserker: Blood Frenzy's strength is read from missing health at cast. */
+  _rageMultiplier() {
+    const p = this.p;
+    return rageMultiplier(p.hp / Math.max(1, p.maxHp));
+  }
+
+  /** Ranger: the basic attack as an arrow, fired from the swing's hit window. */
+  _loosBasicShot(cls, heavy) {
+    const p = this.p;
+    if (p.hitList.has('shot')) return;      // one arrow per swing
+    p.hitList.add('shot');
+    const dmg = meleeBaseDamage(this.hero.attack, {
+      heavy, comboStep: p.comboStep, combo: cls.combo,
+      rageMult: p.buffs.rage ? p.buffs.rage.mult : 1,
+    });
+    const fx = CLASS_FX[this.hero.s.class] || CLASS_FX.warrior;
+    this.projectiles.push({
+      x: p.x + p.facing * 12, depth: p.depth, z: 14,
+      vx: p.facing * (heavy ? 200 : 250), life: (cls.shotRange || 220) / (heavy ? 200 : 250),
+      dmg: Math.round(dmg), owner: 'player', basic: true, precision: true,
+      color: fx.color, color2: fx.color2, pierce: heavy ? 2 : 1, hit: new Set(), r: 3,
+    });
+    Audio.swing();
+  }
+
+  /** A totem is placed in front of the caster, oldest retired past the cap. */
+  _placeTotem(ab) {
+    const p = this.p;
+    const at = totemPlacement(p.x, p.depth, p.facing);
+    const t = makeTotem(ab.totem.kind, at.x, at.depth, {
+      life: ab.totem.life, pulse: ab.totem.pulse || 0,
+      radius: ab.totem.radius, power: ab.totem.power || 0,
+    });
+    t.damageTaken = ab.totem.damageTaken || null;
+    t.ability = ab;
+    this.totems.push(t);
+    while (this.totems.length > TOTEM_LIMIT) this.totems.shift();
+    this._playFx(ab, at.x, at.depth, ab.totem.radius);
+    return t;
+  }
+
+  /** Totems age, pulse and expire. Damage goes through the normal path. */
+  _updateTotems(dt) {
+    if (!this.totems.length) return;
+    const keep = [];
+    for (const t of this.totems) {
+      const step = totemTick(t, dt);
+      t.life = step.life; t.pulseT = step.pulseT;
+      if (step.fired) {
+        const power = abilityPower(this.hero, t.ability);
+        const dmg = abilityBaseDamage(t.ability, power);
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          if (Math.hypot(e.x - t.x, e.depth - t.depth) > t.radius) continue;
+          this._damageEnemy(e, Math.round(dmg * rand(0.9, 1.1)), e.x >= t.x ? 1 : -1, 40, {});
+        }
+        this.particles.ring(t.x, t.depth, this._abilityFx(t.ability).color, t.radius * 0.7);
+      }
+      if (!step.expired) keep.push(t);
+    }
+    this.totems = keep;
+  }
+
+  /** A stone totem softens hits while the player stands in its circle. */
+  _totemDamageTaken() {
+    const p = this.p;
+    let mult = 1;
+    for (const t of this.totems) {
+      if (!t.damageTaken) continue;
+      if (Math.hypot(p.x - t.x, p.depth - t.depth) <= t.radius) mult = Math.min(mult, t.damageTaken);
+    }
+    return mult;
   }
 
   _enemyTryMelee(e, dt) {
@@ -793,16 +1180,25 @@ export class CombatScene {
     if (p.invuln > 0) return;
     // shield absorbs first
     if (p.buffs.shield && p.shieldHp > 0) {
-      const { shieldLeft, remaining } = absorbWithShield(p.shieldHp, amount);
+      const { absorbed, shieldLeft, remaining } = absorbWithShield(p.shieldHp, amount);
       p.shieldHp = shieldLeft; amount = remaining;
+      // The Paladin's Guard remembers what it turned aside and owes it back as
+      // holy damage. Other classes bank nothing, so their shields are unchanged.
+      if (p.buffs.shield.banksGuard) p.guard = bankGuard(p.guard, absorbed);
       this.particles.ring(p.x, p.depth, '#9d8bff', 16);
       if (p.shieldHp <= 0) delete p.buffs.shield;
       if (amount <= 0) return;
     }
-    const dmg = playerDamageAfterDefense(amount, this.hero.defense, {
+    let dmg = playerDamageAfterDefense(amount, this.hero.defense, {
       defenseBuff: !!p.buffs.defense,
     });
-    p.hp -= dmg;
+    // Sanctuary's field and a Stone Totem's circle both soften what lands.
+    if (p.buffs.aura && p.buffs.aura.damageTaken) dmg = Math.round(dmg * p.buffs.aura.damageTaken);
+    dmg = Math.round(dmg * this._totemDamageTaken());
+    p.hp -= Math.max(1, dmg);
+    // Taking a hit is losing pressure: Momentum goes with it. That is the
+    // risk that stops Momentum being a free damage bonus.
+    p.momentum = 0;
     p.flash = 1; p.invuln = 0.6; p.state = 'hurt'; p.animTime = 0; p.attackTimer = 0;
     p.knockVx = dir * 40; p.x += dir * 6;
     this.toasts.push(`${dmg}`, p.x, p.depth - 30, '#ff6a5a', { vy: -24 });
@@ -818,6 +1214,25 @@ export class CombatScene {
       pr.life -= dt;
       pr.x += pr.vx * dt;
       if (pr.vdepth) pr.depth += pr.vdepth * dt;
+      // A wisp steers; an arrow does not. Cheap seek toward the nearest
+      // living enemy, capped so it curves rather than snapping onto a target.
+      if (pr.homing && pr.owner === 'player') {
+        let best = null, bd = Infinity;
+        for (const e of this.enemies) {
+          if (e.hp <= 0) continue;
+          const d = Math.hypot(e.x - pr.x, e.depth - pr.depth);
+          if (d < bd) { best = e; bd = d; }
+        }
+        if (best && bd < 200) {
+          const dx = best.x - pr.x, dy = best.depth - pr.depth;
+          const len = Math.hypot(dx, dy) || 1;
+          const sp = Math.hypot(pr.vx, pr.vdepth || 0) || 1;
+          pr.vx += (dx / len) * sp * 2.2 * dt;
+          pr.vdepth = (pr.vdepth || 0) + (dy / len) * sp * 2.2 * dt;
+          const ns = Math.hypot(pr.vx, pr.vdepth) || 1;
+          pr.vx = (pr.vx / ns) * sp; pr.vdepth = (pr.vdepth / ns) * sp;
+        }
+      }
       pr.trailT = (pr.trailT || 0) + dt;
       if (pr.trailT > 0.03) { pr.trailT = 0; this.particles.spawn({ x: pr.x, y: pr.depth - pr.z, kind: 'ember', color: pr.color, vx: 0, vy: 0, life: 0.25, size: 1 }); }
 
@@ -826,8 +1241,13 @@ export class CombatScene {
           if (e.hp <= 0 || pr.hit.has(e)) continue;
           if (Math.abs(e.x - pr.x) < e.w + 4 && Math.abs(e.depth - pr.depth) < 16) {
             pr.hit.add(e);
-            this._damageEnemy(e, pr.dmg, Math.sign(pr.vx) || 1, 50, {});
+            // Precision shots punish a marked target — the Ranger's whole loop.
+            const hit = pr.dmg * markMultiplier(e.marked > 0, { precision: !!pr.precision });
+            this._damageEnemy(e, Math.round(hit), Math.sign(pr.vx) || 1, 50, {});
             if (pr.element === 'ice') e.frozen = Math.max(e.frozen, 1.5);
+            // Poison is a real damage-over-time now, not just a green tint.
+            if (pr.poison) e.poison = { dps: pr.poison.dps, t: pr.poison.dur };
+            if (pr.basic) this._buildMomentum({});
             pr.pierce--;
             if (pr.pierce <= 0) pr.life = 0;
           }
@@ -974,6 +1394,31 @@ export class CombatScene {
 
   _setMessage(text, dur, sub = null) { this.message = text; this.messageT = dur; this.messageDur = dur; this.messageSub = sub; }
 
+  // The boss walks in from off-screen; when he arrives the grove announces him.
+  _updateBossIntro(dt) {
+    if (this.bossIntroT <= 0) return;
+    this.bossIntroT -= dt;
+    if (this.bossIntroT > 0) return;
+    this._setMessage('THE GOBLIN KING', 2.6, 'FOREST TYRANT');
+    Audio.bossRoar();
+    this.game.addShake(6);
+    if (this.boss && this.boss.seated) {
+      this.boss.seated = false;
+      this.boss.riseT = 0.75;      // steps down off the dais, then AI takes over
+    }
+  }
+
+  // Brings him off the platform over riseT. Purely the z drop — his own walk AI
+  // carries him the rest of the way, so nothing here has to know about the fight.
+  _updateBossRise(dt) {
+    const b = this.boss;
+    if (!b || b.riseT <= 0) return;
+    b.riseT = Math.max(0, b.riseT - dt);
+    const u = 1 - b.riseT / 0.75;
+    b.z = 16 * (1 - u * u);
+    if (b.riseT === 0) b.z = 0;
+  }
+
   // ================================================================ draw
 
   draw(g) {
@@ -994,6 +1439,7 @@ export class CombatScene {
     }
 
     // projectiles + drops on top of actors roughly
+    this._drawTotems(g);
     this._drawProjectiles(g);
     this._drawDrops(g);
     this._drawLightning(g);
@@ -1009,90 +1455,29 @@ export class CombatScene {
   }
 
   _drawWorld(g) {
+    // The environment lives in gfx/forestArena.js — an ancient enchanted forest
+    // clearing. Everything it needs is passed in; it reads no scene state and
+    // holds none, so the fight and the art can be worked on independently.
     const camX = this.camX;
-    const bossZone = camX > 1050;
-    if (bossZone) return this._drawBossZone(g, camX);
-
-    const W = this.W;
-    const GROUND_TOP = 84; // grass horizon on screen — keeps the sky compact
-
-    // --- compact sky (darkest up top), ~21% of the frame
-    const sky = ['#161d33', '#1b2440', '#212c4c', '#283457', '#313e62'];
-    for (let i = 0; i < sky.length; i++) {
-      const y0 = Math.round((GROUND_TOP - 26) * i / sky.length);
-      rect(g, camX, y0, W, Math.ceil((GROUND_TOP - 26) / sky.length) + 1, sky[i]);
-    }
-    // atmospheric haze at the horizon
-    rect(g, camX, GROUND_TOP - 28, W, 6, 'rgba(120,130,170,0.10)');
-
-    // --- FAR: dark blue mountains (lowest contrast), slow parallax
-    const mp = -(camX * 0.18);
-    for (let x = Math.floor((camX * 0.82) / 64) * 64 - 64; x < camX + W + 64; x += 64) {
-      mountain(g, x + (mp % 64) + 32, GROUND_TOP - 6, 60, 34, '#1b2740');
-    }
-    for (let x = Math.floor((camX * 0.82) / 52) * 52 - 52; x < camX + W + 52; x += 52) {
-      mountain(g, x + (mp % 52) + 26, GROUND_TOP - 4, 44, 22, '#212e4a');
-    }
-    // very dark distant pine silhouettes
-    const p1 = -(camX * 0.3);
-    for (let x = Math.floor((camX * 0.7) / 30) * 30 - 30; x < camX + W + 30; x += 30) {
-      pineSil(g, x + (p1 % 30) + 15, GROUND_TOP + 2, 20, '#131c2a');
-    }
-    // --- MID: nearer pines (medium contrast)
-    const p2 = -(camX * 0.55);
-    for (let x = Math.floor((camX * 0.45) / 46) * 46 - 46; x < camX + W + 46; x += 46) {
-      drawPineTree(g, x + (p2 % 46) + 23, GROUND_TOP + 12, 1.05);
-    }
-
-    // --- BATTLEFIELD: grass ground filling ~65% of the frame
-    rect(g, camX, GROUND_TOP, W, this.H - GROUND_TOP, '#274d2c');
-    rect(g, camX, GROUND_TOP, W, 2, '#31602f');
-    // darker shading just under the treeline (subtle lighting)
-    rect(g, camX, GROUND_TOP + 2, W, 20, 'rgba(10,20,12,0.18)');
-    // back grass fringe
-    for (let x = Math.floor(camX / 8) * 8; x < camX + W; x += 8) {
-      const hh = 2 + ((hash(x) * 3) | 0);
-      rect(g, x, GROUND_TOP - hh, 1, hh, '#2c5730');
-    }
-
-    // low-contrast terrain patches across the whole field (grass/dirt/stone)
-    for (let x = Math.floor(camX / 22) * 22 - 22; x < camX + W + 22; x += 22) {
-      const r = hash(x * 1.7);
-      const yy = GROUND_TOP + 12 + hash(x * 2.3) * (this.H - GROUND_TOP - 20);
-      const cx2 = x + hash(x) * 18;
-      if (r < 0.30) softPatch(g, cx2, yy, 10 + r * 22, '#224326');
-      else if (r < 0.50) softPatch(g, cx2, yy, 8 + r * 12, '#2f5836');
-      else if (r < 0.62) { softPatch(g, cx2, yy, 8, '#3a3020'); softPatch(g, cx2, yy, 4, '#463726'); }
-    }
-    // a few brighter open patches (lighting variation)
-    for (let x = Math.floor(camX / 90) * 90 - 90; x < camX + W + 90; x += 90) {
-      if (hash(x * 5.1) < 0.4) softPatch(g, x + hash(x) * 40, GROUND_TOP + 40 + hash(x) * 30, 22, 'rgba(90,140,80,0.10)');
-    }
-
-    // --- environmental STORYTELLING clusters (Goblin Forest), spaced out
-    for (let x = Math.floor(camX / 150) * 150 - 150; x < camX + W + 150; x += 150) {
-      const cx2 = x + 40 + hash(x) * 60;
-      const cy2 = GROUND_TOP - 6 - hash(x * 1.3) * 6;
-      drawForestCluster(g, cx2, cy2, hash(x * 7.7), this.t);
-    }
-    // simple back-edge greenery (bushes/rocks/mushrooms), off the play lanes
-    for (let x = Math.floor(camX / 64) * 64 - 64; x < camX + W + 64; x += 64) {
-      const r = hash(x * 0.9 + 3);
-      const bx = x + hash(x) * 44, by = GROUND_TOP + 4 + hash(x * 3.1) * 6;
-      if (r < 0.3) drawBush(g, bx, by, 0.85);
-      else if (r < 0.5) drawMushrooms(g, bx, by);
-      else if (r < 0.62) drawFlowers(g, bx, by);
-    }
-
-    // gentle depth vignette toward the very front
-    g.fillStyle = 'rgba(0,0,0,0.14)';
-    g.fillRect(camX, DEPTH_MAX + 10, W, this.H - DEPTH_MAX - 10);
-
-    // --- FOREGROUND: a little scenery at the extreme bottom corners for depth
-    drawFgGrass(g, camX + 12, this.H - 2);
-    drawFgGrass(g, camX + 40, this.H - 1);
-    drawFgGrass(g, camX + W - 20, this.H - 2);
-    drawFgGrass(g, camX + W - 46, this.H - 1);
+    const gi = this.currentGate || 0;
+    const n = (this.gates ? this.gates.length : 5) - 1;
+    // `awake` ramps the forest through the run: dormant on wave 1, runes by 2,
+    // motes and goblin torches by 3, the hollow lit for the boss.
+    const awake = clamp01(gi / Math.max(1, n));
+    // The root circle stirs during a wave transition and for the boss, and is
+    // dark while you are actually fighting, so it never competes with VFX.
+    const md = this.messageDur || 1;
+    const msg = clamp01((this.messageT || 0) / md);
+    drawForestArena(g, {
+      camX, W: this.W, H: this.H, t: this.t,
+      gates: this.gates, gateIndex: gi, awake,
+      sealCharge: clamp01(Math.max(msg * 0.8, camX > 1050 ? 0.75 : 0)),
+      bossZone: camX > 1050,
+      arena: this.inArena,
+      // A wave banner is up exactly while a wave is walking in, so it doubles
+      // as the cue for the grove's arrival tell at the right edge.
+      arriving: this.boss ? 0 : msg,
+    });
   }
 
   _drawBossZone(g, camX) {
@@ -1173,6 +1558,30 @@ export class CombatScene {
     }
   }
 
+  /**
+   * Totems. Drawn from the existing primitives rather than new art: a carved
+   * post, a hovering mote, and a ring showing the ground it controls. The post
+   * shortens as its life runs out, so you can see when it is about to go.
+   */
+  _drawTotems(g) {
+    for (const t of this.totems) {
+      const fx = this._abilityFx(t.ability);
+      const frac = Math.max(0, t.life / t.maxLife);
+      const h = 6 + Math.round(10 * frac);
+      shadow(g, t.x, t.depth, 5, 2, 0.3);
+      rect(g, t.x - 2, t.depth - h, 4, h, '#6b4a2e');
+      rect(g, t.x - 3, t.depth - h - 2, 6, 3, '#8a6a44');
+      // the area it holds, breathing so it reads as active
+      const pulse = 0.5 + Math.sin(this.t * 3 + t.x) * 0.5;
+      g.save();
+      g.globalAlpha = 0.10 + pulse * 0.06;
+      disc(g, t.x, t.depth, t.radius, fx.color);
+      g.globalAlpha = 0.5 + pulse * 0.4;
+      disc(g, t.x, t.depth - h - 5, 2, fx.color);
+      g.restore();
+    }
+  }
+
   _drawProjectiles(g) {
     for (const pr of this.projectiles) {
       const y = pr.depth - pr.z;
@@ -1240,6 +1649,7 @@ export class CombatScene {
     this._drawTopBanner(g);
     this._drawMessage(g);
     this._drawTutorial(g);
+    this._drawArenaPrompt(g);
   }
 
   // BOTTOM-LEFT: portrait + [NAME  LV] header + HP / MP / ST bars + pet.
@@ -1351,7 +1761,9 @@ export class CombatScene {
 
   // TOP-CENTER: boss bar, or a wave/enemy banner. Never both.
   _drawTopBanner(g) {
-    if (this.boss && this.boss.hp > 0) {
+    // Not while he is still on the throne: the bar going up before he moves
+    // announces the fight the staging is trying to let you discover.
+    if (this.boss && this.boss.hp > 0 && !this.boss.seated) {
       const bw = this.W - 80, bx = 40, by = 16;
       // dark banner strip behind
       rect(g, bx - 6, by - 12, bw + 12, 30, 'rgba(9,7,16,0.7)');
@@ -1399,11 +1811,24 @@ export class CombatScene {
     g.globalAlpha = clamp01(fade);
     // auto-fit so long banners never run off-screen; sit lower during boss
     // fights so it never collides with the boss health bar at the top.
-    let sc = 3;
+    // Boss banners sit smaller and higher than wave banners: at scale 3 the
+    // title ran across the middle of the frame and covered the arena, which is
+    // the one thing a boss reveal should be showing off. The HP bar carries the
+    // persistent information, so this only has to be a flourish.
+    const isBoss = !!this.boss;
+    let sc = isBoss ? 2 : 3;
     while (sc > 1 && textWidth(this.message, sc) > this.W - 28) sc--;
-    const my = this.boss ? 92 : 40;
+    const my = isBoss ? 58 : 40;
+    // fade in with a slight expansion, hold, fade out
+    const inT = clamp01((this.messageDur - this.messageT) / 0.32);
+    const grow = 0.88 + 0.12 * (1 - (1 - inT) * (1 - inT));
+    g.save();
+    g.translate(this.W / 2, my);
+    g.scale(grow, grow);
+    g.translate(-this.W / 2, -my);
     heading(g, this.W, my, this.message, { scale: sc, color: '#ffe066' });
     if (this.messageSub) drawText(g, this.messageSub, this.W / 2, my + sc * 8 + 4, { color: UI.ink, align: 'center', shadow: '#000' });
+    g.restore();
     g.globalAlpha = 1;
   }
 
@@ -1418,6 +1843,19 @@ export class CombatScene {
     const bx = this.W - bw - 8, by = 40;
     panel(g, bx, by, bw, bh, { bg: 'rgba(9,7,16,0.85)' });
     tb.lines.forEach((l, i) => drawText(g, l, bx + 8, by + 6 + i * 11, { color: UI.ink }));
+    g.globalAlpha = 1;
+  }
+
+  // Shown only while the player is actually standing in the gateway, and it
+  // pulses so it reads as an invitation rather than a HUD element.
+  _drawArenaPrompt(g) {
+    if (!this.arenaPrompt) return;
+    const label = 'E   ENTER THE HALL';
+    const bw = 118, bh = 18;
+    const bx = this.W / 2 - bw / 2, by = this.H - 96;
+    g.globalAlpha = 0.72 + Math.sin(this.t * 4) * 0.22;
+    panel(g, bx, by, bw, bh, { bg: 'rgba(12,8,10,0.88)', frame: UI.gold });
+    drawText(g, label, bx + 10, by + 5, { color: UI.gold });
     g.globalAlpha = 1;
   }
 

@@ -1,0 +1,40 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>phase</title>
+<style>body{background:#14100f;color:#ddd;font:11px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { CombatScene }=await import('./src/scenes/combat.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const W=480,H=270;
+const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+const g=cv.getContext('2d',{willReadFrequently:true});
+const out=[];const say=s=>{out.push(s);document.getElementById('out').textContent=out.join('\n');};
+const sc=new CombatScene(Hero.create('warrior'), ()=>{});
+sc.enter({ width:W, height:H, addShake(){}, shakeOffset(){ return {x:0,y:0}; } });
+await new Promise(r=>setTimeout(r,2800));
+function base(){ sc.camX=500; sc.currentGate=2; sc.enemies=[]; sc.messageT=0; sc.message=null;
+  const p=sc.player||sc.p; if(p){ p.x=-9999; } }
+async function shot(id, m, prep){
+  window.__arenaMode=m; base(); if(prep) prep();
+  for(let i=0;i<10;i++){ sc.t=3.1; g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,W,H); sc.draw(g); }
+  const bl=await new Promise(r=>cv.toBlob(r,'image/png'));
+  await fetch('http://127.0.0.1:8479/ph_'+id+'.png',{method:'POST',body:bl});
+  say(id);
+}
+await shot('A_ground','ground');
+await shot('B_forest','forest');
+await shot('C_both','both');
+// C with the three sprites the brief names, for readability judgement
+await shot('C_cast','both', ()=>{
+  const p=sc.player||sc.p; if(p){ p.x=sc.camX+150; p.depth=214; }
+  try{ sc._spawnEnemy('goblin', sc.camX+270, 196);
+       sc._spawnEnemy('slime',  sc.camX+360, 226); }catch(e){say('spawn '+e.message);}
+  sc.messageT=0; sc.message=null;
+});
+say('DONE');
+</script></body></html>

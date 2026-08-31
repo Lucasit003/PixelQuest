@@ -30,6 +30,15 @@ const repeatTimers = new Map();
 // up/down/left/right actions (below threshold) so menu navigation still works.
 const vaxis = { x: 0, y: 0 };
 
+// How much sideways intent it takes to TURN the character around.
+//
+// Movement uses a small deadzone, but facing must not: a touch joystick pushed
+// almost straight up still reports a fraction of x, and testing `ax.x !== 0`
+// made the hero snap left and right while walking up the map. Turning is a
+// bigger commitment than moving, so it wants a bigger threshold -- a genuine
+// diagonal turns him, a wobble does not.
+export const FACE_DEADZONE = 0.35;
+
 function virtualKeyDown(action) {
   if (!held.has(action)) {
     held.add(action);

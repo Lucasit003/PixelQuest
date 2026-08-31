@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — equipment attachment harness</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.5 ui-monospace,Menlo,monospace; margin:0; padding:18px; }
+  h1 { font-size:15px; color:#ffd678; margin:0 0 4px; }
+  p  { margin:0 0 14px; color:#a8a4b0; max-width:900px; }
+  canvas { image-rendering: pixelated; background:#3a3e4a; border:1px solid #4a4653; display:block; }
+  .row { margin-bottom:16px; }
+  .lbl { color:#ffd678; margin:10px 0 4px; }
+</style>
+</head>
+<body>
+<h1>Equipment attachment harness</h1>
+<p>
+  ONE Paladin body sheet. Five different pieces of equipment played through it.
+  Nothing below edits a single body pixel — the weapon and shield are separate
+  sprites positioned by the per-frame <code>hand</code> / <code>shield</code>
+  anchors, rotated by <code>handAngle</code> / <code>shieldAngle</code>, and
+  layered by <code>handBehind</code>. Placeholders are deliberately crude and
+  deliberately different sizes; they are test scaffolding, not game art.
+</p>
+<div id="out"></div>
+
+<script type="module">
+import { registerActorSprite, ACTOR_SPRITES } from './src/gfx/sprites.js';
+import { registerEquipment, drawActorEquipment, getItemImage } from './src/gfx/equipment.js';
+import { getSheet } from './src/gfx/sprites.js';
+
+const FW = 164, FH = 219;
+
+// The body: four frames of a swing. Anchors trace the fist through the arc and
+// the angle turns the weapon with the wrist. Authored ONCE.
+registerActorSprite('paladin_test', {
+  sheet: 'assets/actors/_src/paladin_gemini/harness/paladin_swing.png',
+  frameWidth: FW, frameHeight: FH, columns: 4,
+  anchorX: FW / 2, anchorY: FH,
+  logicalHeight: 56,
+  animations: {
+    idle:   { frames: [0], fps: 1 },
+    attack: {
+      frames: [0, 1, 2, 3], fps: 6, loop: false,
+      hand:       [[104, 60], [116, 84], [128, 108], [122, 132]],
+      handAngle:  [-75,       -25,        35,          80],
+      handBehind: [true,      false,      false,       false],
+      shield:      [[52, 104], [50, 108], [46, 112], [48, 116]],
+      shieldAngle: [-8,        -4,         6,         12],
+    },
+  },
+});
+
+const HAMMERS = [
+  ['hammer_small', [15, 64]],
+  ['hammer_iron',  [21, 92]],
+  ['hammer_huge',  [31, 132]],
+];
+const SHIELDS = [
+  ['shield_small', [22, 28]],
+  ['shield_big',   [39, 50]],
+];
+for (const [id, grip] of [...HAMMERS, ...SHIELDS]) {
+  registerEquipment(id, {
+    sprite: `assets/actors/_src/paladin_gemini/harness/items/${id}.png`,
+    grip,
+  });
+}
+
+// The real default tier, alongside the crude placeholders. Same registration
+// call, same anchor table, no body change -- which is the thing this harness
+// exists to demonstrate.
+registerEquipment('hammer_default', {
+  sprite: 'assets/actors/_src/paladin_gemini/equipment/hammer_default.png',
+  grip: [16, 67],
+});
+registerEquipment('shield_default', {
+  sprite: 'assets/actors/_src/paladin_gemini/equipment/shield_default.png',
+  grip: [25, 30],
+});
+
+const cfg = ACTOR_SPRITES.paladin_test;
+
+function strip(title, hand, shield) {
+  const wrap = document.createElement('div'); wrap.className = 'row';
+  const lbl = document.createElement('div'); lbl.className = 'lbl';
+  lbl.textContent = title;
+  const c = document.createElement('canvas');
+  c.width = FW * 4; c.height = FH;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  const sheet = getSheet(cfg.sheet);
+
+  for (let f = 0; f < 4; f++) {
+    const actor = {
+      x: FW * f + FW / 2, y: FH, z: 0, facing: 1,
+      state: 'attack', animTime: f / 6,
+      equipped: { hand, shield },
+    };
+    // behind pass -> body -> front pass. Exactly the order the game will use.
+    drawActorEquipment(g, actor, cfg, 'behind');
+    if (sheet.ready) {
+      g.drawImage(sheet.img, f * FW, 0, FW, FH, FW * f, 0, FW, FH);
+    }
+    drawActorEquipment(g, actor, cfg, 'front');
+  }
+  wrap.append(lbl, c);
+  return wrap;
+}
+
+const out = document.getElementById('out');
+function render() {
+  out.innerHTML = '';
+  out.append(strip('BODY ALONE — no equipment registered to the actor', null, null));
+  out.append(strip('hammer_default  +  shield_default   (the real tier)', 'hammer_default', 'shield_default'));
+  for (const [id] of HAMMERS) {
+    out.append(strip(`${id}  +  shield_small`, id, 'shield_small'));
+  }
+  out.append(strip('hammer_iron  +  shield_big   (bigger shield, same anchors)', 'hammer_iron', 'shield_big'));
+  out.append(strip('hammer_huge  facing LEFT   (anchors + angles mirror automatically)', 'hammer_huge', 'shield_big'));
+  // the mirrored strip needs facing -1, redraw that one specially
+  const last = out.lastChild.querySelector('canvas');
+  const g = last.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, last.width, last.height);
+  const sheet = getSheet(cfg.sheet);
+  for (let f = 0; f < 4; f++) {
+    const actor = {
+      x: FW * f + FW / 2, y: FH, z: 0, facing: -1,
+      state: 'attack', animTime: f / 6,
+      equipped: { hand: 'hammer_huge', shield: 'shield_big' },
+    };
+    drawActorEquipment(g, actor, cfg, 'behind');
+    if (sheet.ready) {
+      g.save(); g.translate(FW * f + FW, 0); g.scale(-1, 1);
+      g.drawImage(sheet.img, f * FW, 0, FW, FH, 0, 0, FW, FH);
+      g.restore();
+    }
+    drawActorEquipment(g, actor, cfg, 'front');
+  }
+}
+
+// Images decode async; redraw a few times until everything has landed.
+render();
+let n = 0;
+const t = setInterval(() => { render(); if (++n > 12) clearInterval(t); }, 250);
+window.__rerender = render;
+</script>
+</body>
+</html>

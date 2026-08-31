@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — Paladin equipment review board</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.55 ui-monospace,Menlo,monospace; margin:0; padding:20px 24px 60px; }
+  h1 { font-size:16px; color:#ffd678; margin:0 0 6px; }
+  h2 { font-size:13px; color:#ffd678; margin:26px 0 6px; border-top:1px solid #3a3644; padding-top:10px; }
+  p  { margin:0 0 12px; color:#a8a4b0; max-width:1000px; }
+  .note { color:#e8a04a; }
+  canvas { image-rendering: pixelated; display:block; }
+  .strip { background:#3a3e4a; border:1px solid #4a4653; margin-bottom:6px; }
+  .cap { color:#8c8898; margin:2px 0 10px; }
+  .warn { color:#ffb454; border:1px solid #7a5a22; background:#241d10; padding:10px 12px; border-radius:4px; max-width:1000px; }
+  .row { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<h1>Paladin equipment review board</h1>
+<p>
+  ONE Paladin body sheet, authored empty-handed, plus TWO separate equipment
+  sprites attached at per-frame anchors. No body pixel is modified anywhere on
+  this page — every row below is the same 16-frame sheet with the hammer and
+  shield layered on by <code>equipment.js</code>.
+</p>
+<div id="out"></div>
+
+<script type="module">
+import { registerActorSprite, ACTOR_SPRITES, getSheet } from './src/gfx/sprites.js';
+import { registerEquipment, drawActorEquipment } from './src/gfx/equipment.js';
+import { drawSwingTrail } from './src/gfx/weaponTrail.js';
+
+const FW = 164, FH = 219, COLS = 6;
+const SRC = 'assets/actors/_src/paladin_gemini/';
+
+// ------------------------------------------------------- HEAVY SIDE CRUSH
+// Its own sheet, 264px cells: the hammer head swings 57px from the fist, so a
+// narrower cell clips the arc right where the swing should read. Frame size
+// never feeds gameplay, so this costs nothing. The BODY carries the attack:
+// figure heights run 215 / 210 / 189 / 199, so the lunge genuinely drops him.
+const CW = 264;
+registerActorSprite('paladin_crush', {
+  sheet: SRC + 'anim/heavy_side_crush.png',
+  frameWidth: CW, frameHeight: FH, columns: 4,
+  anchorX: CW / 2, anchorY: FH,
+  logicalHeight: 56,
+  animations: {
+    // Required fallback. This sheet holds only the crush, so idle borrows its
+    // first frame rather than pretending to be a resting pose.
+    idle: {
+      frames: [0], fps: 1,
+      hand: [[61, 62]], handAngle: [-35], handBehind: [true],
+      shield: [[98, 112]], shieldAngle: [-16],
+    },
+    attack: {
+      frames: [0, 1, 2, 3], fps: 12, loop: false,
+      // The fist traces a SMALL arc; the hammer head traces a large one. That
+      // difference IS the illusion of rotational weight.
+      //
+      // The angles sweep monotonically COUNTER-CLOCKWISE through ~215 degrees:
+      // head up-and-back, down behind him, driven down through the target, then
+      // carried past. Written as one descending run rather than wrapped into
+      // 0-360 so the trail interpolates the long way round the arc, which is the
+      // way the head actually travels. Wrapping it makes the trail cut the
+      // short chord straight through his chest.
+      //
+      // Fist moves  (61,62) -> (77,112) -> (188,112) -> (184,130): about 130px.
+      // Head moves  (27,17) -> (21,124) -> (205,167) -> (238,148): about 300px.
+      hand:        [[61, 62], [77, 112], [188, 112], [184, 130]],
+      handAngle:   [-35,      -110,      -195,        -250],
+      // Far side of the body on the wind-up, near side once it comes through.
+      handBehind:  [true,     true,      false,       false],
+      // Shield reacts to the body: tucked in on the load, opening as the torso
+      // turns, shoved back and out by inertia at impact, returning to guard.
+      shield:      [[98, 112], [90, 116], [82, 124], [92, 120]],
+      shieldAngle: [-16,       -6,        10,        -4],
+      trail:       [0,         0.4,       1,         0.55],
+    },
+  },
+});
+
+// ---------------------------------------------------------------- the body
+// Frames 0-5 idle, 6-11 walk, 12-15 attack. Anchors trace the fist and the
+// shield arm through each cycle; angles turn the item with the wrist.
+registerActorSprite('paladin_review', {
+  sheet: SRC + '15_paladin_sheet_16frames.png',
+  frameWidth: FW, frameHeight: FH, columns: COLS,
+  anchorX: FW / 2, anchorY: FH,
+  logicalHeight: 56,
+  animations: {
+    idle: {
+      frames: [0, 1, 2, 3, 4, 5], fps: 6,
+      hand:        [[118,170],[118,171],[119,172],[119,171],[118,170],[118,170]],
+      handAngle:   [-4,       -3,       -2,       -3,       -4,       -4],
+      shield:      [[46,116],[46,117],[47,118],[47,117],[46,116],[46,116]],
+      shieldAngle: [-6,      -5,      -4,      -5,      -6,      -6],
+    },
+    walk: {
+      frames: [6, 7, 8, 9, 10, 11], fps: 10,
+      hand:        [[114,166],[116,168],[118,170],[116,168],[114,166],[113,165]],
+      handAngle:   [-10,     -6,       -2,       -6,       -10,      -12],
+      shield:      [[44,112],[45,114],[46,116],[45,114],[44,112],[43,111]],
+      shieldAngle: [-10,     -8,      -6,      -8,      -10,     -11],
+    },
+    attack: {
+      frames: [12, 13, 14, 15], fps: 12, loop: false,
+      // wind-up pulls the hammer back and BEHIND the body, then it swings
+      // through in front. The shield tucks inward on the strike.
+      //
+      // The wind-up stays BEHIND the body but is angled out so the head clears
+      // the shoulder line: hiding it completely killed the anticipation and made
+      // the hammer pop out of nowhere on the next frame.
+      hand:        [[92,102],[128,112],[138,114],[110,124]],
+      handAngle:   [-46,     20,       70,       -6],
+      handBehind:  [true,    false,    false,    false],
+      shield:      [[52,104],[50,108],[49,110],[50,112]],
+      shieldAngle: [-14,     -6,      4,       -6],
+      // Trail intensity per frame. Nothing on the wind-up, most at impact.
+      // A constant trail reads as a permanent smear and costs the strike its
+      // accent, so the peak is what makes frame 3 land.
+      trail:       [0,       0.35,    1,       0.5],
+    },
+  },
+});
+
+// ------------------------------------------------------------- the equipment
+registerEquipment('hammer_default', {
+  sprite: SRC + 'equipment/hammer_default.png',
+  grip: [16, 67],          // on the shaft, just above the pommel
+  // The business end. weaponTrail.js tracks THIS point across frames to build
+  // the swing arc, so a longer weapon throws a longer trail for free and no
+  // streak is ever baked into the sprite.
+  tip:  [14, 10],          // measured centroid of the head mass
+});
+registerEquipment('shield_default', {
+  sprite: SRC + 'equipment/shield_default.png',
+  grip: [25, 30],          // where the forearm sits behind the boss
+});
+
+const cfg = ACTOR_SPRITES.paladin_review;
+const CRUSH = ACTOR_SPRITES.paladin_crush;
+const EQ = { hand: 'hammer_default', shield: 'shield_default' };
+
+// ------------------------------------------------------------------ helpers
+
+function drawFrame(g, C, state, step, fps, x, y, scale, equipped, facing = 1) {
+  const actor = {
+    x, y, z: 0, facing, scale,
+    state, animTime: step / fps,
+    equipped,
+  };
+  const sheet = getSheet(C.sheet);
+  const cols = C.columns, fw = C.frameWidth, fh = C.frameHeight;
+  // Trail first of all: behind the body, so the streak reads as speed rather
+  // than as a scratch painted over the helmet.
+  if (equipped) drawSwingTrail(g, C, actor, step, { width: 2 * scale, span: 2, alpha: 0.20 });
+  drawActorEquipment(g, actor, C, 'behind');
+  if (sheet.ready) {
+    const anim = C.animations[state];
+    const f = anim.frames[step];
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(Math.round(x), Math.round(y));
+    if (scale !== 1) g.scale(scale, scale);
+    if (facing < 0) g.scale(-1, 1);
+    g.drawImage(sheet.img, (f % cols) * fw, Math.floor(f / cols) * fh, fw, fh,
+                -fw / 2, -fh, fw, fh);
+    g.restore();
+  }
+  drawActorEquipment(g, actor, C, 'front');
+}
+
+function strip(steps, { state, scale = 1, equipped = EQ, bg = null, facing = 1,
+                        pad = 8, silhouette = false, C = cfg }) {
+  const fw = C.frameWidth, fh = C.frameHeight;
+  const cw = Math.round((fw * scale + pad) * steps.length);
+  const ch = Math.round(fh * scale + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch; c.className = 'strip';
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); }
+  steps.forEach((s, i) => {
+    const x = (fw * scale + pad) * i + (fw * scale) / 2 + pad / 2;
+    // Clip to this frame's cell. In game only one actor draws at a time, but on
+    // a contact sheet a long swing trail would spill into the neighbouring
+    // frame and read as if the arc belonged to both.
+    g.save();
+    g.beginPath();
+    g.rect((fw * scale + pad) * i, 0, fw * scale + pad, ch);
+    g.clip();
+    drawFrame(g, C, state, s, C.animations[state].fps, x, ch - pad, scale, equipped, facing);
+    g.restore();
+  });
+  if (silhouette) {
+    // stamp everything black: silhouette read is the real test of a weapon
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch);
+    g.globalCompositeOperation = 'source-over';
+  }
+  return c;
+}
+
+function itemStrip(zooms) {
+  const c = document.createElement('canvas');
+  const H = 84 * Math.max(...zooms) + 20;
+  c.width = 900; c.height = H; c.className = 'strip';
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#3a3e4a'; g.fillRect(0, 0, c.width, H);
+  let x = 12;
+  for (const z of zooms) {
+    for (const id of ['hammer_default', 'shield_default']) {
+      const img = new Image();
+      img.src = SRC + 'equipment/' + (id === 'hammer_default' ? 'hammer_default.png' : 'shield_default.png');
+      const px = x;
+      img.onload = () => {
+        g.drawImage(img, 0, 0, img.width, img.height,
+                    px, H - 10 - img.height * z, img.width * z, img.height * z);
+      };
+      x += 70 * z + 14;
+    }
+    x += 24;
+  }
+  return c;
+}
+
+// --------------------------------------------------------------------- board
+const out = document.getElementById('out');
+function section(title, caption, nodes) {
+  const h = document.createElement('h2'); h.textContent = title;
+  const p = document.createElement('div'); p.className = 'cap'; p.innerHTML = caption;
+  const row = document.createElement('div'); row.className = 'row';
+  nodes.forEach(n => row.appendChild(n));
+  out.append(h, p, row);
+}
+
+function build() {
+  out.innerHTML = '';
+  const atk = [0, 1, 2, 3];
+
+
+  section('1 — body animation, NO equipment, 6x',
+    'The body must carry the attack on its own. Judge shoulders, elbows, hips, knees, ' +
+    'stance width and cape here — if the motion is not visible in this row, no amount ' +
+    'of anchor movement will rescue it.',
+    [strip(atk, {state:'attack', scale:6, equipped:null, C:CRUSH})]);
+
+  section('2 — equipment alone',
+    'hammer 32x81 grip [16,67] tip [14,10], shield 50x74 grip [25,30]. ' +
+    'Never drawn into the body; swappable for any future tier.',
+    [itemStrip([1, 6])]);
+
+  section('3 — equipped animation, 6x',
+    'Anchors FOLLOW the body. The hammer head describes a wider arc than the hand, ' +
+    'and the trail is computed from the head position — it is not painted on the sprite.',
+    [strip(atk, {state:'attack', scale:6, C:CRUSH})]);
+
+  section('4 — equipped animation at TRUE 1x',
+    'The only judge that counts. windup &rarr; swing &rarr; IMPACT &rarr; recovery must ' +
+    'be readable here with no labels.',
+    [strip(atk, {state:'attack', scale:1, C:CRUSH}),
+     strip(atk, {state:'attack', scale:1, facing:-1, C:CRUSH})]);
+
+  section('5 — composited into the game',
+    'Same frames over the real ground palette the combat scene uses.',
+    [strip(atk, {state:'attack', scale:1, bg:'#575b68', C:CRUSH}),
+     strip(atk, {state:'attack', scale:1, bg:'#3d5232', C:CRUSH})]);
+
+  section('6 — silhouette animation at 1x',
+    'Pose reads as pure shape, or it does not read.',
+    [strip(atk, {state:'attack', scale:1, silhouette:true, C:CRUSH}),
+     strip(atk, {state:'attack', scale:4, silhouette:true, C:CRUSH})]);
+}
+
+build();
+let n = 0;
+const t = setInterval(() => { build(); if (++n > 14) clearInterval(t); }, 260);
+window.__rebuild = build;
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — Paladin combat vocabulary</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.55 ui-monospace,Menlo,monospace; margin:0; padding:20px 24px 60px; }
+  h1 { font-size:16px; color:#ffd678; margin:0 0 6px; }
+  h2 { font-size:13px; color:#ffd678; margin:24px 0 6px; border-top:1px solid #3a3644; padding-top:10px; }
+  p  { margin:0 0 12px; color:#a8a4b0; max-width:1040px; }
+  .cap { color:#8c8898; margin:2px 0 8px; max-width:1040px; }
+  canvas { image-rendering: pixelated; display:block; }
+  .strip { background:#3a3e4a; border:1px solid #4a4653; margin-bottom:6px; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<h1>Paladin reusable combat vocabulary</h1>
+<p>
+  Five body actions, every one authored EMPTY-HANDED. The hammer and shield are
+  separate sprites attached at per-frame anchors, so any future weapon replaces
+  them without regenerating a frame of character art. Ability identity comes from
+  VFX layered over these bodies, never from baked-in equipment.
+</p>
+<div id="out"></div>
+
+<script type="module">
+import { registerActorSprite, ACTOR_SPRITES, getSheet } from './src/gfx/sprites.js';
+import { registerEquipment, drawActorEquipment } from './src/gfx/equipment.js';
+import { drawSwingTrail } from './src/gfx/weaponTrail.js';
+
+const SRC = 'assets/actors/_src/paladin_gemini/';
+const FH = 219;
+
+registerEquipment('hammer_default', {
+  sprite: SRC + 'equipment/hammer_default.png', grip: [16, 67], tip: [14, 10],
+});
+registerEquipment('shield_default', {
+  sprite: SRC + 'equipment/shield_default.png', grip: [25, 30],
+});
+
+// Each action is its own sheet. Anchors FOLLOW the body — they never substitute
+// for it. Figure heights are noted per action: the body, not the equipment, is
+// what carries each read.
+function action(id, sheet, cw, anim) {
+  registerActorSprite(id, {
+    sheet: SRC + 'anim/' + sheet + '.png',
+    frameWidth: cw, frameHeight: FH, columns: 4,
+    anchorX: cw / 2, anchorY: FH, logicalHeight: 56,
+    animations: {
+      idle: { frames: [0], fps: 1,
+        hand: [anim.hand[0]], handAngle: [anim.handAngle[0]],
+        handBehind: [anim.handBehind[0]],
+        shield: [anim.shield[0]], shieldAngle: [anim.shieldAngle[0]] },
+      attack: Object.assign({ frames: [0,1,2,3], fps: 12, loop: false }, anim),
+    },
+  });
+  return ACTOR_SPRITES[id];
+}
+
+// ---- 1. BASIC COMBO — the approved Heavy Side Crush.  215/210/189/199
+const CRUSH = action('crush', 'heavy_side_crush', 264, {
+  hand:        [[61, 62], [77, 112], [188, 112], [184, 130]],
+  handAngle:   [-35,      -110,      -195,        -250],
+  handBehind:  [true,     true,      false,       false],
+  shield:      [[98, 112], [90, 116], [82, 124], [92, 120]],
+  shieldAngle: [-16,       -6,        10,        -4],
+  trail:       [0,         0.4,       1,         0.55],
+});
+
+// ---- 2. HEAVY — two-handed, weight forward, travels ACROSS not down. 215/201/190/203
+const HEAVY = action('heavy', 'heavy_forward', 240, {
+  hand:        [[78, 124], [132, 112], [178, 106], [150, 132]],
+  handAngle:   [-70,       0,          70,         110],
+  handBehind:  [true,      false,      false,      false],
+  shield:      [[92, 118], [86, 122], [78, 128], [86, 124]],
+  shieldAngle: [-14,       -4,         12,        -2],
+  trail:       [0,         0.35,       1,         0.5],
+});
+
+// ---- 3. SHIELD BRACE — lowest at frame 3. Shield leads, weapon tucks. 215/204/189/205
+const BRACE = action('brace', 'shield_brace', 216, {
+  hand:        [[142, 148], [146, 154], [150, 158], [152, 160]],
+  handAngle:   [-8,         -4,          0,          4],
+  handBehind:  [false,      false,      false,      false],
+  // shield comes FORWARD and turns more face-on as he sets, then absorbs.
+  shield:      [[86, 118], [78, 124], [68, 128], [64, 132]],
+  shieldAngle: [-20,       -28,       -36,       -30],
+  trail:       [0, 0, 0, 0],
+});
+
+// ---- 4. HOLY CAST — upright, controlled, TALLEST on the last frame. 193/183/191/215
+const CAST = action('cast', 'holy_cast', 216, {
+  // weapon hand rises with the invocation; nothing swings, so no trail at all.
+  hand:        [[132, 140], [120, 122], [112, 82], [106, 40]],
+  handAngle:   [-6,         -4,          -2,        0],
+  handBehind:  [false,      false,      false,     false],
+  shield:      [[80, 122], [78, 124], [78, 120], [76, 116]],
+  shieldAngle: [-8,        -6,        -6,        -4],
+  trail:       [0, 0, 0, 0],
+});
+
+// ---- 5. JUDGMENT SLAM — overhead to ground. 215/191/136/142, the biggest
+// compression in the set: he loses 79px of height into the impact.
+const SLAM = action('slam', 'judgment_slam', 216, {
+  hand:        [[108, 34], [110, 88], [112, 176], [112, 166]],
+  handAngle:   [0,         85,        175,        168],
+  handBehind:  [false,     false,     false,      false],
+  shield:      [[82, 108], [80, 116], [74, 150], [76, 146]],
+  shieldAngle: [-10,       -4,         8,         4],
+  trail:       [0,         0.45,      1,          0.5],
+});
+
+const EQ = { hand: 'hammer_default', shield: 'shield_default' };
+
+function drawFrame(g, C, step, x, y, scale, equipped, facing) {
+  const anim = C.animations.attack;
+  const actor = { x, y, z: 0, facing, scale, state: 'attack',
+                  animTime: step / anim.fps, equipped };
+  const sheet = getSheet(C.sheet);
+  const cols = C.columns, fw = C.frameWidth, fh = C.frameHeight;
+  if (equipped) drawSwingTrail(g, C, actor, step, { width: 2 * scale, span: 2, alpha: 0.20 });
+  drawActorEquipment(g, actor, C, 'behind');
+  if (sheet.ready) {
+    const f = anim.frames[step];
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(Math.round(x), Math.round(y));
+    if (scale !== 1) g.scale(scale, scale);
+    if (facing < 0) g.scale(-1, 1);
+    g.drawImage(sheet.img, (f % cols) * fw, Math.floor(f / cols) * fh, fw, fh,
+                -fw / 2, -fh, fw, fh);
+    g.restore();
+  }
+  drawActorEquipment(g, actor, C, 'front');
+}
+
+function strip(C, { scale = 1, equipped = EQ, facing = 1, pad = 8, bg = null }) {
+  const fw = C.frameWidth, fh = C.frameHeight;
+  const cw = Math.round((fw * scale + pad) * 4);
+  const ch = Math.round(fh * scale + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch; c.className = 'strip';
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); }
+  for (let i = 0; i < 4; i++) {
+    const x = (fw * scale + pad) * i + (fw * scale) / 2 + pad / 2;
+    g.save();
+    g.beginPath();
+    g.rect((fw * scale + pad) * i, 0, fw * scale + pad, ch);
+    g.clip();
+    drawFrame(g, C, i, x, ch - pad, scale, equipped, facing);
+    g.restore();
+  }
+  return c;
+}
+
+const out = document.getElementById('out');
+function section(title, cap, nodes) {
+  const h = document.createElement('h2'); h.textContent = title;
+  const p = document.createElement('div'); p.className = 'cap'; p.textContent = cap;
+  const row = document.createElement('div'); row.className = 'row';
+  nodes.forEach(n => row.appendChild(n));
+  out.append(h, p, row);
+}
+
+const ACTIONS = [
+  [CRUSH, 'BASIC COMBO — Heavy Side Crush', 'heights 215 / 210 / 189 / 199'],
+  [HEAVY, 'HEAVY — two-handed, weight forward', 'heights 215 / 201 / 190 / 203'],
+  [BRACE, 'SHIELD BRACE — defensive', 'heights 215 / 204 / 189 / 205 — lowest when braced'],
+  [CAST,  'HOLY CAST — upright invocation', 'heights 193 / 183 / 191 / 215 — bows, then rises tallest'],
+  [SLAM,  'JUDGMENT SLAM — overhead to ground', 'heights 215 / 191 / 136 / 142 — loses 79px into impact'],
+];
+
+function build() {
+  out.innerHTML = '';
+  for (const [C, name, note] of ACTIONS) {
+    section(name + '  —  BODY ONLY (3x)', note + '   |   no equipment drawn at all',
+      [strip(C, { scale: 3, equipped: null })]);
+    section(name + '  —  EQUIPPED (3x)', 'hammer + shield tracked by per-frame anchors',
+      [strip(C, { scale: 3 })]);
+  }
+  section('ALL FIVE at TRUE 1x — facing right', 'the size this ships at',
+    ACTIONS.map(([C]) => strip(C, { scale: 1, bg: '#575b68' })));
+  section('ALL FIVE at TRUE 1x — facing LEFT', 'anchors and angles mirror automatically',
+    ACTIONS.map(([C]) => strip(C, { scale: 1, facing: -1, bg: '#3d5232' })));
+}
+
+build();
+let n = 0;
+const t = setInterval(() => { build(); if (++n > 14) clearInterval(t); }, 260);
+</script>
+</body>
+</html>

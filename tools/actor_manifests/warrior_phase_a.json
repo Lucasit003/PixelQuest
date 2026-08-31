@@ -1,0 +1,77 @@
+{
+  "_comment": [
+    "Phase A validation sheet for the Warrior, cut from the APPROVED master at",
+    "assets/warrior weaw.png. No art was invented \u2014 every frame is a real pose",
+    "from that sheet, reduced by one uniform factor and aligned on one baseline.",
+    "",
+    "bodyHeight 26 matches SPECS.warrior.h in gfx/actors.js exactly, so the",
+    "sprite Warrior stands the same height as the procedural one and the game's",
+    "bodyHeight 18 is the MEASURED drawn height of the procedural Warrior at scale 1.0 (25px at combat's 1.4x). SPECS.warrior.h=26 is a nominal UI value, not the drawn height - authoring to 26 made the sprite 44% too tall.",
+    "",
+    "LIMITATION: these master poses hold a sword and shield, so equipment is",
+    "baked into this validation sheet. Production frames must be authored",
+    "EMPTY-HANDED so weapons and shields can be layered per-frame anchors.",
+    "jump / dodge / hurt / down have no equivalent pose in the master and are",
+    "left out \u2014 the renderer falls those states back toward idle until real",
+    "frames are generated."
+  ],
+  "source": "assets/warrior weaw.png",
+  "output": "assets/actors/warrior_phase_a.png",
+  "frameWidth": 24,
+  "frameHeight": 24,
+  "columns": 4,
+  "anchorX": 12,
+  "bodyHeight": 18,
+  "logicalHeight": 26,
+  "referencePose": [
+    617,
+    374,
+    754,
+    596
+  ],
+  "alphaThreshold": 110,
+  "colors": 0,
+  "animations": {
+    "idle": [
+      [
+        617,
+        374,
+        754,
+        596
+      ]
+    ],
+    "walk": [
+      [
+        55,
+        375,
+        192,
+        596
+      ],
+      [
+        234,
+        373,
+        385,
+        596
+      ],
+      [
+        428,
+        379,
+        573,
+        593
+      ],
+      [
+        617,
+        374,
+        754,
+        596
+      ]
+    ]
+  },
+  "fps": {
+    "idle": 4,
+    "walk": 6
+  },
+  "oneShot": [],
+  "saturation": 1.6,
+  "contrast": 1.15
+}

@@ -400,6 +400,16 @@ export function buildPlazaDecor(scene, FC) {
     m.trees.forEach(([nm, ox, oy], j) => {
       set(nm, m.at[0] + ox, m.at[1] + oy, { flip: (i + j) % 3 === 0 });
     });
+    // Depth behind the authored front rank. The authored trees are the shape
+    // of the mass; these only make it read as more than one tree deep, so they
+    // sit OUTWARD from the square and are spacing-tested rather than placed.
+    const away = m.at[0] < 0 ? -1 : 1, up = m.at[1] < 0 ? -1 : 1;
+    for (let k = 0; k < 4; k++) {
+      const h1 = hash(24000 + i * 40 + k * 3), h2 = hash(24001 + i * 40 + k * 3);
+      grow(pick(['tree_oak_broad', 'tree_oak_round', 'tree_young', 'tree_small_pine'], h2),
+           m.at[0] + away * (40 + h1 * 78), m.at[1] + up * (26 + h2 * 62),
+           { flip: h1 > 0.5, road: 30 }, 0.86);
+    }
   });
 
   area('nw');
@@ -527,6 +537,236 @@ export function buildPlazaDecor(scene, FC) {
   // arbitrary offset can still be rejected after snapping. Solved against
   // snapped positions — this one sits 8 units off the paint.
   set('lamppost_wood', 382, -20, { flip: true, solid: [6, 5] });
+
+  area('life');
+  // ---- SIGNS OF LIFE ----------------------------------------------------
+  // A market pitch on the west approach and the domestic clutter that makes a
+  // square read as lived in rather than landscaped. These are the only props
+  // here that imply people, so they are grouped into two small scenes rather
+  // than spread evenly — a stall with its cart and barrel, and a washing line
+  // with a cat sitting near it.
+  //
+  // Every one goes through a candidate list, never a single offset: put()
+  // snaps to the 8-grid before testing clearance, so a spot that measures free
+  // can still be refused, and a lone hard-coded point then fails silently.
+  const station = (name, cands, opts = {}) => {
+    for (const [dx, dy, extra] of cands) {
+      if (set(name, dx, dy, Object.assign({}, opts, extra || {}))) return [dx, dy];
+    }
+    return null;
+  };
+
+  const stall = station('market_stall', [
+    [-196, -64], [-188, -96], [-204, -32], [-172, -120], [-212, 8],
+  ], { solid: [26, 10], shadow: 12 });
+  if (stall) {
+    // Anchored on where the stall ACTUALLY landed, not where it was asked for.
+    // Kept on the stall's open side: the first attempt put it east, where a
+    // pine draws in front of it and swallowed the cart entirely.
+    station('handcart', [
+      [stall[0] - 8, stall[1] + 52], [stall[0] + 22, stall[1] + 56],
+      [stall[0] - 34, stall[1] + 44], [stall[0] + 46, stall[1] + 60],
+    ], { solid: [20, 8], shadow: 9 });
+    station('barrel_apples', [
+      [stall[0] - 26, stall[1] + 20], [stall[0] - 32, stall[1] - 8],
+      [stall[0] - 14, stall[1] + 40], [stall[0] + 8, stall[1] + 44],
+    ], { shadow: 6 });
+  }
+
+  // Butterflies over the bloomiest ground. The six-frame flap and the wander
+  // are already built in props.js and were only ever used in the Eldertree
+  // glade; the square had none. Kept sparse on purpose -- a handful reads as
+  // a summer afternoon, a swarm reads as an infestation.
+  for (const [bx, by, col, rx, ry, sp, ph] of [
+    [-168, 74, 'blue', 24, 12, 0.90, 0.4],
+    [-138, -108, 'white', 22, 11, 0.98, 2.1],
+    [156, 92, 'violet', 23, 12, 0.86, 3.6],
+    [186, -96, 'blue', 25, 12, 0.94, 5.0],
+    [-42, 196, 'gold', 21, 11, 1.02, 1.5],
+  ]) scene.butterflies.push({ x: FC.x + bx, y: FC.y + by, col, rx, ry, speed: sp, phase: ph });
+
+  // A banner beside the north gateway, on one side only — the gateway's
+  // topiary pair is already the one mirrored thing in the square.
+  station('banner_shield', [
+    [-86, -168], [-70, -186], [-104, -150], [96, -172],
+  ], { solid: [5, 4], shadow: 5 });
+
+  // Washing strung out in the south-west, well off the carriageway.
+  // Measured, not guessed: the first spot sat inside the park's tree mass and
+  // the whole line was hidden behind canopy. This band west-southwest of the
+  // square has no large prop within 56 units, so the washing actually reads —
+  // and it puts the trade and domestic scenes on the same approach, which
+  // makes the west side of the plaza feel inhabited rather than landscaped.
+  const line = station('laundry_line', [
+    [-200, 88], [-224, 70], [-176, 104], [-248, 92], [-160, 76],
+  ], { shadow: 8 });
+  if (line) {
+    station('cat_sitting', [
+      [line[0] + 40, line[1] + 22], [line[0] + 30, line[1] + 34],
+      [line[0] - 30, line[1] + 26], [line[0] + 52, line[1] + 8],
+    ], { shadow: 4 });
+  }
+
+  area('folk');
+  // ---- TOWNSFOLK --------------------------------------------------------
+  // Nothing populated this map at all -- scene.npcs was allocated in layout.js
+  // and left empty. Figures are the fastest way to make a square read as a
+  // town rather than a diorama, and they cost one push each; town.js already
+  // depth-sorts and draws whatever is in this list.
+  //
+  // Placed where the map already gives them a REASON to stand: one by the
+  // player's arrival point south of the fountain, a trader at the stall, a
+  // scholar on a memorial bench, a hand at the farm. They are scenery until
+  // the interaction system is wired to them -- see the note in the report.
+  for (const [dx, dy, sprite, facing] of [
+    [-8, 138, 'sage', 1],         // strolling the south approach
+    [214, -108, 'sage', -1],      // scholar, up by the memorial
+    [-24, -142, 'villager', 1],   // north gateway
+  ]) {
+    scene.npcs.push({ x: FC.x + dx, y: FC.y + dy, facing, sprite });
+  }
+
+  // ---- THE TRAVELLER'S CAMP --------------------------------------------
+  // The player arrives at PZ (dx 0, dy 50) and the first thing they should
+  // meet is a person, not an empty square.
+  //
+  // Sited by measurement, three times, because two different guards disagree
+  // with "as close to the road as possible":
+  //
+  //   1. `_nearAnyRoad` does NOT count the plaza's own paving, so a first pitch
+  //      at dx -52, dy 74 reported clear of the road while sitting on the
+  //      square's stone — radius 90 against a plazaRadius of 105.
+  //   2. put() refuses anything within 40 units of a road MOUTH (radius
+  //      101-205) unless it is a topiary, lamppost or planter. That is a
+  //      deliberate guard keeping the four approaches clear, and it silently
+  //      ate the log, the pack and the bedroll sack while the fire and the
+  //      figure survived — those two bypass put() entirely.
+  //
+  // The site was then SEARCHED rather than guessed a fourth time: every
+  // 8-unit position south of the square was scored for plaza radius, road
+  // clearance across the camp's full width, and crowding, and this was the
+  // nearest one to the arrival point that satisfies all three. Radius ~119, so
+  // off the paving; 60 units clear of the carriageway, which is about as near
+  // the road as the map's own mouth guard permits.
+  //
+  // The figure alone does not say "traveller"; the camp does. A fire, a seat,
+  // a dropped pack and a supply crate tell you someone stopped here for the
+  // night, and the fire gives the arrival point a warm thing to walk toward.
+  const CAMP = [-88, 80];
+  const [kx, ky] = CAMP;
+  // brazier() is an animated flicker with its own glow, so the camp is the one
+  // moving thing at the arrival point.
+  scene.braziers.push([FC.x + kx, FC.y + ky]);
+  // holdOk on every one of these: the camp sits inside SE_HOLD (dx -46..+518,
+  // dy -7..+311), which silently swallowed all four on the first attempt while
+  // the fire and the figure survived because they bypass put() entirely. The
+  // hold is exempted by CALLER, not by prop type, and an authored camp is
+  // exactly the case it allows for.
+  const campProp = (nm, cands, opts) => station(nm, cands, Object.assign({ holdOk: true }, opts));
+  campProp('fallen_log_01', [[kx - 22, ky + 12], [kx - 30, ky + 2], [kx - 14, ky + 24]],
+           { flip: true, shadow: 8 });
+  campProp('sack_pile', [[kx - 6, ky - 18], [kx - 18, ky - 24], [kx + 6, ky - 12]], { shadow: 7 });
+  campProp('crate_01', [[kx - 30, ky - 10], [kx - 38, ky - 2]], { shadow: 6 });
+  campProp('sack_01', [[kx + 12, ky + 8], [kx + 18, ky - 2]], { flip: true, shadow: 5 });
+  // Stood on the fire's road side, turned back toward the arriving player.
+  // 'traveller' is a sheet-backed actor cut from the approved master art, so
+  // he is painted rather than assembled from rectangles like the procedural
+  // townsfolk — the first face the player meets is worth the sheet.
+  scene.npcs.push({ x: FC.x + kx + 20, y: FC.y + ky - 4, facing: 1, sprite: 'traveller' });
+
+  area('signs');
+  // ---- WAYFINDING -------------------------------------------------------
+  // Four roads leave this square and nothing told you where any of them went.
+  // A signpost at each mouth is the single strongest "this is a town, not a
+  // clearing" cue available, and it costs four props. Each sits BESIDE its
+  // carriageway, never in it, with a lamp-height post so it reads from a
+  // distance. Candidate stations again -- a sign that silently fails to place
+  // is worse than no sign, because the road then looks deliberately bare.
+  for (const [nm, cands] of [
+    ['signpost',       [[-46, -196], [-58, -172], [-34, -220], [46, -200]]],   // north road
+    ['direction_sign', [[52, 190], [38, 214], [70, 168], [-56, 196]]],          // south road
+    ['direction_sign', [[214, -46], [238, -30], [190, -62], [214, 38]]],        // east road
+    ['signpost',       [[-206, 44], [-230, 30], [-182, 60], [-206, -44]]],      // west road
+  ]) {
+    for (const [dx, dy] of cands) {
+      if (set(nm, dx, dy, { solid: [5, 4], shadow: 6 })) break;
+    }
+  }
+
+  area('memorial');
+  // ---- THE MEMORIAL GARDEN (north-east) ---------------------------------
+  // The north-east was the emptiest quadrant and had no reason to be looked
+  // at. A knight on a pedestal gives it a subject; everything else is
+  // arranged to point at him. Deliberately NOT another fountain -- the
+  // square already has the one bright thing, and a second centre would
+  // compete with it.
+  const MX = 236, MY = -156;
+  const monument = station('myst_statue_knight', [
+    [MX, MY], [MX + 22, MY - 14], [MX - 26, MY + 12], [MX + 8, MY + 30],
+  ], { solid: [9, 6], shadow: 8 });
+  if (monument) {
+    const [mx, my] = monument;
+    // A low plinth pair flanking him, then seating facing IN, then hedging
+    // behind the seating so the whole thing reads as a room.
+    station('myst_ped_sword', [[mx - 44, my + 10], [mx - 52, my - 6]], { shadow: 6 });
+    station('myst_ped_book',  [[mx + 44, my + 10], [mx + 52, my - 6]], { shadow: 6 });
+    station('bench_01', [[mx - 40, my + 54], [mx - 56, my + 44]], { flip: true, solid: [16, 6], shadow: 8 });
+    station('bench_01', [[mx + 42, my + 54], [mx + 58, my + 44]], { solid: [16, 6], shadow: 8 });
+    station('lamppost_single', [[mx - 70, my + 22], [mx - 78, my + 6]], { solid: [5, 4] });
+    station('lamppost_single', [[mx + 70, my + 22], [mx + 78, my + 6]], { flip: true, solid: [5, 4] });
+    // stepping stones approaching from the square, not a straight path
+    for (const [i, [ox, oy]] of [[0, [-14, 74]], [1, [4, 92]], [2, [-8, 110]], [3, [10, 128]]]) {
+      grow('rock_small_0' + (1 + (i % 3)), mx + ox, my + oy, { flat: true, road: 20 }, 0.45);
+    }
+    bed(31000, mx - 34, my - 26, BLUE, 6, 18);
+    bed(31100, mx + 36, my - 22, BLUEWHITE, 5, 16);
+    for (const [bx, by] of [[mx - 62, my - 18], [mx + 64, my - 14], [mx, my - 40]]) {
+      grow('bush_low', bx, by, { road: 22 }, 0.6);
+    }
+    // a few motes of life over the memorial
+    for (const [i, col] of [[0, 'white'], [1, 'blue']]) {
+      scene.butterflies.push({ x: FC.x + mx + (i ? 30 : -28), y: FC.y + my + 20 + i * 14,
+                               col, rx: 20, ry: 10, speed: 0.88 + i * 0.1, phase: i * 2.4 });
+    }
+  }
+
+  area('market');
+  // ---- THE MARKET NOOK (north-west) -------------------------------------
+  // Committing to the identity the stall already started. One compact pile of
+  // trade goods behind and beside the pitch rather than crates dotted around
+  // -- a merchant stacks stock in one place.
+  const nook = scene.decor.find((d) => d.name === 'market_stall');
+  if (nook) {
+    const nx = nook.x - FC.x, ny = nook.y - FC.y;
+    station('crate_stack', [[nx + 40, ny - 6], [nx + 48, ny + 12], [nx + 30, ny - 22]], { solid: [16, 7], shadow: 8 });
+    station('sack_pile',   [[nx - 40, ny + 14], [nx - 48, ny - 4], [nx - 28, ny + 32]], { shadow: 8 });
+    station('crate_01',    [[nx + 22, ny + 34], [nx + 36, ny + 40]], { shadow: 6 });
+    station('crate_02',    [[nx - 12, ny - 30], [nx - 26, ny - 24]], { flip: true, shadow: 6 });
+    station('wooden_sign', [[nx - 58, ny - 26], [nx - 66, ny - 8]], { solid: [5, 4], shadow: 6 });
+    station('cart',        [[nx + 66, ny + 26], [nx + 74, ny + 6]], { solid: [18, 8], shadow: 9 });
+    station('water_well',  [[nx - 78, ny + 46], [nx - 92, ny + 28]], { solid: [18, 9], shadow: 10 });
+  }
+
+  area('farmyard');
+  // ---- THE WORKING FARM (south-east) ------------------------------------
+  // The crops were two rectangles with nothing to say anybody tends them.
+  // Everything here passes holdOk so it survives SE_HOLD, which otherwise
+  // keeps this frame clear for exactly this kind of rebuild.
+  for (const [nm, cands, opts] of [
+    ['hay_bale',   [[268, 214], [286, 232], [250, 196]], { solid: [16, 7], shadow: 9 }],
+    ['hay_pile',   [[314, 232], [330, 250], [296, 214]], { shadow: 10 }],
+    ['hay_bale',   [[292, 196], [308, 180]], { flip: true, solid: [16, 7], shadow: 9 }],
+    ['wheelbarrow',[[228, 246], [244, 262], [212, 230]], { shadow: 8 }],
+    ['sack_pile',  [[210, 200], [196, 216]], { shadow: 8 }],
+    ['crate_stack',[[344, 200], [358, 216]], { solid: [16, 7], shadow: 8 }],
+    ['water_bucket',[[236, 224], [252, 238]], { shadow: 5 }],
+    ['barrel_01',  [[356, 244], [370, 228]], { shadow: 6 }],
+    ['direction_sign', [[188, 268], [204, 284]], { solid: [5, 4], shadow: 6 }],
+  ]) {
+    for (const [dx, dy] of cands) {
+      if (set(nm, dx, dy, Object.assign({ holdOk: true }, opts))) break;
+    }
+  }
 
   // The farm's eastern boundary: a stone wall rather than more rail, so the
   // holding reads as closed on the side away from town. `_ns` is the
@@ -718,6 +958,69 @@ export function buildPlazaDecor(scene, FC) {
     bed(14200, 380, -252, YELLOW, 5, 18);
     bed(14300, -368, 262, WHITEBLUE, 6, 20);
     bed(14400, 300, 236, MARKET, 6, 20);
+
+    // ---- THE FOREST EDGE -----------------------------------------------
+    // The belt was five masses of bare trunks standing on mown grass, and the
+    // mid pass above only dresses the trunks themselves (r 14-34). Nothing
+    // bridged the outside of a mass to open ground, which is what made the
+    // boundary read as a wall rather than a wood.
+    //
+    // This lays a graduated skirt outward from each mass so the ground reads
+    //     canopy -> undergrowth -> rough meadow -> lawn
+    // instead of switching in a single step. Three bands, each a different
+    // species pool, a looser spacing and a lower count than the last.
+    //
+    // Everything is hash-jittered on an ellipse with y compressed to 0.62 --
+    // the same foreshortening the rest of the map uses -- so no band ever
+    // reads as a ring. grow() refuses roads, lawns and buildings, so the
+    // skirt cannot creep onto a carriageway; the grass band is allowed
+    // nearer the kerb than the shrubs, which softens the road edge as well.
+    const SKIRT = [
+      // cx, cy, reach, density, face. `face` biases the skirt toward the
+      // square: that is the side a player ever sees, and a mass dressed
+      // evenly all round spends half its props where nobody looks.
+      [-248, -216, 1.00, 1.00, 0.7],
+      [-408, 46, 0.86, 0.78, 1.0],
+      [-336, 236, 1.00, 0.95, 0.7],
+      [336, -228, 1.00, 1.00, -0.7],
+      [412, 128, 0.86, 0.80, -1.0],
+    ];
+    const BANDS = [
+      { r: [84, 124], slack: 0.80, n: 9, road: 30,
+        pool: ['bush_big', 'bush_01', 'bush_02', 'bush_03', 'fernbank_01', 'fernbank_02', 'tree_sapling'] },
+      { r: [116, 158], slack: 0.66, n: 8, road: 26,
+        pool: ['bush_low', 'bush_04', 'fern_clump', 'fernbank_03', 'leafplant_01', 'leafplant_02'] },
+      { r: [148, 202], slack: 0.54, n: 11, road: 24, flat: true,
+        pool: ['grass_lg_01', 'grass_lg_02', 'grass_lg_03', 'grass_tuft_01',
+               'grass_tuft_02', 'grass_tuft_03', 'weeds_01', 'weeds_02'] },
+    ];
+    SKIRT.forEach(([cx, cy, reach, dens, face], mi) => {
+      BANDS.forEach((band, bi) => {
+        const n = Math.round(band.n * dens);
+        for (let k = 0; k < n; k++) {
+          const seed = 21000 + mi * 400 + bi * 90 + k * 7;
+          const h1 = hash(seed), h2 = hash(seed + 1), h3 = hash(seed + 2);
+          const a = h1 * Math.PI * 2;
+          // thin the far side rather than cutting it dead, so the mass still
+          // has a back but spends most of its cover where it is seen
+          if (Math.cos(a) * face < -0.25 && h3 < 0.70) continue;
+          const rr = (band.r[0] + h2 * (band.r[1] - band.r[0])) * reach;
+          grow(pick(band.pool, h3), cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.62,
+               { flip: h2 > 0.5, road: band.road, flat: !!band.flat }, band.slack);
+        }
+      });
+    });
+
+    // Shade things sit in the crook of a mass, never out in the meadow.
+    for (const [dx, dy, nm] of [
+      [-286, -186, 'mushrooms_mixed'], [-372, 96, 'mushrooms_red'],
+      [-300, 208, 'mushrooms_01'], [366, -196, 'mushrooms_04'],
+      [396, 158, 'mushrooms_02'], [-232, -238, 'leaf_pile'],
+      [352, -244, 'leaf_pile'], [-350, 268, 'mushrooms_03'],
+    ]) {
+      const h = hash(22000 + dx + dy);
+      grow(nm, dx, dy, { flip: h > 0.5, road: 24 }, 0.5);
+    }
   }
 
   if (MICRO) {

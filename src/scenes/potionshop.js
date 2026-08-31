@@ -6,7 +6,7 @@
 // (reusing the existing PotionShop overlay); walking off the bottom leaves
 // back to town.
 
-import { Input } from '../core/input.js';
+import { Input, FACE_DEADZONE } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { panel, UI, Toasts } from '../gfx/ui.js';
@@ -43,7 +43,7 @@ export class PotionShopScene {
     // walkable area: the lower (floor) part of the backdrop plus the added
     // floor strip beneath it
     this.room = { x: 40, y: IMG_Y + IMG_H - 70, w: this.W - 80, h: 90 };
-    this.px = this.W / 2; this.py = this.room.y + this.room.h - 16; this.facing = 1;
+    this.px = this.W / 2; this.py = this.room.y + this.room.h - 16; this.facing = 1; this.dir = 'side';
     this.moving = false; this.walkT = 0;
 
     this.spots = [
@@ -77,7 +77,13 @@ export class PotionShopScene {
     if (this.moving) {
       this._tryMove(ax.x * 78 * dt, 0);
       this._tryMove(0, ax.y * 78 * dt);
-      if (ax.x !== 0) this.facing = ax.x > 0 ? 1 : -1;
+      if (Math.abs(ax.x) > FACE_DEADZONE) this.facing = ax.x > 0 ? 1 : -1;
+      // Which way he is turned relative to the camera. Vertical intent wins over
+      // horizontal so a mostly-up diagonal shows his back rather than his side;
+      // `facing` still carries left/right for the side view. This persists when
+      // he stops, so he keeps facing the way he was walking.
+      this.dir = Math.abs(ax.y) > Math.abs(ax.x)
+        ? (ax.y < 0 ? 'up' : 'down') : 'side';
       this.walkT += dt;
     }
 
@@ -115,7 +121,7 @@ export class PotionShopScene {
     }
     // area below the art stays part of the dark surround (no floor strip)
 
-    drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
+    drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, dir: this.dir, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
 
     this.particles.draw(g);
     this.toasts.draw(g);

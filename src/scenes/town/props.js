@@ -194,6 +194,145 @@ const DECOR_SIZE = {
   myst_tree_round: [49, 56], myst_tree_roots: [49, 62],
   myst_rubble_a: [38, 12], myst_rubble_b: [12, 11], myst_rubble_c: [13, 12],
   myst_crystal_spike: [13, 14],
+
+  // ---- Ancient City set (generated; see tools/gen_city_sheet.py + citycut.py) --
+  // Sizes come from a design HEIGHT per prop, with width following the cut's
+  // own aspect so nothing is squashed. Heights are read off the scale table in
+  // docs/ART_RULES.md: player ~24, canopy tree ~2.5x that, building ~3.5x.
+  // These are the pieces the Mystical Tree sheet never had — things with
+  // storeys and roofs — so the quarter can read as a city rather than a walled
+  // garden. The watchtower is the tallest thing in the world after the
+  // Eldertree, on purpose: it is what you see over the wall on approach.
+  city_watchtower: [61, 118], city_temple: [117, 92], city_townhouse: [82, 94],
+  city_rotunda: [85, 96], city_gatehouse: [111, 96], city_hall_colonnade: [128, 80],
+  city_granary: [73, 88], city_shrine: [84, 80], city_merchant_house: [78, 86],
+  city_chapel: [73, 96], city_greathall: [115, 88], city_archive: [112, 84],
+  // civic sculpture — ~1.5 player heights, except the colossal king and the arch
+  city_statue_king: [36, 58], city_statue_rider: [46, 54], city_arch_triumph: [94, 66],
+  city_statue_winged: [30, 40], city_statue_scholar: [16, 38],
+  city_statue_warrior: [19, 38], city_statue_headless: [25, 34], city_obelisk: [15, 46],
+  city_stele: [22, 34], city_statue_toppled: [43, 22], city_lion_l: [15, 32],
+  city_lion_r: [15, 32], city_votive_column: [12, 44], city_standing_stones: [51, 34],
+  city_stardial: [26, 38],
+  // walls, streets and rubble — the connective stone. The _ns piece is drawn
+  // north-south on the sheet itself, so unlike the myst_ set nothing here
+  // needs a pre-rotated twin.
+  city_wall: [54, 32], city_wall_broken: [52, 34], city_wall_ivy: [54, 30],
+  city_wall_steps: [54, 32], city_wall_door: [55, 30], city_wall_gap: [56, 32],
+  city_wall_low: [51, 22], city_wall_ns: [42, 40], city_wall_corner: [55, 42],
+  city_steps: [46, 28], city_ramp: [37, 24], city_rubble_heap: [34, 22],
+  city_rubble_a: [18, 11], city_rubble_b: [13, 10], city_rubble_c: [13, 10],
+  // laid FLAT (groundDecor) — these are seen looking straight down
+  city_paving: [54, 20], city_paving_ns: [41, 40], city_paving_cross: [40, 38],
+  // waterworks — the city's water still running. The pool, the canals and the
+  // dry basin are laid FLAT; the fountain, aqueducts, wall fountain and well
+  // stand up and show their face.
+  // The canal is drawn deliberately larger than its "correct" scale. At the
+  // size the rest of the set implies, its stone kerbs came out ~3px and the
+  // whole watercourse read as a flat blue ribbon painted on the grass; at this
+  // size the kerbs are ~8px and it reads as masonry with water in it. The
+  // canal, cross, bridge and cascade come from the second (corrective) water
+  // sheet — see the water2 block in tools/citycut.py.
+  city_fountain: [63, 70], city_pool: [69, 40], city_canal: [62, 34],
+  city_canal_ns: [53, 82], city_canal_cross: [60, 60],
+  // The aqueducts come from their own sheet (see the aqueduct block in
+  // tools/citycut.py) — the water sheet's versions were drawn at an angle and
+  // read as blue slides. These are three-arch spans, wide enough to march
+  // along the east wall and still be read as a single structure.
+  city_aqueduct: [94, 58], city_aqueduct_broken: [87, 62],
+  city_aqueduct_pier: [29, 52], city_aqueduct_end: [96, 48],
+  city_wallfountain: [26, 40], city_well: [23, 34], city_cascade: [50, 44],
+  city_bath: [47, 30], city_waterbridge: [47, 34], city_basin_dry: [37, 26],
+  // the green half of the ruin — every piece tied to the stone it grew on, so
+  // the vegetation reads as reclamation rather than as landscaping
+  city_tree_wall: [80, 66], city_tree_door: [45, 60], city_sapling: [18, 40],
+  city_ivy_curtain: [46, 36], city_ivy_mound: [51, 40], city_shrub_white: [32, 22],
+  city_shrub_blue: [31, 22], city_stump_shoots: [21, 18], city_ferns: [45, 24],
+  city_wildflowers: [25, 20], city_grass_clump: [25, 24], city_stump_small: [19, 18],
+  city_vine_trellis: [39, 34], city_moss_patch: [44, 22],
+
+  // ---- Moonbell + maintenance kit (generated) -----------------------------
+  // The Moonbell is the garden's one rare plant. The cool tint lives only in
+  // the bell mouths and there is no glow, no aura and no light — it reads as a
+  // rare species, not a magic item, which is what keeps the ruin subtle.
+  // Used TWICE in the whole garden and nowhere else.
+  gk_moonbell: [9, 14], gk_moonbell_clump: [11, 15],
+  // A trellis that is already grown into, rather than a bare frame with plants
+  // parked next to it. Replaces gk_trellis wherever the frame should look
+  // established.
+  gk_trellis_vine: [33, 44],
+  gk_basket: [18, 12],
+
+  // ---- Garden hero + ruin kit (generated) ---------------------------------
+  // The hero tree is the garden's SECONDARY landmark, after the pond. At 96x88
+  // it is meaningfully larger than tree_oak_broad (75x60), the biggest tree the
+  // game had, but nowhere near mystic_tree_grand (176x200) — a fine garden
+  // tree, not a world tree.
+  gk_herotree: [96, 88],
+  // the northern nook's overgrown ruin garden
+  gk_ruin_foundation: [44, 20], gk_ruin_stub: [30, 26], gk_ruin_fragments: [26, 16],
+  // the only signs anyone tends the place
+  gk_tools: [18, 26], gk_wateringcan: [19, 14],
+
+  // ---- Garden redesign kit (generated) ------------------------------------
+  // The pond is the garden's focal point at the approved ~72x46 — smaller than
+  // the town fountain's stone apron and carrying no crystal, jet or glow, so it
+  // reads as quiet rather than as a second landmark.
+  //
+  // The three beds exist to kill the rectangles. gk_bed_blue/gk_bed_white are
+  // straight stone-kerbed boxes, and four of them inside a rectangular hedge is
+  // what made the garden read as a grid. These are a crescent, an elongated
+  // ribbon and a broad lobed mass — their SILHOUETTES are the point, not their
+  // contents.
+  gk_pond: [72, 46],
+  gk_bed_crescent: [47, 22], gk_bed_ribbon: [33, 20], gk_bed_broad: [37, 26],
+  gk_pedestal: [16, 20],
+
+  // ---- Farm kit (generated) -----------------------------------------------
+  // The scarecrow reads at ~1.5 player heights, the same rule the statues use.
+  // The crows share a body size and differ only in wingspan, so the beat does
+  // not jitter as the frame changes: up 14 wide, half 13, down 18, glide 23.
+  scarecrow: [33, 36],
+  crow_up: [11, 11], crow_half: [10, 9], crow_down: [14, 8],
+  crow_glide: [18, 6], crow_perch: [10, 8],
+
+  // ---- Garden kit (generated) ---------------------------------------------
+  // Made against a reference sheet of the game's OWN props (bench, stalls,
+  // fences, trees) rather than a generic pixel-art brief, so it matches the
+  // town's muted palette and soft shading instead of the sandstone city set.
+  // The three hedge pieces are what finally give the garden a boundary that
+  // is not a row of identical potted topiary.
+  // 24 not 18: at 18 the hedge is a dark stripe against grass at gameplay
+  // zoom and stops reading as a boundary. Measured in-frame, not in preview.
+  gk_hedge: [56, 24], gk_hedge_ns: [24, 56], gk_hedge_corner: [26, 30],
+  gk_hedge_end: [27, 24],
+  gk_arch: [51, 54], gk_trellis: [51, 40], gk_birdbath: [18, 26],
+  gk_sundial: [13, 22], gk_bed_blue: [38, 20], gk_bed_white: [39, 20],
+  gk_urn: [22, 28],
+  // laid FLAT — the garden's own path materials, which is what the district
+  // was missing: garden_patch is a VEGETABLE BED, not paving.
+  gk_gravel: [38, 22], gk_stepstones: [35, 26],
+
+  // ---- Plaza district set -------------------------------------------------
+  // Nothing here is new art. The five market stalls and the cottage were
+  // already authored for the far-south Market and for Wayfarer's Watch, but
+  // were reachable only from inside drawMarket()/the Watch compound, so the
+  // plaza could never use them. Copied into the prop pipeline at their native
+  // size — which IS their draw size — they now Y-sort, cull and take contact
+  // shadows like every other prop, with no new rendering path.
+  stall_produce: [50, 33], stall_bakery: [42, 36], stall_cloth: [42, 37],
+  stall_goods: [52, 32], stall_merchant: [50, 33], cottage_small: [140, 88],
+  // Cut or baked long ago and then never given a DECOR_SIZE entry, so they
+  // have been sitting unused on disk: a second bench, an outdoor table, and
+  // two lamps. Sized to match bench_01 (32x20) and lamppost_twin (26x38).
+  bench_02: [32, 20], table_outdoor: [32, 20],
+  lamp_04: [29, 38], lamp_crystal: [29, 40],
+
+  // Plaza life — a market pitch, a hung banner, and the small signs of people
+  // living here. Generated as one sheet and cut to these exact sizes by
+  // tools/cut_prop_sheet.py, so the art is already at draw size.
+  market_stall: [34, 44], banner_shield: [18, 38], handcart: [28, 22],
+  laundry_line: [38, 24], cat_sitting: [9, 11], barrel_apples: [14, 18],
 };
 const DECOR_ART = {};
 for (const n of Object.keys(DECOR_SIZE)) DECOR_ART[n] = loadBuildingArt(`assets/props/${n}.png`);

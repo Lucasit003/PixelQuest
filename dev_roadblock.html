@@ -1,0 +1,57 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>road blockers</title>
+<style>body{background:#14100f;color:#ddd;font:10px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { TownScene }=await import('./src/scenes/town.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const sc=new TownScene(Hero.create('warrior'),{});
+sc.enter({width:480,height:270});
+await new Promise(r=>setTimeout(r,1800));
+const FC=sc.plazaFocus, C=4, cov=sc.roadCov;
+const onRoad=(x,y)=>!!cov.get(Math.floor(x/C)+','+Math.floor(y/C));
+// Any solid whose box overlaps road paint is something the player will walk
+// into while following the road — an invisible barrier across a carriageway.
+const bad=[];
+for(const s of sc.solids){
+  if(!Number.isFinite(s.x)) continue;
+  let hits=0, tot=0;
+  for(let yy=s.y; yy<s.y+s.h; yy+=C) for(let xx=s.x; xx<s.x+s.w; xx+=C){ tot++; if(onRoad(xx,yy)) hits++; }
+  if(tot && hits/tot > 0.5) bad.push({s, frac:hits/tot});
+}
+const out=['solids on the map: '+sc.solids.length];
+out.push('solids sitting >50% ON road paint: '+bad.length);
+out.push('');
+bad.sort((a,b)=>b.s.w*b.s.h - a.s.w*a.s.h);
+for(const {s,frac} of bad.slice(0,20)){
+  out.push('   dx '+String(Math.round(s.x+s.w/2-FC.x)).padStart(6)+'  dy '+String(Math.round(s.y+s.h-FC.y)).padStart(6)
+          +'   '+String(s.w).padStart(4)+'x'+String(s.h).padStart(3)+'   '+Math.round(frac*100)+'% on road');
+}
+out.push('');
+// what IS each blocker? name the nearest decor prop to its centre
+out.push('nearest prop to each blocker:');
+for(const {s:sol} of bad){
+  const cx=sol.x+sol.w/2, cy=sol.y+sol.h;
+  let best=null,bd=1e9;
+  for(const d of sc.decor){ const dd=(d.x-cx)**2+(d.y-cy)**2; if(dd<bd){bd=dd;best=d;} }
+  out.push('   dx '+String(Math.round(cx-FC.x)).padStart(6)+' dy '+String(Math.round(cy-FC.y)).padStart(6)
+           +'  -> '+(best?best.name:'?')+'  at '+Math.round(Math.sqrt(bd))+' units');
+}
+out.push('');
+// also: is any road cell fully enclosed by solids (a genuine wall across it)?
+out.push('locations (buildings) whose solid overlaps road paint:');
+let n=0;
+for(const l of sc.locations){
+  if(!l.solid) continue; const s=l.solid;
+  let hits=0,tot=0;
+  for(let yy=s.y; yy<s.y+s.h; yy+=C) for(let xx=s.x; xx<s.x+s.w; xx+=C){ tot++; if(onRoad(xx,yy)) hits++; }
+  if(tot && hits/tot>0.25){ out.push('   '+l.id+'  '+Math.round(hits/tot*100)+'% on road'); n++; }
+}
+if(!n) out.push('   none');
+document.getElementById('out').textContent=out.join('\n');
+</script></body></html>

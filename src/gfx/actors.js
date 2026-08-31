@@ -5,8 +5,19 @@
 //
 // Weapons are authored in three fixed orientations instead of being rotated,
 // because rotating pixel art through canvas transforms destroys the grid.
+//
+// This is the DEFAULT path and stays the default. gfx/sprites.js adds an opt-in
+// sheet-backed path for actors that register one; drawCharacter picks between
+// them. Nothing here changed to make that work.
 
 import { drawGrid, shadow, disc, rect } from './pixel.js';
+import { spriteConfigFor, drawSpriteActor, ACTOR_SPRITES } from './sprites.js';
+// Populates ACTOR_SPRITES as a side effect. Imported HERE rather than from
+// main.js so the registry is filled for every entry point that draws an actor.
+// The dev harnesses import a scene directly and never touch main.js, which left
+// them rendering registered actors as procedural fallbacks — the sheet loaded
+// fine, but nothing had told the registry it existed.
+import './spriteCatalog.js';
 
 // ---------------------------------------------------------------- palettes
 
@@ -88,6 +99,51 @@ export const PALETTES = {
 // ------------------------------------------------------------------- heads
 
 const HEADS = {
+  paladinHelm: [
+    '..tttt..',
+    '.kmmmmk.',
+    'kmllllmk',
+    'kmkkkkmk',
+    'kmllllmk',
+    '.kmmmmk.',
+    '..kkkk..',
+  ],
+  berserkerHair: [
+    '.hh..hh.',
+    'hhhhhhhh',
+    'khhhhhhk',
+    'ksessesk',
+    '.kssssk.',
+    '.khhhhk.',
+    '..kkkk..',
+  ],
+  rogueCowl: [
+    '..kkkk..',
+    '.kmmmmk.',
+    'kmmmmmmk',
+    'kmeeeemk',
+    'kmmmmmmk',
+    '.kmmmmk.',
+    '..kkkk..',
+  ],
+  rangerHead: [
+    '..hhhh..',
+    '.hhhhhh.',
+    'khhhhhhk',
+    'kaaaaaak',
+    'ksessesk',
+    '.kssssk.',
+    '..kkkk..',
+  ],
+  summonerMask: [
+    '..hhhh..',
+    '.hhhhhh.',
+    'khhhhhhk',
+    'kwwwwwwk',
+    'kweeeewk',
+    '.kssssk.',
+    '..kkkk..',
+  ],
   warriorHelm: [
     '..kkkk..',
     '.kmmmmk.',
@@ -156,6 +212,59 @@ const HEADS = {
 // ------------------------------------------------------------------ torsos
 
 const TORSOS = {
+  paladin: [
+    'kkkkkkkkkk',
+    'kmmmmmmmmk',
+    'kmlttttlmk',
+    'kmltaatlmk',
+    'kmlttttlmk',
+    'kmmllllmmk',
+    'kmmmmmmmmk',
+    '.kttttttk.',
+    '..kkkkkk..',
+  ],
+  berserker: [
+    'kkkkkkkkkk',
+    'khhmmmmhhk',
+    'ksmllllmsk',
+    'ksmlaalmsk',
+    'ksmllllmsk',
+    '.kmmmmmmk.',
+    '.kbbbbbbk.',
+    '..kkkkkk..',
+  ],
+  rogue: [
+    '..kkkkkk..',
+    '.kmmmmmk..',
+    'kmmllllmk.',
+    'kmlaaalmk.',
+    'kmllllmk..',
+    '.kmmmmmk..',
+    '.kbbbbbk..',
+    '..kkkkk...',
+  ],
+  ranger: [
+    '..kkkkkk..',
+    '.kmmmmmmk.',
+    'kmmllllmmk',
+    'kmlaaaalmk',
+    'kmllttllmk',
+    'kmmllllmmk',
+    'kmmmmmmmmk',
+    '.kbbbbbbk.',
+    '..kkkkkk..',
+  ],
+  summoner: [
+    '...kkkk...',
+    '..kmmmmk..',
+    '.kmllllmk.',
+    'kmlaaaalmk',
+    'kmllttllmk',
+    'kmllllllmk',
+    'kmlt..tlmk',
+    '.k.mmmm.k.',
+    '..k.kk.k..',
+  ],
   warrior: [
     '..kkkkkk..',
     '.kmmmmmmk.',
@@ -285,11 +394,11 @@ const WEAPONS = {
 export const SPECS = {
   warrior:  { pal: 'warrior',  head: 'warriorHelm', torso: 'warrior',  weapon: 'sword',  h: 26 },
   mage:     { pal: 'mage',     head: 'mageHood',    torso: 'mage',     weapon: 'staff',  h: 26 },
-  rogue:    { pal: 'rogue',    head: 'mageHood',    torso: 'warrior',  weapon: 'dagger', h: 25 },
-  ranger:   { pal: 'ranger',   head: 'mageHood',    torso: 'villager', weapon: 'bow',    h: 25 },
-  paladin:  { pal: 'paladin',  head: 'warriorHelm', torso: 'warrior',  weapon: 'sword',  h: 26 },
-  berserker:{ pal: 'berserker',head: 'warriorHelm', torso: 'warrior',  weapon: 'axe',    h: 26 },
-  summoner: { pal: 'summoner', head: 'mageHood',    torso: 'mage',     weapon: 'staff',  h: 26 },
+  rogue:    { pal: 'rogue',    head: 'rogueCowl',    torso: 'rogue',      weapon: 'dagger', h: 25 },
+  ranger:   { pal: 'ranger',   head: 'rangerHead',   torso: 'ranger',    weapon: 'bow',    h: 25 },
+  paladin:  { pal: 'paladin',  head: 'paladinHelm',  torso: 'paladin',    weapon: 'sword',  h: 26 },
+  berserker:{ pal: 'berserker',head: 'berserkerHair',torso: 'berserker',  weapon: 'axe',    h: 26 },
+  summoner: { pal: 'summoner', head: 'summonerMask', torso: 'summoner',      weapon: 'staff',  h: 26 },
   goblin:   { pal: 'goblin',   head: 'goblin',      torso: 'goblin',   weapon: 'dagger', h: 22 },
   skeleton: { pal: 'skeleton', head: 'skull',       torso: 'skeleton', weapon: 'bone',   h: 24 },
   king:     { pal: 'king',     head: 'kingHelm',    torso: 'king',     weapon: 'club',   h: 34, scale: 1.6 },
@@ -297,7 +406,14 @@ export const SPECS = {
   sage:     { pal: 'sage',     head: 'sageHood',    torso: 'sage',     weapon: 'none',   h: 25 },
 };
 
+/**
+ * Logical height for nameplates and UI. For sheet-backed actors this is the
+ * AUTHORED `logicalHeight`, never the frame height — art that overhangs its
+ * frame (a raised axe, a plume) must not move the health bar or anything else.
+ */
 export function actorHeight(sprite) {
+  const cfg = ACTOR_SPRITES[sprite];
+  if (cfg && cfg.logicalHeight !== undefined) return cfg.logicalHeight;
   const s = SPECS[sprite];
   return s ? s.h * (s.scale || 1) : 24;
 }
@@ -572,8 +688,15 @@ export function drawSlime(g, a) {
   }
 }
 
-/** Dispatch: slimes use the blob renderer, everything else the humanoid one. */
+/**
+ * Dispatch. An actor with a registered sprite sheet draws from it; everything
+ * else takes the procedural path exactly as before. A sheet that has not
+ * finished decoding reports false, so the actor keeps rendering procedurally
+ * instead of blinking out while the image loads.
+ */
 export function drawCharacter(g, a) {
+  const cfg = spriteConfigFor(a);
+  if (cfg && drawSpriteActor(g, a, cfg)) return;
   if (a.sprite === 'slime') drawSlime(g, a);
   else drawActor(g, a);
 }

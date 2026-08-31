@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PixelQuest — dual-wield anchor test</title>
+<style>
+  body { background:#16141c; color:#e8e4dc; font:13px/1.55 ui-monospace,Menlo,monospace; margin:0; padding:20px 24px 60px; }
+  h1 { font-size:16px; color:#ffd678; margin:0 0 6px; }
+  h2 { font-size:13px; color:#ffd678; margin:24px 0 6px; border-top:1px solid #3a3644; padding-top:10px; }
+  p  { margin:0 0 12px; color:#a8a4b0; max-width:1040px; }
+  .cap { color:#8c8898; margin:2px 0 8px; max-width:1040px; }
+  .ok { color:#7ad17a; } .warn { color:#e8a04a; }
+  canvas { image-rendering: pixelated; display:block; }
+  .strip { background:#3a3e4a; border:1px solid #4a4653; margin-bottom:6px; }
+  .row { display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<h1>Dual-wield anchor test</h1>
+<p>
+  The SAME four body pixels in every cell — this sheet is one standing Rogue
+  repeated, deliberately. Everything that moves below is anchor data, which is
+  the point: it isolates <code>mainHand</code> and <code>offHand</code> from the
+  art and proves the two slots are genuinely independent.
+  The two test weapons are deliberately different sizes and colours so you can
+  see at a glance which slot is which — <span style="color:#8ac">long blue =
+  mainHand</span>, <span style="color:#d77">short red = offHand</span>.
+  Neither is game art.
+</p>
+<div id="out"></div>
+
+<script type="module">
+// Dev harnesses load their modules CACHE-BUSTED on purpose. A dev-server with
+// no cache headers lets the browser hold an old copy of a module it has already
+// seen, and the symptom is silent: the page renders, nothing errors, and the
+// feature you just wrote simply does nothing. That cost a long debugging
+// session here -- the page was running a drawActorEquipment that predated
+// mainHand/offHand, so both slots fell through and drew nothing.
+const V = '?v=' + Date.now();
+const { registerActorSprite, ACTOR_SPRITES, getSheet } = await import('./src/gfx/sprites.js' + V);
+const { registerEquipment, drawActorEquipment, getItemImage, equipmentConfig } =
+  await import('./src/gfx/equipment.js' + V);
+
+const SRC = 'assets/actors/_src/rogue_gemini/';
+const CW = 200, CH = 219;
+
+registerEquipment('test_long_blue',  { sprite: SRC + 'harness/items/test_long_blue.png',  grip: [13, 108], tip: [13, 6] });
+registerEquipment('test_short_red',  { sprite: SRC + 'harness/items/test_short_red.png',  grip: [20, 54],  tip: [20, 6] });
+
+// Four cells of the SAME standing body. Only the anchor data differs, so any
+// motion you see below is the anchor system and nothing else.
+registerActorSprite('rogue_rig', {
+  sheet: SRC + 'rogue_rig4.png',
+  frameWidth: CW, frameHeight: CH, columns: 4,
+  anchorX: CW / 2, anchorY: CH, logicalHeight: 56,
+  slots: ['offHand', 'mainHand'],
+  animations: {
+    idle: { frames: [0], fps: 1,
+      mainHand: [[152, 148]], mainHandAngle: [-10],
+      offHand:  [[48, 150]],  offHandAngle:  [10] },
+
+    // INDEPENDENT POSITION: main hand sweeps high and forward while the off
+    // hand stays low and back. If the two slots shared anything, they could not
+    // diverge like this.
+    split: {
+      frames: [0, 1, 2, 3], fps: 8, loop: false,
+      mainHand:      [[152, 148], [172, 112], [188, 78], [180, 58]],
+      mainHandAngle: [-10,        40,         85,        115],
+      offHand:       [[48, 150], [38, 160], [28, 170], [22, 178]],
+      offHandAngle:  [10,        -10,       -30,       -50],
+    },
+
+    // INDEPENDENT ROTATION: identical anchor points for both hands, opposite
+    // spin. Same place, opposite angle — rotation is per slot.
+    counter: {
+      frames: [0, 1, 2, 3], fps: 8, loop: false,
+      mainHand:      [[164, 118], [164, 118], [164, 118], [164, 118]],
+      mainHandAngle: [0,           90,          180,         270],
+      offHand:       [[40, 118], [40, 118], [40, 118], [40, 118]],
+      offHandAngle:  [0,         -90,       -180,      -270],
+    },
+
+    // INDEPENDENT MIRRORING: off hand flips on the middle two frames only.
+    flip: {
+      frames: [0, 1, 2, 3], fps: 8, loop: false,
+      mainHand:      [[166, 126], [166, 126], [166, 126], [166, 126]],
+      mainHandAngle: [45,          45,          45,          45],
+      offHand:       [[42, 126], [42, 126], [42, 126], [42, 126]],
+      offHandAngle:  [45,        45,        45,        45],
+      offHandFlip:   [false,     true,      true,      false],
+    },
+
+    // INDEPENDENT DRAW ORDER: the blades cross. Frames 2 and 3 put the off-hand
+    // ON TOP, the outer frames put the main hand on top. Both are in front of
+    // the body throughout, so `behind` alone could never express this.
+    cross: {
+      frames: [0, 1, 2, 3], fps: 8, loop: false,
+      mainHand:      [[176, 112], [136, 112], [86, 112], [40, 112]],
+      mainHandAngle: [80,          80,          80,        80],
+      offHand:       [[40, 128], [86, 128], [136, 128], [176, 128]],
+      offHandAngle:  [-80,       -80,       -80,        -80],
+      slotOrder: [['offHand','mainHand'],
+                  ['offHand','mainHand'],
+                  ['mainHand','offHand'],
+                  ['mainHand','offHand']],
+    },
+
+    // INDEPENDENT BODY LAYERING: off hand passes behind the body while the main
+    // hand stays in front.
+    depth: {
+      frames: [0, 1, 2, 3], fps: 8, loop: false,
+      mainHand:       [[170, 124], [170, 124], [170, 124], [170, 124]],
+      mainHandAngle:  [55,          55,          55,          55],
+      offHand:        [[52, 126], [74, 126], [96, 126], [118, 126]],
+      offHandAngle:   [-45,       -45,       -45,       -45],
+      offHandBehind:  [true,      true,      false,      false],
+    },
+  },
+});
+
+const CFG = ACTOR_SPRITES.rogue_rig;
+const EQ = { mainHand: 'test_long_blue', offHand: 'test_short_red' };
+
+function drawFrame(g, state, step, x, y, scale, equipped, facing) {
+  const anim = CFG.animations[state];
+  const actor = { x, y, z: 0, facing, scale, state,
+                  animTime: step / anim.fps, equipped };
+  const sheet = getSheet(CFG.sheet);
+  drawActorEquipment(g, actor, CFG, 'behind');
+  if (sheet.ready) {
+    const f = anim.frames[step];
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(Math.round(x), Math.round(y));
+    if (scale !== 1) g.scale(scale, scale);
+    if (facing < 0) g.scale(-1, 1);
+    g.drawImage(sheet.img, (f % 4) * CW, 0, CW, CH, -CW / 2, -CH, CW, CH);
+    g.restore();
+  }
+  drawActorEquipment(g, actor, CFG, 'front');
+}
+
+function strip(state, { scale = 1, equipped = EQ, facing = 1, pad = 8, bg = null }) {
+  const n = CFG.animations[state].frames.length;
+  const cw = Math.round((CW * scale + pad) * n);
+  const ch = Math.round(CH * scale + pad * 2);
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch; c.className = 'strip';
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, cw, ch); }
+  for (let i = 0; i < n; i++) {
+    const x = (CW * scale + pad) * i + (CW * scale) / 2 + pad / 2;
+    g.save(); g.beginPath();
+    g.rect((CW * scale + pad) * i, 0, CW * scale + pad, ch); g.clip();
+    drawFrame(g, state, i, x, ch - pad, scale, equipped, facing);
+    g.restore();
+  }
+  return c;
+}
+
+const out = document.getElementById('out');
+function section(t, cap, nodes) {
+  const h = document.createElement('h2'); h.innerHTML = t;
+  const p = document.createElement('div'); p.className = 'cap'; p.innerHTML = cap;
+  const r = document.createElement('div'); r.className = 'row';
+  nodes.forEach(n => r.appendChild(n));
+  out.append(h, p, r);
+}
+
+function build() {
+  out.innerHTML = '';
+  section('1 — INDEPENDENT POSITION',
+    'Main hand sweeps up and forward; off hand drifts down and back. Same frame, opposite travel.',
+    [strip('split', { scale: 2 })]);
+  section('2 — INDEPENDENT ROTATION',
+    'Both hands pinned to fixed points. Main spins +90&deg; per frame, off spins &minus;90&deg;. Same place, opposite spin.',
+    [strip('counter', { scale: 2 })]);
+  section('3 — INDEPENDENT MIRRORING',
+    'Identical angle on both. <code>offHandFlip</code> mirrors the RED blade on the middle two frames only — the blue one never changes.',
+    [strip('flip', { scale: 2 })]);
+  section('4 — INDEPENDENT DRAW ORDER  <span class="ok">(the one <code>behind</code> could not do)</span>',
+    'The blades cross. Frames 1&ndash;2 draw red under blue; frames 3&ndash;4 flip it via <code>slotOrder</code>. Both are in front of the body throughout.',
+    [strip('cross', { scale: 2 })]);
+  section('5 — INDEPENDENT BODY LAYERING',
+    'Red passes BEHIND the body on frames 1&ndash;2 and returns in front on 3&ndash;4, while blue stays in front the whole time.',
+    [strip('depth', { scale: 2 })]);
+  section('6 — MIRRORED FACING, at true 1x',
+    'Every anchor, angle and draw order mirrors automatically. Nothing is authored twice.',
+    [strip('split', { scale: 1, bg: '#575b68' }),
+     strip('split', { scale: 1, facing: -1, bg: '#3d5232' }),
+     strip('cross', { scale: 1, facing: -1, bg: '#3d5232' })]);
+  section('7 — SLOTS ARE OPTIONAL',
+    'Same rig, main hand only, then off hand only. A missing slot costs nothing and never takes the body down with it.',
+    [strip('split', { scale: 1, equipped: { mainHand: 'test_long_blue' }, bg: '#575b68' }),
+     strip('split', { scale: 1, equipped: { offHand: 'test_short_red' }, bg: '#575b68' }),
+     strip('split', { scale: 1, equipped: null, bg: '#575b68' })]);
+}
+
+// Rebuild until every sprite and item image has actually decoded. The item
+// images load lazily on first draw, so a fixed-length rebuild loop can finish
+// while the weapons are still blank -- which reads as "the anchors are broken"
+// when nothing is wrong at all.
+function allReady() {
+  if (!getSheet(CFG.sheet).ready) return false;
+  for (const id of ['test_long_blue', 'test_short_red']) {
+    const it = equipmentConfig(id);
+    if (!it || !getItemImage(it.sprite).ready) return false;
+  }
+  return true;
+}
+build();
+let n = 0;
+const t = setInterval(() => {
+  build();
+  if (allReady() && n > 4) { clearInterval(t); }
+  if (++n > 60) { clearInterval(t); }
+}, 200);
+</script>
+</body>
+</html>

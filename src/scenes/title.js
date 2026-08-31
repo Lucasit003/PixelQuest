@@ -11,7 +11,7 @@ import { Audio } from '../core/audio.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { panel, panelTitle, heading, bar, UI } from '../gfx/ui.js';
 import { rect, rectOutline, disc, clamp01, lerp } from '../gfx/pixel.js';
-import { drawActor, drawPet } from '../gfx/actors.js';
+import { drawActor, drawCharacter, drawPet } from '../gfx/actors.js';
 import { drawPineTree, drawTorch, drawIcon } from '../gfx/props.js';
 import { Particles } from '../gfx/particles.js';
 import { CLASSES, abilitiesForClass } from '../game/data.js';
@@ -465,7 +465,11 @@ export class ClassSelectScene {
 
       const sx = cx + cardW / 2, sy = cy + 76;
       g.globalAlpha = 0.3; disc(g, sx, sy + 2, 20, cls.color); g.globalAlpha = 1;
-      drawActor(g, { x: sx, y: sy, facing: 1, sprite: cls.sprite, weapon: cls.weapon, state: 'idle', animTime: this.t + i, scale: 1.6 });
+      // drawCharacter, not drawActor: it routes a class whose sprite id is
+      // registered in gfx/spriteCatalog.js to its sheet and falls straight back
+      // to the procedural renderer for every id that is not. Paladin and Rogue
+      // are registered; the other five still draw exactly as before.
+      drawCharacter(g, { x: sx, y: sy, facing: 1, sprite: cls.sprite, weapon: cls.weapon, state: 'idle', animTime: this.t + i, scale: 1.6 });
 
       rect(g, cx + 8, cy + 92, cardW - 16, 9, UI.frameDark);
       drawText(g, 'RESOURCE: ' + cls.resource.toUpperCase(), cx + 12, cy + 93, { color: cls.resourceColor });

@@ -1,0 +1,43 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>road walkability</title>
+<style>body{background:#14100f;color:#ddd;font:10px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { TownScene }=await import('./src/scenes/town.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const sc=new TownScene(Hero.create('warrior'),{});
+sc.enter({width:480,height:270});
+await new Promise(r=>setTimeout(r,1800));
+const FC=sc.plazaFocus, C=4, cov=sc.roadCov;
+const onRoad=(x,y)=>!!cov.get(Math.floor(x/C)+','+Math.floor(y/C));
+const blocked=(x,y)=>sc.solids.some(s=>Number.isFinite(s.x)&&x>s.x&&x<s.x+s.w&&y>s.y&&y<s.y+s.h);
+const out=[];
+// Scan across the road at each latitude on the Eldertree approach and report
+// how much of the carriageway is walkable. 0 free cells = a wall across it.
+out.push('Eldertree approach — road width vs free width, by latitude:');
+out.push('   dy    roadCells  freeCells   state');
+let worst=[];
+for(let dy=-900; dy<=-250; dy+=8){
+  const y=FC.y+dy;
+  let road=0, free=0;
+  for(let dx=400; dx<=1000; dx+=C){
+    const x=FC.x+dx;
+    if(onRoad(x,y)){ road++; if(!blocked(x,y)) free++; }
+  }
+  if(road>0){
+    const st = free===0 ? 'FULLY BLOCKED' : (free/road<0.35 ? 'pinched' : 'ok');
+    if(st!=='ok') worst.push({dy, road, free, st});
+  }
+}
+for(const w of worst) out.push('   '+String(w.dy).padStart(5)+'   '+String(w.road).padStart(7)+'   '+String(w.free).padStart(8)+'   '+w.st);
+if(!worst.length) out.push('   (no latitude is blocked or pinched)');
+out.push('');
+out.push('fully blocked latitudes: '+worst.filter(w=>w.state==='FULLY BLOCKED').length);
+out.push('pinched (<35% free):    '+worst.filter(w=>w.st==='pinched').length);
+document.getElementById('out').textContent=out.join('\n');
+</script></body></html>

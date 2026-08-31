@@ -1739,118 +1739,365 @@ function woodland(g, camX, W, bay, t) {
   g.drawImage(wd.front, wd.x0 + sway, wd.y0);
 }
 
-// ================== AUTHORED FOREST BACKDROP ============================
+// ================== THE CONTINUOUS WORLD ================================
 //
-// assets/forest_bg.png is supplied art, not something this file draws. It is a
-// area (BOX) downsample of assets/forest.jpeg, 1024 -> 410
-// with the source's baked-in transparency checkerboard keyed back out. Nothing
-// below redraws or recolours it; the only freedoms taken are scale, x offset
-// and mirrored tiling.
+// One world, walked end to end: Forest -> Thornkeep -> the keep wall, with the
+// palace to follow. The art arrives as three plates (assets/zone_*.png, cut
+// from "goblin map pre king.jpeg"), scaled by a SINGLE factor and drawn on a
+// SINGLE baseline, because plates aligned differently cannot be blended — the
+// horizon would step at every crossing.
 //
-// Vertical placement is what makes it sit in the scene rather than on it. The
-// art is solid forest down to its own row 114 and only trunks and root flares
-// below that, so drawn at y 0 its ground line lands just under the bush tops
-// (median 107). battlefield() paints the grass afterwards and follows edgeY exactly,
-// so it crops the roots along the real clearing edge, and bgEdge()'s bushes
-// then stand in front of whatever is left. The occlusion is done by the
-// existing layers in their existing order — none of them changed.
+// There is deliberately no transition event, and no coordinate at which one
+// place becomes the next. Each plate carries a tent weight peaking at its own
+// centre and falling to zero at its neighbour's, so at every world x the frame
+// is a weighted mix of two plates and the mixture changes on every column.
+// Nothing keys off gates, waves or scene state: walk the same stretch twice and
+// you get the same picture, because the only input is position.
 //
-// The tile is 410 wide against a 480 frame, so a plain repeat would show the
-// same distinctive tree twice on screen. Odd tiles are mirrored, which puts the
-// period at 820 and makes the seams match. The asset is rolled 525 source px
-// first so every mirror axis falls in the artwork's one trunk-free gap —
-// mirroring where the big trees sit produced obvious twins.
-const FOREST_ART = new Image();
-FOREST_ART.src = 'assets/forest_bg.png';
-const ART_W = 410;
+// Compositing: plates are drawn left to right, each masked by a horizontal
+// ramp rising 0 -> 1 across the gap behind it and holding at 1 thereafter.
+// Painted in that order the result is exactly A*(1-t) + B*t at every column,
+// with one gradient per plate rather than a per-column loop.
+// Wave 1 is the arena as approved — its own backdrop, its own grass, its own
+// bush line. Waves 2 and 3 are the authored plates, which are whole
+// battlefields. The plates were re-cut to WAVE 1's baseline rather than the
+// reverse: the approved picture does not move to accommodate new art.
+//
+// Centres sit on the wave camera centres (gate.x - W/2 + W/2), so each fight
+// lands in its own place while the ground between them keeps changing.
+const ZONES = [
+  { cx: 240, src: 'assets/forest_bg.png', plate: false },
+  { cx: 480, src: 'assets/zone_thornkeep.png', plate: true },
+  { cx: 740, src: 'assets/zone_keepwall.png', plate: true },
+];
 const ART_TOP = 0;
+const ART_K = 1.06;              // the mirrored flanks are not copies
+const ART_SHEAR = 0.05;
+const ART_GROUND = 121;          // every plate's grass line, = the arena's edgeY
 
-let ART_BAKE = null;
+for (const z of ZONES) { z.img = new Image(); z.img.src = z.src; z.bake = null; }
 
-// The two dominant forked trees framing the centre were one tree and its own
-// reflection: measured about screen x=320 the frame was a near-perfect mirror
-// (mean |L-R| of 5.6). Plain mirroring is what produced that, so the pair is
-// baked once here with the second half deliberately unlike the first.
-//
-// The variation is a vertical scale ANCHORED ON THE GROUND LINE (row 114), not
-// a free transform. Anchoring matters twice over: scaling about the top would
-// have walked the far-forest floor down into the bush gaps and printed a step
-// at the seam, and scaling k < 1 would have opened a strip of bare sky above
-// the canopy. Anchored, with k > 1, the ground line does not move at all and
-// the surplus height is absorbed by cropping the canopy off the top of the
-// frame — so the second tree simply stands taller, with its crown carried up
-// out of shot and its branching cut at a different height.
-const ART_K = 1.18;
-const ART_SHEAR = 0.075;      // leans the second half; 0 at the ground line
-const ART_GROUND = 114;
-
-function artBake() {
-  if (ART_BAKE) return ART_BAKE;
-  if (!FOREST_ART.complete || !FOREST_ART.naturalWidth) return null;
+// [mirrored][plate][mirrored], anchored so the plate itself is centred on the
+// zone. A zone reaches +/-370, the bake reaches +/-771, so nothing repeats
+// inside a zone and the mirror axes fall at +/-257 — outside the 480 frame
+// when the camera parks on the centre for a fight.
+function zoneBake(z) {
+  if (z.bake) return z.bake;
+  if (!z.img.complete || !z.img.naturalWidth) return null;
+  const h = z.img.naturalHeight;
+  const pw = z.img.naturalWidth;
+  z.w = pw;
   const c = document.createElement('canvas');
-  c.width = ART_W * 2;
-  c.height = 268;
+  c.width = pw * 3; c.height = Math.ceil(h * ART_K) + 8;
   const q = c.getContext('2d');
   q.imageSmoothingEnabled = false;
-  q.drawImage(FOREST_ART, 0, 0);
-  q.save();
-  q.translate(ART_W * 2, 0);
-  q.scale(-1, 1);                       // mirrored, so the seams still match
-  q.translate(0, ART_GROUND);
-  // Lean as well as height. The shear is x' = x + SHEAR*y with y measured from
-  // the ground line, so the displacement is zero where the halves meet the
-  // floor and grows upward — the trunks tilt instead of sliding sideways. At
-  // the seam the largest offset is about 8px at the canopy, which stays inside
-  // the artwork's trunk-free gap that the seam was aligned to in the first place.
-  q.transform(1, 0, ART_SHEAR, 1, 0, 0);
-  q.scale(1, ART_K);                    // ...but taller, about the ground line
-  q.translate(0, -ART_GROUND);
-  q.drawImage(FOREST_ART, 0, 0);
-  q.restore();
-  ART_BAKE = c;
+  const flank = (originX, dir) => {
+    q.save();
+    q.translate(originX, 0);
+    q.scale(dir, 1);
+    q.translate(0, ART_GROUND);
+    q.transform(1, 0, ART_SHEAR * dir, 1, 0, 0);
+    q.scale(1, ART_K);
+    q.translate(0, -ART_GROUND);
+    q.drawImage(z.img, 0, 0);
+    q.restore();
+  };
+  flank(pw, -1);                            // left flank, mirrored
+  q.drawImage(z.img, pw, 0);                // the plate, unaltered
+  flank(pw * 2, 1);                         // right flank, mirrored back
+  z.bake = c;
   return c;
 }
 
-function forestArt(g, camX, W) {
-  const bake = artBake();
-  if (!bake) return false;
-  const P = ART_W * 2;
-  for (let i = Math.floor(camX / P); i * P < camX + W; i++) {
-    g.drawImage(bake, i * P, ART_TOP);
+// Blending two finished paintings with an alpha ramp averages them, and an
+// average has neither picture's contrast: the keep wall went translucent with
+// forest trunks showing through it, and the grass and the courtyard met in a
+// milky band. Both read as bad lighting, because losing contrast is what bad
+// lighting looks like.
+//
+// So the crossover is a DISSOLVE, not a fade. Every pixel belongs wholly to one
+// plate or the other, so each keeps its own values, and the changeover is
+// carried by how much area each one owns. The noise is clustered rather than
+// per-pixel, so it breaks into patches — grass giving way to bare earth the way
+// ground actually wears through — instead of television static.
+//
+// The mask is baked in WORLD space and cached: the band never moves, so the
+// same dissolve is reused every frame and the pattern does not crawl as the
+// camera pans.
+const MASK_CACHE = new Map();
+
+// 2D value noise, INTERPOLATED between cells. Sampling the hash per cell gives
+// hard rectangular plateaus, and against two different paintings those read as
+// broken tiles rather than as one place becoming another — the same mistake the
+// clearing edge had to have corrected out of it.
+function vnoise(x, y, cell, seed) {
+  const gx = x / cell, gy = y / cell;
+  const ix = Math.floor(gx), iy = Math.floor(gy);
+  const fx = gx - ix, fy = gy - iy;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = h1(ix * 2.7 + iy * 7.1 + seed);
+  const b = h1((ix + 1) * 2.7 + iy * 7.1 + seed);
+  const c = h1(ix * 2.7 + (iy + 1) * 7.1 + seed);
+  const d = h1((ix + 1) * 2.7 + (iy + 1) * 7.1 + seed);
+  const top = a + (b - a) * sx, bot = c + (d - c) * sx;
+  return top + (bot - top) * sy;
+}
+
+function dissolveMask(w, h, seed) {
+  const key = `${w}x${h}:${seed}`;
+  if (MASK_CACHE.has(key)) return MASK_CACHE.get(key);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, w); c.height = h;
+  const q = c.getContext('2d');
+  const img = q.createImageData(c.width, h);
+  const d = img.data;
+  const FEATHER = 0.055;          // a few px of blend at a patch edge, no more
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < c.width; x++) {
+      const u = c.width > 1 ? x / (c.width - 1) : 0;
+      const n = vnoise(x, y, 34, seed) * 0.52
+              + vnoise(x, y, 15, seed + 3) * 0.30
+              + vnoise(x, y, 6, seed + 9) * 0.18;
+      const a = clamp01((n - u) / FEATHER + 0.5);
+      d[(y * c.width + x) * 4 + 3] = Math.round(a * 255);
+    }
+  }
+  q.putImageData(img, 0, 0);
+  MASK_CACHE.set(key, c);
+  return c;
+}
+
+// The frame-sized mask for one crossover: solid on the side that has fully
+// taken over, the dissolve through the band, nothing beyond.
+let MASK_SCRATCH = null;
+function frameMask(camX, W, H, bandA, bandB, seed, solidAfter) {
+  if (!MASK_SCRATCH) MASK_SCRATCH = document.createElement('canvas');
+  if (MASK_SCRATCH.width !== W || MASK_SCRATCH.height !== H) {
+    MASK_SCRATCH.width = W; MASK_SCRATCH.height = H;
+  }
+  const q = MASK_SCRATCH.getContext('2d');
+  q.setTransform(1, 0, 0, 1, 0, 0);
+  q.clearRect(0, 0, W, H);
+  q.fillStyle = '#000';
+  if (solidAfter) q.fillRect(bandB - camX, 0, W - (bandB - camX), H);
+  else            q.fillRect(0, 0, bandA - camX, H);
+  // The mask is built opaque at u=0 and clear at u=1. A layer that is TAKING
+  // OVER to the right therefore needs it mirrored; one that is GIVING WAY to
+  // the right takes it as built. Getting this backwards put a hard edge at each
+  // band boundary, where the reversed ramp met the solid fill.
+  const m = dissolveMask(Math.round(bandB - bandA), H, seed);
+  q.save();
+  if (solidAfter) {
+    q.translate(bandB - camX, 0); q.scale(-1, 1);
+    q.drawImage(m, 0, 0);
+  } else {
+    q.drawImage(m, bandA - camX, 0);
+  }
+  q.restore();
+  return MASK_SCRATCH;
+}
+
+let ZONE_SCRATCH = null;
+function scratchFor(W, H) {
+  if (!ZONE_SCRATCH) { ZONE_SCRATCH = document.createElement('canvas'); }
+  if (ZONE_SCRATCH.width !== W || ZONE_SCRATCH.height !== H) {
+    ZONE_SCRATCH.width = W; ZONE_SCRATCH.height = H;
+  }
+  return ZONE_SCRATCH;
+}
+
+// How much of zone i is showing at world x — the value the ground and the
+// lighting read too, so every layer crosses over together.
+function zoneMix(wx) {
+  if (wx <= ZONES[0].cx) return { i: 0, j: 0, t: 0 };
+  for (let i = 0; i < ZONES.length - 1; i++) {
+    if (wx < ZONES[i + 1].cx) {
+      const a = ZONES[i].cx, b = ZONES[i + 1].cx;
+      return { i, j: i + 1, t: clamp01((wx - a) / (b - a)) };
+    }
+  }
+  const last = ZONES.length - 1;
+  return { i: last, j: last, t: 0 };
+}
+
+// The woodland edge thins out as the forest gives way to the keep. Wave 1 is
+// framed by it as approved; by waves 2 and 3 it is gone, and the wall meets
+// open ground instead of hiding behind a hedge.
+//
+// Ramped on world x rather than switched per wave, for the same reason as
+// everything else here: waves 1 and 2 share the stretch from 240 to 480, so a
+// per-wave rule would have to draw that ground two different ways. A ramp has
+// one answer per coordinate and no edge to find.
+const BUSH_FULL = 300, BUSH_GONE = 500;
+function bushDensity(wx) {
+  return 1 - clamp01((wx - BUSH_FULL) / (BUSH_GONE - BUSH_FULL));
+}
+
+// ---------------------------------------------------------------- the hall
+//
+// The boss arena is not another stretch of the walk: it is a bounded room, so
+// it does not blend with anything and nothing outdoors leaks into it. No
+// forest floor, no clearing edge, no bush line, no zone mix — the plate is the
+// whole picture, and the fight happens on its flagstones.
+//
+// Anchored so the room is centred on the parked camera rather than tiled: a
+// room that repeats is not a room.
+const ARENA_IMG = new Image();
+ARENA_IMG.src = 'assets/zone_arena.png';
+const ARENA_W = 575;
+const ARENA_ANCHOR = 920;                  // camX the boss gate parks at
+
+function drawArena(g, camX, W, H, t, awake) {
+  if (!ARENA_IMG.complete || !ARENA_IMG.naturalWidth) {
+    rect(g, camX, 0, W, H, '#171a1e');
+    return;
+  }
+  // Right-aligned rather than centred: the throne dais is at the room's right
+  // end, and centring pushed it off the frame. The left wall's shelves are the
+  // cheaper thing to lose.
+  const x0 = ARENA_ANCHOR + W - ARENA_W;
+  g.drawImage(ARENA_IMG, x0, 0);
+  // Anything the camera can see beyond the room's own walls is the same stone
+  // carried outward, so the edges never show as a cut.
+  if (x0 > camX) rect(g, camX, 0, x0 - camX + 1, H, '#14171b');
+  const right = x0 + ARENA_W;
+  if (right < camX + W) rect(g, right - 1, 0, camX + W - right + 1, H, '#14171b');
+  // torchlight breathing, the only motion in the room
+  const puls = 0.09 + Math.sin(t * 1.7) * 0.02 + Math.sin(t * 3.1 + 1.3) * 0.012;
+  g.fillStyle = `rgba(120,64,22,${puls})`;
+  g.fillRect(camX, 0, W, H);
+  const vig = g.createRadialGradient(camX + W / 2, 150, 110, camX + W / 2, 150, 360);
+  vig.addColorStop(0, 'rgba(4,6,10,0)');
+  vig.addColorStop(1, `rgba(4,6,10,${0.42 + clamp01(awake || 0) * 0.10})`);
+  g.fillStyle = vig;
+  g.fillRect(camX, 0, W, H);
+}
+
+function forestArt(g, camX, W, H) {
+  for (const z of ZONES) if (!zoneBake(z)) return false;
+  for (let i = 0; i < ZONES.length; i++) {
+    const z = ZONES[i];
+    const bakeX = z.cx - z.w * 1.5;
+    if (bakeX > camX + W || bakeX + z.w * 3 < camX) continue;
+    if (i === 0) { g.drawImage(z.bake, bakeX, ART_TOP); continue; }
+    const prev = ZONES[i - 1].cx, span = z.cx - prev;
+    const aL = clamp01((camX - prev) / span);
+    const aR = clamp01((camX + W - prev) / span);
+    if (aR <= 0) continue;
+    if (aL >= 1) { g.drawImage(z.bake, bakeX, ART_TOP); continue; }
+    const sc = scratchFor(W, H), q = sc.getContext('2d');
+    q.setTransform(1, 0, 0, 1, 0, 0);
+    q.clearRect(0, 0, W, H);
+    q.imageSmoothingEnabled = false;
+    q.drawImage(z.bake, bakeX - camX, ART_TOP);
+    q.globalCompositeOperation = 'destination-in';
+    q.drawImage(frameMask(camX, W, H, prev, z.cx, 17 + i * 41, true), 0, 0);
+    q.globalCompositeOperation = 'source-over';
+    g.drawImage(sc, camX, 0);
   }
   return true;
 }
 
-// The mood pass. Three cameras of the authored backdrop were compared and the
-// one at world 1060 read best — deeper, cooler, with the eye pulled to centre.
-// That frame was not better art: camX > 1050 is the boss zone, so it was the
-// boss lighting. This reproduces that treatment for every bay.
+// Per-zone lighting and ground. Both read the SAME zoneMix the backdrop does,
+// sampled at the frame centre, so the light and the earth turn over together
+// with the picture instead of one lagging the other. Sampling at the centre
+// makes them a function of camera position alone — continuous as you walk, and
+// with no coordinate at which anything switches.
 //
-// It is deliberately scoped to the backdrop, not bolted onto lighting(). The
-// boss pass runs over the full frame height, so promoting it wholesale would
-// have dimmed the battlefield and the blue wash would have pulled the grass
-// cold — a readability cost that was invisible in the crops the choice was
-// made from. Everything here stops at the backdrop; the ground and the bushes
-// paint over the lower rows afterwards, exactly as before.
-function backdropMood(g, camX, W, boss) {
-  const BOT = 180;                       // past the art's reach; ground repaints below edgeY
-  // In the boss zone the boss pass in lighting() already lays down most of
-  // this, so the top-up is partial. At full strength the two stacked and the
-  // boss backdrop went to luminance 21 — the trunks stopped reading at all.
+// The wash is far lighter than it was for the old procedural forest: these
+// plates are authored art carrying their own depth, and the heavy pass that
+// rescued a flat generated backdrop simply buried them.
+const ZONE_LOOK = [
+  { drop: 0.12, cool: 0.13, warm: 0.00, vig: 0.34, tint: '#000000', earth: 0.00 },
+  { drop: 0.11, cool: 0.09, warm: 0.04, vig: 0.33, tint: '#5a5f34', earth: 0.10 },
+  { drop: 0.09, cool: 0.03, warm: 0.11, vig: 0.31, tint: '#6b6238', earth: 0.26 },
+];
+function mixHex(a, b, t) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.substr(i, 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.substr(i, 2), 16));
+  return `rgb(${pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(',')})`;
+}
+function lookAt(wx) {
+  const m = zoneMix(wx);
+  const A = ZONE_LOOK[m.i], B = ZONE_LOOK[m.j], t = m.t;
+  const L = (k) => A[k] + (B[k] - A[k]) * t;
+  return { drop: L('drop'), cool: L('cool'), warm: L('warm'), vig: L('vig'),
+           earth: L('earth'), tint: mixHex(A.tint, B.tint, t) };
+}
+
+// The procedural ground is wave 1's floor, and only wave 1's. The zone plates
+// are whole battlefields — their own dirt, paving and courtyard are painted in
+// — so past the forest the grass is faded out and the plate's floor is simply
+// what you stand on. Same ramp as the bushes, because the woodland floor and
+// the woodland edge have to leave together or the join shows.
+function groundFade(g, camX, W, H) {
+  const aL = bushDensity(camX), aR = bushDensity(camX + W);
+  if (aL <= 0.01 && aR <= 0.01) return;          // deep in the keep: plate only
+  if (aL >= 0.99 && aR >= 0.99) { battlefield(g, camX, W, H); return; }
+  const sc = scratchFor(W, H), q = sc.getContext('2d');
+  q.setTransform(1, 0, 0, 1, 0, 0);
+  q.clearRect(0, 0, W, H);
+  q.imageSmoothingEnabled = false;
+  q.save();
+  q.translate(-camX, 0);
+  battlefield(q, camX, W, H);
+  q.restore();
+  q.globalCompositeOperation = 'destination-in';
+  q.drawImage(frameMask(camX, W, H, BUSH_FULL, BUSH_GONE, 5, false), 0, 0);
+  q.globalCompositeOperation = 'source-over';
+  g.drawImage(sc, camX, 0);
+}
+
+function backdropMood(g, camX, W, boss, H) {
+  const L = lookAt(camX + W / 2);
   const k = boss ? 0.45 : 1;
-  g.fillStyle = `rgba(4,10,10,${0.30 * k})`;    // drops the band
-  g.fillRect(camX, 0, W, BOT);
-  g.fillStyle = `rgba(24,44,58,${0.14 * k})`;   // cools it, which is what reads as distance
-  g.fillRect(camX, 0, W, BOT);
-  // The vignette is the half that is doing compositional work rather than
-  // tonal: it darkens the frame's corners and leaves the centre open, which is
-  // what stops the tiled backdrop reading as a flat repeating strip.
+  // These used to be flat rects stopping at y=180. That was invisible while the
+  // grass was painted over the join; now the plates carry their own ground, it
+  // printed a hard dark line straight across the battlefield — measured a 16
+  // luminance step against a median of 1. Each wash now holds full strength to
+  // the tree line and eases out through the field, so the light falls off
+  // instead of ending, and the playable floor keeps its brightness.
+  const BOT = H;
+  const wash = (rgb, a) => {
+    if (a <= 0.002) return;
+    const grad = g.createLinearGradient(0, 0, 0, BOT);
+    grad.addColorStop(0, `rgba(${rgb},${a})`);
+    grad.addColorStop(150 / BOT, `rgba(${rgb},${a})`);
+    grad.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = grad;
+    g.fillRect(camX, 0, W, BOT);
+  };
+  wash('4,10,10', L.drop * k);
+  wash('24,44,58', L.cool * k);                       // forest reads cold
+  wash('96,60,26', L.warm * k);                       // the keep reads torchlit
+  // The vignette is the half doing compositional rather than tonal work: it
+  // holds the eye centre-frame and stops a tiled backdrop reading as a strip.
   const vig = g.createRadialGradient(camX + W / 2, DEPTH_MAX - 30, 90,
                                      camX + W / 2, DEPTH_MAX - 30, 330);
   vig.addColorStop(0, 'rgba(3,9,8,0)');
-  vig.addColorStop(1, `rgba(3,9,8,${0.46 * k})`);
+  vig.addColorStop(1, `rgba(3,9,8,${L.vig * k})`);
   g.fillStyle = vig;
   g.fillRect(camX, 0, W, BOT);
+}
+
+// The floor turning from woodland to beaten earth. Applied as a wash rather
+// than by swapping tiles: the clearing, its edge curve and its wear are all
+// approved work, and a wash shifts the material without disturbing any of it.
+// Zero at the forest by construction, so wave 1 is untouched.
+function zoneGround(g, camX, W, H) {
+  const steps = 8;
+  const grad = g.createLinearGradient(camX, 0, camX + W, 0);
+  let any = false;
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps;
+    const L = lookAt(camX + u * W);
+    if (L.earth > 0.002) any = true;
+    const c = L.tint;
+    grad.addColorStop(u, `rgba(${c.slice(4, -1)},${L.earth})`);
+  }
+  if (!any) return;
+  g.fillStyle = grad;
+  g.fillRect(camX, GROUND_TOP, W, H - GROUND_TOP);
 }
 
 function forestFloor(g, camX, W) {
@@ -1886,6 +2133,7 @@ function edgeGapFill(g, camX, W, bay) {
   for (let i = 0; i < EDGE_GAPS.length; i++) {
     const cx = bay + EDGE_GAPS[i];
     if (cx < camX - 70 || cx > camX + W + 70) continue;
+    if (bushDensity(cx) <= 0.05) continue;
     const e = edgeY(cx), hw = 17 + i * 3;
     // the floor behind the boundary, a shade off the forest interior
     g.fillStyle = '#1b2a1e';
@@ -1945,6 +2193,8 @@ function bgEdge(g, camX, W, bay, t, dark) {
     const k = h1(wx * 0.041 + 31);
     if (windowAt(wx, bay) * heaviness(wx, bay) * (0.62 + k * 0.7) < 0.34) continue;
     if (edgeGap(wx, bay)) continue;
+    const dens = bushDensity(wx);
+    if (dens <= 0.02 || h1(wx * 0.077 + 5.1) > dens) continue;
     const w = windAt(wx, edgeY(wx), t) * 0.55;
     blitSil(g, EDGE_KIT[Math.floor(k * 89) % EDGE_KIT.length],
             k > 0.62 ? '#31603f' : '#285036',
@@ -1961,9 +2211,10 @@ function bgEdge(g, camX, W, bay, t, dark) {
   for (let sx = 0; sx < W; sx += 2) {
     const wx = camX + sx;
     const e = edgeY(wx);
-    g.fillStyle = 'rgba(6,18,12,0.46)';
+    const sd = 0.34 + 0.66 * bushDensity(wx);
+    g.fillStyle = `rgba(6,18,12,${0.46 * sd})`;
     g.fillRect(wx, e + 8, 2, 5);
-    g.fillStyle = 'rgba(6,18,12,0.24)';
+    g.fillStyle = `rgba(6,18,12,${0.24 * sd})`;
     g.fillRect(wx, e + 13, 2, 4);
   }
 
@@ -2176,8 +2427,9 @@ function transitionBand(g, camX, W, bay, t) {
   // RUNS of two to five driven by a low-frequency hash, with real gaps between
   // runs, so some trunks are buried completely and others stand clear.
   for (let wx = Math.floor((camX - 90) / 11) * 11; wx < camX + W + 90; wx += 11) {
+    const dens = bushDensity(wx);
     const run = h1(Math.floor(wx / 63) * 4.1);
-    const inRun = run > 0.48;
+    const inRun = dens > 0.02 && run > 0.48 + (1 - dens) * 0.52;
     if (inRun) {
       const e2 = edgeY(wx);
       const kk = h1(wx * 0.13 + 7);
@@ -2210,29 +2462,6 @@ function transitionBand(g, camX, W, bay, t) {
       const w = windAt(wx, e, t) * 0.5;
       blitSil(g, h1(wx) > 0.5 ? 'fernbank_01' : 'fernbank_02', '#1c3a26',
               wx + w, e + 14 + Math.round(k * 8), k > 0.5, 1, 0.7);
-    }
-  }
-}
-
-// ---- foreground framing: two partial masses, mostly off-screen, and the
-// bottom centre deliberately untouched.
-function frameCorners(g, camX, W, H, bay) {
-  const y = H + 20;
-  for (const side of [-1, 1]) {
-    const x = bay + side * 268;
-    if (x < camX - 120 || x > camX + W + 120) continue;
-    if (side < 0) {
-      g.fillStyle = BARK.deep;
-      g.beginPath(); g.ellipse(x, y - 26, 64, 17, -0.10, 0, Math.PI * 2); g.fill();
-      g.fillStyle = BARK.body;
-      g.beginPath(); g.ellipse(x, y - 31, 55, 10, -0.10, 0, Math.PI * 2); g.fill();
-      blitSil(g, 'fernbank_02', '#16311f', x - 30, y - 20, false, 1, 0.66);
-      blitSil(g, 'fernbank_01', '#193723', x + 26, y - 17, true, 1, 0.66);
-    } else {
-      blitSil(g, 'bush_big', '#16311f', x + 14, y - 14, false, 1, 0.64);
-      blitSil(g, 'bush_03', '#193723', x - 22, y - 10, true, 1, 0.66);
-      g.fillStyle = BARK.deep;
-      g.beginPath(); g.ellipse(x - 6, y - 22, 34, 8, 0.08, 0, Math.PI * 2); g.fill();
     }
   }
 }
@@ -2558,126 +2787,6 @@ function arrivalTell(g, camX, W, amt, t) {
   g.globalAlpha = 1;
 }
 
-// =========================================================================
-// THE SIX CLUSTERS
-// =========================================================================
-// Exactly six compositions, hand-placed around the perimeter of the bay. Not a
-// generator: a generator is what produced the uniform decoration this replaces.
-// Everything sits outside the protected combat space, and the count is fixed —
-// there is no rule here that can quietly add a seventh.
-//
-// Anchored to the bay centre, which is where the camera parks for each fight,
-// so every wave is framed by the same deliberate arrangement.
-
-// 2 — ANCIENT SHRINE. Left, and small on purpose: one ruined stone element
-// with vegetation. It is a wayside marker, not a second landmark.
-function clusterShrine(g, camX, W, cx, awake, t) {
-  const x = cx - 205, y = edgeY(x) + 30;
-  if (x < camX - 70 || x > camX + W + 70) return;
-  ground(g, x, y + 2, 26, 8, 0.32);
-  blit(g, 'myst_arch_vine', x, y, false, 0.95);
-  blit(g, awake > 0.45 ? 'myst_ped_crystal_lit' : 'myst_ped_crystal_dim', x + 16, y + 4, false, 1);
-  blit(g, 'fernbank_01', x - 17, y + 5, false, 1);
-  blit(g, 'flowers_white', x + 6, y + 7, true, 1);
-  if (awake > 0.45) {
-    g.save(); g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = clamp01((awake - 0.45) / 0.55) * (0.09 + 0.04 * Math.sin(t * 1.6));
-    disc(g, x + 16, y - 10, 18, CYAN.body);
-    g.restore(); g.globalAlpha = 1;
-  }
-}
-
-// 3 — GOBLIN CAMP. Upper right. One camp in the whole arena.
-function clusterCamp(g, camX, W, cx, awake, t) {
-  const x = cx + 150, y = edgeY(x) + 30;
-  if (x < camX - 80 || x > camX + W + 80) return;
-  const lit = clamp01((awake - 0.20) / 0.45);
-  ground(g, x, y + 3, 34, 10, 0.34);
-  // crude barricade: three leaning stakes
-  for (let i = 0; i < 3; i++) {
-    const k = h1(i * 9.1 + 3);
-    const sx = x - 16 + i * 15, hgt = 16 + k * 9, lean = (k - 0.5) * 5;
-    g.save(); g.translate(sx, y + 2); g.transform(1, 0, lean / hgt, 1, 0, 0);
-    rect(g, -1.5, -hgt, 3, hgt, BARK.deep);
-    rect(g, -1.5, -hgt, 1, hgt, BARK.body);
-    g.restore();
-  }
-  // lean-to
-  g.save(); g.translate(x + 20, y);
-  rect(g, -1, -24, 2, 24, BARK.deep); rect(g, 20, -13, 2, 13, BARK.deep);
-  g.fillStyle = '#5c4a33';
-  g.beginPath(); g.moveTo(-3, -24); g.lineTo(23, -13); g.lineTo(23, -9); g.lineTo(-3, -20);
-  g.closePath(); g.fill();
-  g.restore();
-  // supplies
-  blit(g, 'barrel_01', x - 26, y + 4, false, 1);
-  blit(g, 'crate_01', x - 13, y + 6, true, 1);
-  blit(g, 'sack_pile', x + 6, y + 7, false, 1);
-  // one banner
-  const bx = x - 36, wave = Math.sin(t * 1.6 + 1.1) * 1.6;
-  rect(g, bx, y - 30, 2, 30, BARK.deep);
-  g.fillStyle = '#7d2b20';
-  g.beginPath(); g.moveTo(bx + 2, y - 28); g.lineTo(bx + 15 + wave, y - 26);
-  g.lineTo(bx + 13 + wave, y - 14); g.lineTo(bx + 2, y - 15); g.closePath(); g.fill();
-  // one warm light
-  if (lit > 0.02) {
-    const fl = 0.7 + 0.3 * Math.sin(t * 8.1 + 1.7);
-    g.save(); g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = lit * 0.26 * fl; disc(g, x + 30, y - 20, 20, FIRE.body);
-    g.globalAlpha = lit; g.fillStyle = FIRE.body;
-    g.beginPath(); g.ellipse(x + 30, y - 21, 2.4, 3.8 * fl, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = FIRE.core;
-    g.beginPath(); g.ellipse(x + 30, y - 21, 1.1, 2.1 * fl, 0, 0, Math.PI * 2); g.fill();
-    g.restore(); g.globalAlpha = 1;
-  }
-  rect(g, x + 28, y - 22, 2, 24, BARK.deep);
-}
-
-// 4 — FALLEN TREE. Right boundary. A big horizontal mass that helps close the
-// arena on that side rather than a decorative log dropped on the grass.
-function clusterFallen(g, camX, W, cx) {
-  const x = cx + 236, y = edgeY(x) + 34;
-  if (x < camX - 80 || x > camX + W + 80) return;
-  ground(g, x, y + 3, 34, 9, 0.34);
-  blit(g, 'fallen_log_01', x, y, false, 1);
-  blit(g, 'log_long', x + 24, y + 4, true, 1);
-  blit(g, 'rock_med_01', x - 22, y + 4, false, 1);
-  blit(g, 'mushrooms_red', x + 9, y + 5, false, 1);
-  blit(g, 'fernbank_02', x - 8, y + 7, true, 1);
-}
-
-// 5 & 6 — FOREGROUND FRAMES. Bottom corners, cropped by the frame, with the
-// bottom centre deliberately left open. Two different recipes so the corners
-// do not mirror each other.
-function clusterFrames(g, camX, W, H, cx) {
-  const y = H + 14;
-  // left: root shoulder, ferns, rock
-  const lx = cx - 238;
-  if (lx > camX - 90 && lx < camX + W + 90) {
-    g.fillStyle = BARK.deep;
-    g.beginPath(); g.ellipse(lx, y - 24, 58, 15, -0.12, 0, Math.PI * 2); g.fill();
-    g.fillStyle = BARK.body;
-    g.beginPath(); g.ellipse(lx, y - 28, 51, 9, -0.12, 0, Math.PI * 2); g.fill();
-    blit(g, 'fernbank_02', lx - 30, y - 18, false, 1);
-    blit(g, 'fernbank_01', lx + 24, y - 15, true, 1);
-    blit(g, 'bush_low', lx - 2, y - 13, false, 1);
-  }
-  // right: bush mass, flowers, a small root
-  const rx = cx + 238;
-  if (rx > camX - 90 && rx < camX + W + 90) {
-    blit(g, 'bush_big', rx + 8, y - 13, false, 1);
-    blit(g, 'bush_03', rx - 24, y - 9, true, 1);
-    blit(g, 'flowers_mixed', rx + 30, y - 11, false, 1);
-    g.fillStyle = BARK.deep;
-    g.beginPath(); g.ellipse(rx - 4, y - 20, 30, 7, 0.10, 0, Math.PI * 2); g.fill();
-  }
-  // the bottom edge sinks into shadow, closing the frame
-  const fg = g.createLinearGradient(0, H - 24, 0, H);
-  fg.addColorStop(0, 'rgba(6,14,10,0)');
-  fg.addColorStop(1, 'rgba(6,14,10,0.44)');
-  g.fillStyle = fg;
-  g.fillRect(camX, H - 24, W, 24);
-}
 
 // =========================================================================
 // COMPOSITE
@@ -2696,6 +2805,12 @@ export function drawForestArena(g, ctx) {
   let bd = 1e9;
   for (const b of bays) { const d = Math.abs(b - (camX + W / 2)); if (d < bd) { bd = d; bay = b; } }
 
+  if (ctx.arena) {
+    drawArena(g, camX, W, H, t, awake);
+    arrivalTell(g, camX, W, ctx.arriving || 0, t);
+    return;
+  }
+
   // sky and the far ridgeline, which both views keep for context
   backdrop(g, camX, W, dark);
 
@@ -2706,17 +2821,17 @@ export function drawForestArena(g, ctx) {
     // The authored backdrop stands in for the procedural forest planes. They
     // remain as the fallback for the frames before the image decodes, so a
     // slow load shows a forest rather than bare sky.
-    if (!forestArt(g, camX, W)) {
+    if (!forestArt(g, camX, W, H)) {
       planeVista(g, camX, W, bay, t);
       woodland(g, camX, W, bay, t);
     }
     fallenLandmark(g, camX, W, bay);
-    backdropMood(g, camX, W, boss);
+    backdropMood(g, camX, W, boss, H);
   }
 
   // --- A. Ground goes over the far planes and under the clearing edge, so
   // the clearing-edge vegetation sits ON the grass rather than behind it.
-  if (wantGround) battlefield(g, camX, W, H);
+  if (wantGround) groundFade(g, camX, W, H);
   else rect(g, camX, GROUND_TOP, W, H - GROUND_TOP, '#3f6b43');   // neutral ground
 
   if (wantForest) {

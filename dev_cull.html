@@ -29,7 +29,7 @@ performance.now = () => 1234.5;   // pins wind phase, HUD blink, sway
 
 // Chrome caches ES modules per URL, and only the two entry modules below carry
 // a cache-buster — everything they import transitively is served from cache.
-// A stale ancientcity.js silently invalidated an entire verification round
+// A stale city.js silently invalidated an entire verification round
 // here (every camera still reported the pre-fix result), so force-revalidate
 // the whole tree first, walking python http.server's directory index.
 async function purge(dir) {

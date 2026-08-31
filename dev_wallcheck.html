@@ -1,0 +1,68 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>wall alignment</title>
+<style>body{background:#14100f;color:#ddd;font:10px monospace;margin:0;padding:8px;white-space:pre}</style></head>
+<body><div id="out">…</div>
+<script type="module">
+async function purge(dir){const h=await (await fetch(dir+'?v='+Date.now(),{cache:'reload'})).text();
+  const n=[...h.matchAll(/href="([^"?]+)"/g)].map(m=>decodeURIComponent(m[1]));
+  await Promise.all(n.map(x=>{if(x.startsWith('/')||x.startsWith('.'))return null;
+    if(x.endsWith('/'))return purge(dir+x);return x.endsWith('.js')?fetch(dir+x,{cache:'reload'}):null;}));}
+await purge('./src/');
+const b='?v='+Date.now();
+const { TownScene }=await import('./src/scenes/town.js'+b);
+const { Hero }=await import('./src/game/state.js'+b);
+const sc=new TownScene(Hero.create('warrior'),{});
+sc.enter({width:480,height:270});
+await new Promise(r=>setTimeout(r,1800));
+const out=[];
+const walls=sc.decor.filter(d=>/^city_wall|^city_watchtower|^city_gatehouse/.test(d.name));
+out.push('city wall pieces placed: '+walls.length);
+// Group by TOP edge, not baseline. Levelling the battlement deliberately puts
+// the feet on slightly different baselines, so grouping by y would split one
+// wall into several phantom runs with phantom gaps between them.
+const byT={};
+for(const w of walls){ if(w.name==='city_wall_corner'||/tower|gatehouse/.test(w.name)) continue;
+  const t=Math.round(w.y-w.h); (byT[t]=byT[t]||[]).push(w); }
+// merge tops within 3px of each other into one wall line
+const tops=Object.keys(byT).map(Number).sort((a,b)=>a-b);
+const lines=[];
+for(const t of tops){
+  const last=lines[lines.length-1];
+  if(last && t-last.t<=3){ last.items.push(...byT[t]); last.t=t; }
+  else lines.push({t, items:[...byT[t]]});
+}
+out.push('wall LINES (grouped by battlement height): '+lines.length);
+out.push('');
+for(const L of lines.filter(l=>l.items.length>=4).sort((a,b)=>b.items.length-a.items.length).slice(0,4)){
+  const arr=L.items.slice();
+  const horiz = new Set(arr.map(p=>Math.round(p.y-p.h))).size<=3 &&
+                (Math.max(...arr.map(p=>p.x))-Math.min(...arr.map(p=>p.x))) > 200;
+  arr.sort((p,q)=>p.x-q.x);
+  const ts=arr.map(p=>Math.round(p.y-p.h));
+  out.push('line at top y='+Math.min(...ts)+'  ('+arr.length+' pieces)  '+(horiz?'horizontal':'vertical'));
+  out.push('   battlement spread: '+(Math.max(...ts)-Math.min(...ts))+'px   '+((Math.max(...ts)-Math.min(...ts))<=1?'LEVEL':'ragged'));
+  if(horiz){
+    const gaps=[];
+    for(let i=1;i<arr.length;i++){
+      const g=Math.round((arr[i].x-arr[i].w/2)-(arr[i-1].x+arr[i-1].w/2));
+      if(g>4) gaps.push(g+'px');
+    }
+    out.push('   holes >4px along it: '+(gaps.length?gaps.join(', '):'none'));
+  }
+  out.push('');
+}
+// vertical runs
+const byX={};
+for(const w of walls) (byX[Math.round(w.x)] = byX[Math.round(w.x)]||[]).push(w);
+const vruns=Object.entries(byX).filter(([x,a])=>a.length>=4).sort((a,b)=>b[1].length-a[1].length);
+out.push('vertical runs (>=4 pieces sharing an x): '+vruns.length);
+for(const [x,arr] of vruns.slice(0,2)){
+  arr.sort((p,q)=>p.y-q.y);
+  const gaps=[];
+  for(let i=1;i<arr.length;i++){
+    const g=Math.round((arr[i].y-arr[i].h)-arr[i-1].y);
+    if(g>0) gaps.push(g+'px');
+  }
+  out.push('   x='+x+'  '+arr.length+' pieces   vertical gaps: '+(gaps.length?gaps.join(', '):'none'));
+}
+document.getElementById('out').textContent=out.join('\n');
+</script></body></html>

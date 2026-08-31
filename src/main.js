@@ -14,8 +14,10 @@ import { PotionShopScene } from './scenes/potionshop.js';
 import { WeaponShopScene } from './scenes/weaponshop.js';
 import { LibraryScene } from './scenes/library.js';
 import { installDevConsole } from './dev/console.js';
-// Registers any sheet-backed actors. Actors not listed there stay procedural,
-// and the sheets themselves only load if something draws one.
+// Also imported by gfx/actors.js, which is what makes the registry work for the
+// dev harnesses too. Kept here as well because a module body runs once however
+// many times it is imported, and this way the game still populates its actor
+// sprites even if a browser is holding a stale copy of actors.js.
 import './gfx/spriteCatalog.js';
 
 const canvas = document.getElementById('game');

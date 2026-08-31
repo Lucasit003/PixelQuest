@@ -4,7 +4,7 @@
 // player walks in front of the art, a central counter opens the weapon buy
 // menu, and the forge on the left throws off embers for a touch of life.
 
-import { Input } from '../core/input.js';
+import { Input, FACE_DEADZONE } from '../core/input.js';
 import { Audio } from '../core/audio.js';
 import { drawText, textWidth } from '../gfx/font.js';
 import { panel, UI, Toasts } from '../gfx/ui.js';
@@ -38,7 +38,7 @@ export class WeaponShopScene {
     this.overlay = null;
 
     this.room = { x: 40, y: IMG_Y + IMG_H - 62, w: this.W - 80, h: 78 };
-    this.px = this.W / 2; this.py = this.room.y + this.room.h - 14; this.facing = 1;
+    this.px = this.W / 2; this.py = this.room.y + this.room.h - 14; this.facing = 1; this.dir = 'side';
     this.moving = false; this.walkT = 0;
 
     this.spots = [
@@ -69,7 +69,13 @@ export class WeaponShopScene {
     if (this.moving) {
       this._tryMove(ax.x * 78 * dt, 0);
       this._tryMove(0, ax.y * 78 * dt);
-      if (ax.x !== 0) this.facing = ax.x > 0 ? 1 : -1;
+      if (Math.abs(ax.x) > FACE_DEADZONE) this.facing = ax.x > 0 ? 1 : -1;
+      // Which way he is turned relative to the camera. Vertical intent wins over
+      // horizontal so a mostly-up diagonal shows his back rather than his side;
+      // `facing` still carries left/right for the side view. This persists when
+      // he stops, so he keeps facing the way he was walking.
+      this.dir = Math.abs(ax.y) > Math.abs(ax.x)
+        ? (ax.y < 0 ? 'up' : 'down') : 'side';
       this.walkT += dt;
     }
 
@@ -106,7 +112,7 @@ export class WeaponShopScene {
       g.drawImage(INTERIOR_IMG, CROP.x, CROP.y, CROP.w, CROP.h, 0, IMG_Y, IMG_W, IMG_H);
     }
 
-    drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
+    drawCharacter(g, { x: this.px, y: this.py, z: 0, facing: this.facing, dir: this.dir, sprite: this.hero.cls().sprite, weapon: this.hero.weaponSprite(), state: this.moving ? 'walk' : 'idle', animTime: this.moving ? this.walkT : this.t });
 
     this.particles.draw(g);
     this.toasts.draw(g);

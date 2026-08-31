@@ -1,0 +1,372 @@
+{
+  "paladin": {
+    "sheets": [
+      {
+        "src": "assets/actors/_src/paladin_gemini/15_paladin_sheet_16frames.png",
+        "out": "assets/actors/paladin.png",
+        "columns": 6,
+        "cellW": 164,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/paladin_gemini/anim/heavy_side_crush.png",
+        "out": "assets/actors/paladin_crush.png",
+        "columns": 4,
+        "cellW": 264,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/paladin_gemini/anim/heavy_forward.png",
+        "out": "assets/actors/paladin_heavy.png",
+        "columns": 4,
+        "cellW": 240,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/paladin_gemini/anim/shield_brace.png",
+        "out": "assets/actors/paladin_brace.png",
+        "columns": 4,
+        "cellW": 216,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/paladin_gemini/anim/holy_cast.png",
+        "out": "assets/actors/paladin_cast.png",
+        "columns": 4,
+        "cellW": 216,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/paladin_gemini/anim/judgment_slam.png",
+        "out": "assets/actors/paladin_slam.png",
+        "columns": 4,
+        "cellW": 216,
+        "cellH": 219
+      }
+    ],
+    "anchorsOut": "assets/actors/paladin_anchors.json",
+    "anchors": {
+      "idle": {
+        "hand": [
+          [
+            118,
+            170
+          ],
+          [
+            118,
+            171
+          ],
+          [
+            119,
+            172
+          ],
+          [
+            119,
+            171
+          ],
+          [
+            118,
+            170
+          ],
+          [
+            118,
+            170
+          ]
+        ],
+        "shield": [
+          [
+            46,
+            116
+          ],
+          [
+            46,
+            117
+          ],
+          [
+            47,
+            118
+          ],
+          [
+            47,
+            117
+          ],
+          [
+            46,
+            116
+          ],
+          [
+            46,
+            116
+          ]
+        ]
+      },
+      "walk": {
+        "hand": [
+          [
+            114,
+            166
+          ],
+          [
+            116,
+            168
+          ],
+          [
+            118,
+            170
+          ],
+          [
+            116,
+            168
+          ],
+          [
+            114,
+            166
+          ],
+          [
+            113,
+            165
+          ]
+        ],
+        "shield": [
+          [
+            44,
+            112
+          ],
+          [
+            45,
+            114
+          ],
+          [
+            46,
+            116
+          ],
+          [
+            45,
+            114
+          ],
+          [
+            44,
+            112
+          ],
+          [
+            43,
+            111
+          ]
+        ]
+      },
+      "crush": {
+        "hand": [
+          [
+            61,
+            62
+          ],
+          [
+            77,
+            112
+          ],
+          [
+            188,
+            112
+          ],
+          [
+            184,
+            130
+          ]
+        ],
+        "shield": [
+          [
+            98,
+            112
+          ],
+          [
+            90,
+            116
+          ],
+          [
+            82,
+            124
+          ],
+          [
+            92,
+            120
+          ]
+        ]
+      },
+      "grip": {
+        "hammer": [
+          16,
+          67
+        ],
+        "hammerTip": [
+          14,
+          10
+        ],
+        "shield": [
+          25,
+          30
+        ]
+      }
+    }
+  },
+  "rogue": {
+    "sheets": [
+      {
+        "src": "assets/actors/_src/rogue_gemini/anim/combo.png",
+        "out": "assets/actors/rogue_combo.png",
+        "columns": 4,
+        "cellW": 232,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/rogue_gemini/anim/lunge.png",
+        "out": "assets/actors/rogue_lunge.png",
+        "columns": 4,
+        "cellW": 248,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/rogue_gemini/anim/roll.png",
+        "out": "assets/actors/rogue_roll.png",
+        "columns": 4,
+        "cellW": 232,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/rogue_gemini/anim/hurtdown.png",
+        "out": "assets/actors/rogue_hurtdown.png",
+        "columns": 4,
+        "cellW": 248,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/rogue_gemini/anim/throw.png",
+        "out": "assets/actors/rogue_throw.png",
+        "columns": 4,
+        "cellW": 232,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/rogue_gemini/rogue_rig4.png",
+        "out": "assets/actors/rogue.png",
+        "columns": 4,
+        "cellW": 200,
+        "cellH": 219
+      },
+      {
+        "src": "assets/actors/_src/rogue_gemini/anim/walk.png",
+        "out": "assets/actors/rogue_walk.png",
+        "columns": 4,
+        "cellW": 216,
+        "cellH": 219
+      }
+    ],
+    "anchorsOut": "assets/actors/rogue_anchors.json",
+    "anchors": {
+      "combo": {
+        "mainHand": [
+          [
+            78,
+            150
+          ],
+          [
+            150,
+            96
+          ],
+          [
+            196,
+            116
+          ],
+          [
+            200,
+            96
+          ]
+        ],
+        "offHand": [
+          [
+            126,
+            128
+          ],
+          [
+            70,
+            112
+          ],
+          [
+            96,
+            140
+          ],
+          [
+            32,
+            98
+          ]
+        ]
+      },
+      "lunge": {
+        "mainHand": [
+          [
+            112,
+            136
+          ],
+          [
+            150,
+            108
+          ],
+          [
+            206,
+            126
+          ],
+          [
+            140,
+            130
+          ]
+        ],
+        "offHand": [
+          [
+            92,
+            142
+          ],
+          [
+            120,
+            124
+          ],
+          [
+            150,
+            146
+          ],
+          [
+            110,
+            140
+          ]
+        ]
+      },
+      "grip": {
+        "main": [
+          8,
+          56
+        ],
+        "mainTip": [
+          8,
+          2
+        ],
+        "off": [
+          6,
+          40
+        ],
+        "offTip": [
+          4,
+          2
+        ]
+      }
+    }
+  },
+  "warrior": {
+    "sheets": [
+      {
+        "src": "assets/actors/_src/warrior_gemini/warrior_body.png",
+        "out": "assets/actors/warrior.png",
+        "columns": 5,
+        "cellW": 200,
+        "cellH": 219
+      }
+    ]
+  }
+}
