@@ -410,21 +410,24 @@ test('the Warrior sheet matches its catalog entry exactly', () => {
   assert.equal(height % cfg.frameHeight, 0, 'sheet height is not a whole number of frame rows');
 });
 
-// This assertion has now flipped twice, which is the point of keeping it rather
-// than deleting it. It first said 'warrior' must stay UNREGISTERED so the
-// procedural Warrior remained the default; then said the three finished heroes
-// must be registered, once their sheets shipped; and now says none of the seven
-// class ids may be registered, because every hero sheet was cleared for the
-// Spine rebuild. Each flip is a deliberate statement of what the game currently
-// is, and a guard against a half-finished sheet being wired in by accident.
-test('no class id is sheet-backed while the heroes are being rebuilt', () => {
+// This assertion has now flipped three times, which is why it is kept rather
+// than deleted. It first said 'warrior' must stay UNREGISTERED so the
+// procedural Warrior remained the default; then that three finished heroes must
+// be registered; then that NONE may be, while the art was cleared for the
+// rebuild; and now that all seven are. Each flip states what the game currently
+// is, and catches a hero being wired in or dropped by accident.
+test('all seven classes are sheet-backed', () => {
   for (const id of ['warrior', 'mage', 'rogue', 'ranger', 'paladin', 'berserker', 'summoner']) {
-    assert.equal(ACTOR_SPRITES[id], undefined,
-      `${id} must render procedurally until its Spine-driven sheet exists`);
+    const cfg = ACTOR_SPRITES[id];
+    assert.ok(cfg, `${id} should have a sheet`);
+    assert.ok(cfg.animations.idle && cfg.animations.walk,
+      `${id} needs both idle and walk`);
+    assert.equal(cfg.logicalHeight, 26,
+      `${id} must report the gameplay height, not its frame height`);
   }
-  assert.ok(ACTOR_SPRITES.warrior_sprite,
-    'the phase-A look-dev sheet keeps its own id and is unaffected');
+  assert.ok(ACTOR_SPRITES.warrior_sprite, 'the phase-A look-dev sheet keeps its own id');
 });
+
 
 test('the Warrior reports the procedural logical height, not its frame height', () => {
   const cfg = ACTOR_SPRITES.warrior_sprite;

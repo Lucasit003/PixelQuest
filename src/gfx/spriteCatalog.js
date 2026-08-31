@@ -187,3 +187,110 @@ const HERO_SCALE = 1 / ACTOR_ZOOM;
 // With nothing registered under a class id, gfx/actors.js falls straight through
 // to the procedural renderer, which is what every unfinished class already does.
 // Re-register here when the Spine-driven sheets exist.
+
+
+// ---------------------------------------------------------------- heroes
+//
+// All seven classes, from the artist's own model sheets. Each sprite is the
+// "~35-PIXEL GAMEPLAY SPRITE" panel of its sheet, reduced from the 6x display
+// copy back to its native grid -- so the in-game character is the one that was
+// designed for this size, not a 400px illustration crushed down to it.
+//
+// Frames 0-3 are idle (a one-pixel breath), 4-7 are a four-beat walk. Both are
+// composed from the sprite's OWN pixels, moved: the feet alternate a pixel or
+// two and the whole figure lifts on the passing frames. Nothing is redrawn.
+// A 25-degree limb rotation at this size reads as a paper doll; a 2-pixel foot
+// offset reads as walking.
+//
+// scale is 1/ACTOR_ZOOM so the town blits them 1:1 with no resampling.
+
+registerActorSprite('warrior', {
+  sheet: 'assets/actors/warrior.png',
+  frameWidth: 22, frameHeight: 40, columns: 4,
+  anchorX: 11, anchorY: 40,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});
+
+registerActorSprite('mage', {
+  sheet: 'assets/actors/mage.png',
+  frameWidth: 22, frameHeight: 41, columns: 4,
+  anchorX: 11, anchorY: 41,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});
+
+registerActorSprite('rogue', {
+  sheet: 'assets/actors/rogue.png',
+  frameWidth: 22, frameHeight: 41, columns: 4,
+  anchorX: 11, anchorY: 41,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});
+
+registerActorSprite('ranger', {
+  sheet: 'assets/actors/ranger.png',
+  frameWidth: 22, frameHeight: 40, columns: 4,
+  anchorX: 11, anchorY: 40,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});
+
+registerActorSprite('paladin', {
+  sheet: 'assets/actors/paladin.png',
+  frameWidth: 22, frameHeight: 40, columns: 4,
+  anchorX: 11, anchorY: 40,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});
+
+registerActorSprite('berserker', {
+  sheet: 'assets/actors/berserker.png',
+  frameWidth: 23, frameHeight: 40, columns: 4,
+  anchorX: 11, anchorY: 40,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});
+
+registerActorSprite('summoner', {
+  sheet: 'assets/actors/summoner.png',
+  frameWidth: 22, frameHeight: 39, columns: 4,
+  anchorX: 11, anchorY: 39,
+  logicalHeight: 26,
+  scale: HERO_SCALE,
+  shadowRadius: 7,
+  animations: {
+    idle: { frames: [0, 1, 2, 3], fps: 4 },
+    walk: { frames: [4, 5, 6, 7], fps: 10 },
+  },
+});

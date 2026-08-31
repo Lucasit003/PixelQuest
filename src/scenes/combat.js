@@ -12,6 +12,21 @@ import { drawText, textWidth } from '../gfx/font.js';
 import { panel, bar, heading, UI, Toasts } from '../gfx/ui.js';
 import { rect, rectOutline, clamp, clamp01, lerp, disc, shadow } from '../gfx/pixel.js';
 import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
+// The Thorn King's approved artwork, cut from assets/goblinking.png. He is NOT
+// drawn through the actor sprite system: `sprite: 'king'` is a hand-coded pixel
+// grid in actors.js that was only ever a placeholder, and nothing about the
+// approved design survives being squeezed into it. Every pose here shares one
+// character scale taken from the standing figure, so his proportions cannot
+// drift between poses.
+const THORN_ART = {};
+for (const [k, f] of Object.entries({
+  throne:  'assets/actors/thornking_throne.png',
+  p1:      'assets/actors/thornking_p1.png',
+  p2:      'assets/actors/thornking_p2.png',
+  kneel:   'assets/actors/thornking_kneel.png',
+  cleaver: 'assets/actors/thornking_cleaver.png',
+})) { const im = new Image(); im.src = f; THORN_ART[k] = im; }
+
 import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
          drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
 import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
@@ -233,6 +248,16 @@ export class CombatScene {
       b.seated = true;
       b.facing = -1;
       b.state = 'idle';
+    }
+    // §4 recalibration. `w` and `reach` in data.js were sized to the coded
+    // placeholder, which was a fraction of the real King's mass. Set on the
+    // INSTANCE rather than in data.js so the shared enemy table is untouched.
+    // The hitbox tracks his body, not his mantle or the Cleaver — a hurtbox
+    // that includes trailing cloth is a hurtbox that feels wrong to hit.
+    {
+      const b = this.boss;
+      b.w = 34;
+      b.reach = (b.def.reach || 34) + 10;
     }
     this.enemies.push(this.boss);
   }
@@ -1627,7 +1652,38 @@ export class CombatScene {
     }
   }
 
+  // Which approved pose the King is in. One place decides, so the cinematic,
+  // the throne and the fight can never disagree about who he currently is.
+  _thornPose() {
+    const c = this.cine;
+    if (this.phase2) return 'p2';
+    if (c) return c.pose.kneel > 0.5 ? 'kneel' : (c.pose.phase2 > 0.5 ? 'p2' : 'p1');
+    if (this.boss && this.boss.seated) return 'throne';
+    return 'p1';
+  }
+
+  _drawThornKing(g, e) {
+    const img = THORN_ART[this._thornPose()];
+    if (!img || !img.complete || !img.naturalWidth) return false;
+    const x = Math.round(e.x - img.naturalWidth / 2);
+    const y = Math.round(e.depth - (e.z || 0) - img.naturalHeight);
+    if (e.flash > 0) {                       // hit flash, without tinting the art
+      g.drawImage(img, x, y);
+      g.globalAlpha = Math.min(0.7, e.flash);
+      g.globalCompositeOperation = 'lighter';
+      g.drawImage(img, x, y);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+      return true;
+    }
+    g.globalAlpha = e.alpha ?? 1;
+    g.drawImage(img, x, y);
+    g.globalAlpha = 1;
+    return true;
+  }
+
   _drawEnemy(g, e) {
+    if (e.isBoss && e.type === 'goblin_king' && this._drawThornKing(g, e)) return;
     const sc = e.isBoss ? e.scale : e.scale * ACTOR_SCALE;
     drawCharacter(g, {
       x: e.x, y: e.depth, z: e.z, facing: e.facing,
