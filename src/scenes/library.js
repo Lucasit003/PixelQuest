@@ -51,7 +51,7 @@ export class LibraryScene {
     // solids too; this clamp is only a backstop.
     this.room = { x: 10, y: 40, w: 460, h: 220 };
     // spawn just inside the front door, on the mat at the bottom centre
-    this.px = 240; this.py = 238; this.facing = 1; this.dir = 'side';
+    this.px = 240; this.py = 238; this.facing = 1; this.dir = 'down';
     this.moving = false; this.walkT = 0;
 
     this.spots = [

@@ -43,7 +43,7 @@ export class PotionShopScene {
     // walkable area: the lower (floor) part of the backdrop plus the added
     // floor strip beneath it
     this.room = { x: 40, y: IMG_Y + IMG_H - 70, w: this.W - 80, h: 90 };
-    this.px = this.W / 2; this.py = this.room.y + this.room.h - 16; this.facing = 1; this.dir = 'side';
+    this.px = this.W / 2; this.py = this.room.y + this.room.h - 16; this.facing = 1; this.dir = 'down';
     this.moving = false; this.walkT = 0;
 
     this.spots = [

@@ -1947,6 +1947,16 @@ ARENA_IMG.src = 'assets/zone_arena.png';
 const ARENA_W = 575;
 const ARENA_ANCHOR = 920;                  // camX the boss gate parks at
 
+// A slice of the chamber, re-blitted as FOREGROUND. Actors draw over the
+// background, so a figure sitting on the dais sits in front of its own steps
+// and reads as perched on top of them. Painting the step edge back over his
+// legs is what seats him into the structure — same pixels, drawn twice.
+export function drawArenaSlice(g, sx, sy, sw, sh) {
+  if (!ARENA_IMG.complete || !ARENA_IMG.naturalWidth) return;
+  const x0 = ARENA_ANCHOR + 480 - ARENA_W;
+  g.drawImage(ARENA_IMG, sx, sy, sw, sh, x0 + sx, sy, sw, sh);
+}
+
 function drawArena(g, camX, W, H, t, awake) {
   if (!ARENA_IMG.complete || !ARENA_IMG.naturalWidth) {
     rect(g, camX, 0, W, H, '#171a1e');

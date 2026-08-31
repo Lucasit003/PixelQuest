@@ -18,9 +18,13 @@ import { drawCharacter, actorHeight, drawPet } from '../gfx/actors.js';
 // approved design survives being squeezed into it. Every pose here shares one
 // character scale taken from the standing figure, so his proportions cannot
 // drift between poses.
+// The step edge in front of the throne seat, in arena-plate pixels. Tuned so it
+// covers his shins and the foot of the mantle without eating his knees.
+const THRONE_FG = { x: 470, y: 138, w: 105, h: 52 };
+
 const THORN_ART = {};
 for (const [k, f] of Object.entries({
-  throne:  'assets/actors/thornking_throne.png',
+  throne:  'assets/actors/thornking_throne_side.png',
   p1:      'assets/actors/thornking_p1.png',
   p2:      'assets/actors/thornking_p2.png',
   kneel:   'assets/actors/thornking_kneel.png',
@@ -31,7 +35,7 @@ import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
          drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
 import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
-import { drawForestArena } from '../gfx/forestArena.js';
+import { drawForestArena, drawArenaSlice } from '../gfx/forestArena.js';
 import { Particles } from '../gfx/particles.js';
 import { resolveFx, playAbilityFx, CLASS_FX } from '../gfx/abilityFx.js';
 import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
@@ -242,9 +246,12 @@ export class CombatScene {
     // or timers are touched, so a real seated build can replace it cleanly.
     if (this.inArena) {
       const b = this.boss;
-      b.x = 1345;            // the dais, at the top of the steps
-      b.depth = 152;         // as far back as the field allows
-      b.z = 16;              // raised, so he reads as up on the platform
+      // Seated in profile on the top step, facing down the carpet toward the
+      // door — a throne faces its own hall. Tuned against the dais art, not
+      // inherited from the placeholder's box.
+      b.x = 1342;
+      b.depth = 158;
+      b.z = 20;              // sat on the step, not perched above it
       b.seated = true;
       b.facing = -1;
       b.state = 'idle';
@@ -1520,6 +1527,10 @@ export class CombatScene {
     for (const a of actors) {
       if (a === this.p) this._drawPlayer(g);
       else this._drawEnemy(g, a);
+    }
+    // Seat the King INTO the dais: the step edge goes back over his legs.
+    if (this.boss && this.boss.seated && this.inArena) {
+      drawArenaSlice(g, THRONE_FG.x, THRONE_FG.y, THRONE_FG.w, THRONE_FG.h);
     }
 
     // projectiles + drops on top of actors roughly

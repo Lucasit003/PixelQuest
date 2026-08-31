@@ -191,113 +191,124 @@ const HERO_SCALE = 1 / ACTOR_ZOOM;
 
 // ------------------------------------------------------------------ heroes
 //
-// All seven classes, cut from the artist's own model sheets. The source is each
-// hero's full FRONT 3/4 illustration reduced to 68px, not the 35px gameplay
-// sprite -- with the buffer supersampled 2x there is room for the extra detail,
-// and at 35px the characters read as four beige pixels where a face should be.
+// All seven classes, cut from the artist's own model sheets -- each hero's full
+// FRONT, SIDE and BACK illustrations reduced to a common 68px figure height, not
+// the 35px gameplay sprite. With the buffer supersampled 2x there is room for the
+// detail, and at 35px the characters read as four beige pixels where a face
+// should be. One scale factor per hero across all three views, so he does not
+// grow or shrink as he turns.
 //
 // Idle is a SINGLE static frame. A breathing cycle read as an odd little bounce
 // at this size -- the same failure the Warrior's original sheet had, where an
 // idle cycle made him rotate on the spot. A character standing still stands still.
 //
 // The walk is six beats -- contact, lift, pass, twice -- composed from each
-// sprite's own pixels. The legs LIFT rather than splay: in a front view a stride
-// travels toward and away from the camera, so a sideways splay is not a step,
-// and it opens a gap between the legs that the torso encloses. The upper body
-// also sways a pixel toward the planted foot, which is what separates walking
-// from marching on the spot. Verified zero enclosed holes added by any frame.
+// sprite's own pixels, and the upper body leans a pixel toward the planted foot,
+// which is what separates walking from marching on the spot.
 //
-// HERO_WORLD_H is the height they occupy in logical units. 34 was the old size;
-// 1.35x reads as a person rather than a doll against the benches and wells.
+// The two views differ in how a step is made, because the anatomy differs:
+//
+//   front / back   the legs sit side by side, so they are split apart and LIFT.
+//                  They never splay -- a stride here travels toward and away
+//                  from the camera, so sideways is not a step, it is the splits,
+//                  and it opens a gap the torso encloses.
+//   side           the near leg completely occludes the far one (a single opaque
+//                  run on 118 of 119 rows measured below the hip), so there is no
+//                  far leg to cut out. The drawn leg is stamped twice instead,
+//                  offset fore and aft with the rear copy darkened.
+//
+// Clothing is held out of both by a hem test, or a robe would scissor at the
+// knee. Verified zero enclosed holes added by any of the 147 frames.
+//
 const HERO_WORLD_H = 34 * 1.35;
+
+// Each hero sheet packs three views, one per row, 1 idle + 6 walk each:
+//
+//     row 0   frames  0-6    side, mirrored left/right by `facing`
+//     row 1   frames  7-13   up, walking away from the camera
+//     row 2   frames 14-20   down, walking toward it
+//
+// The three are AUTHORED separately -- a back view is its own drawing, not a
+// mirrored profile, and you can flip a profile forever without seeing the back
+// of a head. Every hero packs identically, so the table is built once rather
+// than repeated seven times; it is a function so no two heroes share one object.
+function heroDirs() {
+  return {
+    idle:     { frames: [0], fps: 1 },
+    walk:     { frames: [1, 2, 3, 4, 5, 6], fps: 12 },
+    idleUp:   { frames: [7], fps: 1 },
+    walkUp:   { frames: [8, 9, 10, 11, 12, 13], fps: 12 },
+    idleDown: { frames: [14], fps: 1 },
+    walkDown: { frames: [15, 16, 17, 18, 19, 20], fps: 12 },
+  };
+}
 
 registerActorSprite('warrior', {
   sheet: 'assets/actors/hi/warrior.png',
-  frameWidth: 41, frameHeight: 76, columns: 5,
-  anchorX: 20, anchorY: 76,
+  frameWidth: 46, frameHeight: 80, columns: 7,
+  anchorX: 22, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });
 
 registerActorSprite('mage', {
   sheet: 'assets/actors/hi/mage.png',
-  frameWidth: 40, frameHeight: 76, columns: 5,
-  anchorX: 20, anchorY: 76,
+  frameWidth: 46, frameHeight: 80, columns: 7,
+  anchorX: 22, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });
 
 registerActorSprite('rogue', {
   sheet: 'assets/actors/hi/rogue.png',
-  frameWidth: 39, frameHeight: 76, columns: 5,
-  anchorX: 19, anchorY: 76,
+  frameWidth: 45, frameHeight: 80, columns: 7,
+  anchorX: 21, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });
 
 registerActorSprite('ranger', {
   sheet: 'assets/actors/hi/ranger.png',
-  frameWidth: 39, frameHeight: 76, columns: 5,
-  anchorX: 19, anchorY: 76,
+  frameWidth: 44, frameHeight: 80, columns: 7,
+  anchorX: 22, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });
 
 registerActorSprite('paladin', {
   sheet: 'assets/actors/hi/paladin.png',
-  frameWidth: 41, frameHeight: 76, columns: 5,
-  anchorX: 20, anchorY: 76,
+  frameWidth: 46, frameHeight: 80, columns: 7,
+  anchorX: 22, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });
 
 registerActorSprite('berserker', {
   sheet: 'assets/actors/hi/berserker.png',
-  frameWidth: 41, frameHeight: 76, columns: 5,
-  anchorX: 20, anchorY: 76,
+  frameWidth: 46, frameHeight: 80, columns: 7,
+  anchorX: 22, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });
 
 registerActorSprite('summoner', {
   sheet: 'assets/actors/hi/summoner.png',
-  frameWidth: 40, frameHeight: 76, columns: 5,
-  anchorX: 20, anchorY: 76,
+  frameWidth: 45, frameHeight: 80, columns: 7,
+  anchorX: 22, anchorY: 74,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
   shadowRadius: 8,
-  animations: {
-    idle: { frames: [0], fps: 1 },
-    walk: { frames: [4, 5, 6, 7, 8, 9], fps: 12 },
-  },
+  animations: heroDirs(),
 });

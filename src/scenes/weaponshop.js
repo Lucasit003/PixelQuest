@@ -38,7 +38,7 @@ export class WeaponShopScene {
     this.overlay = null;
 
     this.room = { x: 40, y: IMG_Y + IMG_H - 62, w: this.W - 80, h: 78 };
-    this.px = this.W / 2; this.py = this.room.y + this.room.h - 14; this.facing = 1; this.dir = 'side';
+    this.px = this.W / 2; this.py = this.room.y + this.room.h - 14; this.facing = 1; this.dir = 'down';
     this.moving = false; this.walkT = 0;
 
     this.spots = [

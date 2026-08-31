@@ -56,7 +56,7 @@ export class TownScene {
     this.dialogue = null;
     this.dialogueReveal = 0;
 
-    this.facing = 1; this.dir = 'side'; this.moving = false; this.walkT = 0;
+    this.facing = 1; this.dir = 'down'; this.moving = false; this.walkT = 0;
     this.camX = 0; this.camY = 0;
 
     this.currentDistrict = null;

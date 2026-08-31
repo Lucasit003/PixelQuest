@@ -44,7 +44,7 @@ export class HouseScene {
 
     this.room = { x: 40, y: 60, w: this.W - 80, h: 190 };
     // spawn/exit at the drawn door on the back wall, not the bottom of frame
-    this.px = 242; this.py = 121; this.facing = 1; this.dir = 'side';
+    this.px = 242; this.py = 121; this.facing = 1; this.dir = 'down';
     this.moving = false; this.walkT = 0;
 
     this.spots = [
