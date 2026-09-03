@@ -45,6 +45,7 @@ for (const [k, spec] of Object.entries({
   idle:   { n: 8,  w: 107, cx: 58 },
   walk:   { n: 20, w: 107, cx: 58 },
   attack: { n: 7,  w: 152, cx: 76 },
+  slam:   { n: 5,  w: 126, cx: 66 },
   hurt:   { n: 8,  w: 107, cx: 58 },
   summon: { n: 12, w: 107, cx: 58 },
 })) {
@@ -60,6 +61,10 @@ for (const [k, spec] of Object.entries({
 // the sweep) and the blade has to be across the player on that exact frame,
 // or he takes a hit from a weapon that is still behind the King's head.
 const THORN_SWEEP_T = [0, 0.09, 0.16, 0.22, 0.28, 0.36, 0.46, 0.60];
+// The slam is the heavier of the two and telegraphs longer: he hangs at the top
+// with the cleaver overhead before it comes down. Its damage lands at 0.40, on
+// the frame where the blade is already buried in the floor.
+const THORN_SLAM_T  = [0, 0.12, 0.28, 0.40, 0.56, 0.78];
 
 import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
          drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
