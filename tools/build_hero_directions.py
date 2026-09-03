@@ -194,6 +194,39 @@ def side_stance(a, hip, hem, pad, size, near=(0, 0), far=(0, 0), body_off=(0, 0)
     ], size, pad)
 
 
+def authored_walk(hero, pad, size):
+    """Six drawn walk frames, if they exist, in place of the composed ones.
+
+    The composed profile walk slides each leg as a rigid block -- no knee, no arm
+    swing. That is a shuffle, and no amount of tuning makes a rigid block walk.
+    Where real frames have been drawn for a hero they are used instead, dropped
+    onto the same canvas and origin as everything else so the rest of the sheet
+    does not care where they came from.
+    """
+    path = f'{SRC}/{hero}_walkside.png'
+    if not os.path.isfile(path):
+        return None
+    im = Image.open(path).convert('RGBA')
+    cw = im.size[0] // 6
+    H, W = size
+    out = []
+    for i in range(6):
+        cell = np.array(im.crop((i * cw, 0, (i + 1) * cw, im.size[1])))
+        f = np.zeros((H, W, 4), np.uint8)
+        ys, xs = np.where(cell[:, :, 3] > 0)
+        # bottom-align on the canvas ground line, centre horizontally
+        oy = (pad + 68 - 1) - ys.max()
+        ox = (W - cw) // 2
+        ny, nx = ys + oy, xs + ox
+        ok = (ny >= 0) & (ny < H) & (nx >= 0) & (nx < W)
+        f[ny[ok], nx[ok]] = cell[ys[ok], xs[ok]]
+        # Drawn frames get the same pinhole repair as composed ones -- a
+        # generated figure can enclose a few transparent pixels between an arm
+        # and the body just as readily as a cut-up one can.
+        out.append(fill_notches(f))
+    return out
+
+
 def side_frames(a, hip, hem, pad, size):
     """Profile: stamp the one drawn leg twice, fore and aft."""
     S = STRIDE
@@ -448,8 +481,12 @@ def build(hero):
     for d in ['side', 'up', 'down']:
         a = art[d]
         size = (a.shape[0] + pad * 2, a.shape[1] + pad * 2)
-        rows.append(('view:' + d,
-                     (side_frames if d == 'side' else frontal_frames)(a, hip, hem, pad, size)))
+        fr = (side_frames if d == 'side' else frontal_frames)(a, hip, hem, pad, size)
+        if d == 'side':
+            drawn = authored_walk(hero, pad, size)
+            if drawn:
+                fr = [fr[0]] + drawn        # keep the artist's idle, swap the walk
+        rows.append(('view:' + d, fr))
     a = art['side']
     size = (a.shape[0] + pad * 2, a.shape[1] + pad * 2)
     for name, spec in ACTIONS.items():
