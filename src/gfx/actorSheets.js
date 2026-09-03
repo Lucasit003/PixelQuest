@@ -103,7 +103,7 @@ const DEFS = {
   // a pawing windup loop and the head-down run.
   gob_brute: {
     sheet: 'assets/actors/gob_brute.png',
-    frameW: 94, frameH: 62, anchorX: 32, anchorY: 57,
+    frameW: 106, frameH: 62, anchorX: 32, anchorY: 56,
     scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 26, shadowRadius: 15,
     anims: {
       idle:       { row: 0, frames: 4, fps: 5, loop: true },
