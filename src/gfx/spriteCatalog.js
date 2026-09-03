@@ -234,19 +234,27 @@ const HERO_WORLD_H = 34 * 1.35;
 // than repeated seven times; it is a function so no two heroes share one object.
 function heroDirs() {
   return {
+    // the three walking views
     idle:     { frames: [0], fps: 1 },
     walk:     { frames: [1, 2, 3, 4, 5, 6], fps: 12 },
     idleUp:   { frames: [7], fps: 1 },
     walkUp:   { frames: [8, 9, 10, 11, 12, 13], fps: 12 },
     idleDown: { frames: [14], fps: 1 },
     walkDown: { frames: [15, 16, 17, 18, 19, 20], fps: 12 },
+    // and the combat actions, profile only, each timed to the window combat.js
+    // actually waits for and each holding its last frame rather than looping
+    attack:   { frames: [21, 22, 23, 24, 25], fps: 18, loop: false },
+    heavy:    { frames: [28, 29, 30, 31, 32, 33], fps: 12, loop: false },
+    cast:     { frames: [35, 36, 37, 38, 39], fps: 12, loop: false },
+    hurt:     { frames: [42, 43, 44, 45], fps: 14, loop: false },
+    down:     { frames: [49, 50, 51, 52, 53], fps: 9, loop: false },
   };
 }
 
 registerActorSprite('warrior', {
   sheet: 'assets/actors/hi/warrior.png',
-  frameWidth: 46, frameHeight: 80, columns: 7,
-  anchorX: 22, anchorY: 74,
+  frameWidth: 94, frameHeight: 78, columns: 7,
+  anchorX: 67, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
@@ -256,8 +264,8 @@ registerActorSprite('warrior', {
 
 registerActorSprite('mage', {
   sheet: 'assets/actors/hi/mage.png',
-  frameWidth: 45, frameHeight: 80, columns: 7,
-  anchorX: 22, anchorY: 74,
+  frameWidth: 94, frameHeight: 77, columns: 7,
+  anchorX: 67, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
@@ -267,8 +275,8 @@ registerActorSprite('mage', {
 
 registerActorSprite('rogue', {
   sheet: 'assets/actors/hi/rogue.png',
-  frameWidth: 44, frameHeight: 80, columns: 7,
-  anchorX: 22, anchorY: 74,
+  frameWidth: 95, frameHeight: 77, columns: 7,
+  anchorX: 67, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
@@ -278,8 +286,8 @@ registerActorSprite('rogue', {
 
 registerActorSprite('ranger', {
   sheet: 'assets/actors/hi/ranger.png',
-  frameWidth: 44, frameHeight: 80, columns: 7,
-  anchorX: 21, anchorY: 74,
+  frameWidth: 94, frameHeight: 78, columns: 7,
+  anchorX: 67, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
@@ -289,8 +297,8 @@ registerActorSprite('ranger', {
 
 registerActorSprite('paladin', {
   sheet: 'assets/actors/hi/paladin.png',
-  frameWidth: 46, frameHeight: 80, columns: 7,
-  anchorX: 22, anchorY: 74,
+  frameWidth: 94, frameHeight: 77, columns: 7,
+  anchorX: 68, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
@@ -300,8 +308,8 @@ registerActorSprite('paladin', {
 
 registerActorSprite('berserker', {
   sheet: 'assets/actors/hi/berserker.png',
-  frameWidth: 46, frameHeight: 80, columns: 7,
-  anchorX: 22, anchorY: 74,
+  frameWidth: 95, frameHeight: 77, columns: 7,
+  anchorX: 68, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,
@@ -311,8 +319,8 @@ registerActorSprite('berserker', {
 
 registerActorSprite('summoner', {
   sheet: 'assets/actors/hi/summoner.png',
-  frameWidth: 45, frameHeight: 80, columns: 7,
-  anchorX: 22, anchorY: 74,
+  frameWidth: 94, frameHeight: 77, columns: 7,
+  anchorX: 66, anchorY: 70,
   threeQuarter: true,
   logicalHeight: 26,
   scale: (HERO_WORLD_H / 68) / ACTOR_ZOOM,

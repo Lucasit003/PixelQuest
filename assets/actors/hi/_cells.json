@@ -1,58 +1,359 @@
 {
   "warrior": {
-    "cellW": 46,
-    "cellH": 80,
+    "cellW": 94,
+    "cellH": 78,
     "columns": 7,
-    "anchorX": 22,
-    "anchorY": 74,
-    "hem": 43
+    "rows": 8,
+    "anchorX": 67,
+    "anchorY": 70,
+    "hem": 43,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   },
   "mage": {
-    "cellW": 45,
-    "cellH": 80,
+    "cellW": 94,
+    "cellH": 77,
     "columns": 7,
-    "anchorX": 22,
-    "anchorY": 74,
-    "hem": 51
+    "rows": 8,
+    "anchorX": 67,
+    "anchorY": 70,
+    "hem": 51,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   },
   "rogue": {
-    "cellW": 44,
-    "cellH": 80,
+    "cellW": 95,
+    "cellH": 77,
     "columns": 7,
-    "anchorX": 22,
-    "anchorY": 74,
-    "hem": 44
+    "rows": 8,
+    "anchorX": 67,
+    "anchorY": 70,
+    "hem": 44,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   },
   "ranger": {
-    "cellW": 44,
-    "cellH": 80,
+    "cellW": 94,
+    "cellH": 78,
     "columns": 7,
-    "anchorX": 21,
-    "anchorY": 74,
-    "hem": 43
+    "rows": 8,
+    "anchorX": 67,
+    "anchorY": 70,
+    "hem": 43,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   },
   "paladin": {
-    "cellW": 46,
-    "cellH": 80,
+    "cellW": 94,
+    "cellH": 77,
     "columns": 7,
-    "anchorX": 22,
-    "anchorY": 74,
-    "hem": 53
+    "rows": 8,
+    "anchorX": 68,
+    "anchorY": 70,
+    "hem": 53,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   },
   "berserker": {
-    "cellW": 46,
-    "cellH": 80,
+    "cellW": 95,
+    "cellH": 77,
     "columns": 7,
-    "anchorX": 22,
-    "anchorY": 74,
-    "hem": 46
+    "rows": 8,
+    "anchorX": 68,
+    "anchorY": 70,
+    "hem": 46,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   },
   "summoner": {
-    "cellW": 45,
-    "cellH": 80,
+    "cellW": 94,
+    "cellH": 77,
     "columns": 7,
-    "anchorX": 22,
-    "anchorY": 74,
-    "hem": 48
+    "rows": 8,
+    "anchorX": 66,
+    "anchorY": 70,
+    "hem": 48,
+    "index": {
+      "view:side": {
+        "first": 0,
+        "count": 7,
+        "fps": null
+      },
+      "view:up": {
+        "first": 7,
+        "count": 7,
+        "fps": null
+      },
+      "view:down": {
+        "first": 14,
+        "count": 7,
+        "fps": null
+      },
+      "act:attack": {
+        "first": 21,
+        "count": 5,
+        "fps": 18
+      },
+      "act:heavy": {
+        "first": 28,
+        "count": 6,
+        "fps": 12
+      },
+      "act:cast": {
+        "first": 35,
+        "count": 5,
+        "fps": 12
+      },
+      "act:hurt": {
+        "first": 42,
+        "count": 4,
+        "fps": 14
+      },
+      "act:down": {
+        "first": 49,
+        "count": 5,
+        "fps": 9
+      }
+    }
   }
 }

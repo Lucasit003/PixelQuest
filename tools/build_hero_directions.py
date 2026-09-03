@@ -39,6 +39,7 @@ the garment by its own travel distance, so a leg at full extension still has
 cover overlapping the hem; those hidden rows are painted over and never seen.
 """
 import json
+import math
 import os
 
 import numpy as np
@@ -181,13 +182,21 @@ def frontal_frames(a, hip, hem, pad, size):
             f(0, 0, LIFT, -1), f(-1, 0, LIFT // 2, -1), f(0, 0, 0, 0)]
 
 
+def side_stance(a, hip, hem, pad, size, near=(0, 0), far=(0, 0), body_off=(0, 0)):
+    """One profile pose: far leg, near leg, garment, torso last."""
+    top = max(hip, hem - STRIDE - 1)
+    fwd = SOURCE_FACES
+    return compose(a, [
+        (band(a, top, a.shape[0]), far[0] * fwd, -far[1], FAR),
+        (band(a, top, a.shape[0]), near[0] * fwd, -near[1], 1.0),
+        (band(a, hip, hem), body_off[0], body_off[1], 1.0),
+        (band(a, 0, hip), body_off[0], body_off[1], 1.0),
+    ], size, pad)
+
+
 def side_frames(a, hip, hem, pad, size):
     """Profile: stamp the one drawn leg twice, fore and aft."""
-    top = max(hip, hem - STRIDE - 1)
-    body = band(a, 0, hip)
-    skirt = band(a, hip, hem)
-    legs = band(a, top, a.shape[0])
-    S, fwd = STRIDE, SOURCE_FACES
+    S = STRIDE
 
     # One leg through six beats: heel contact ahead, weight over it, passing
     # under the body, pushing off behind, toe lifting, swinging through raised.
@@ -197,16 +206,189 @@ def side_frames(a, hip, hem, pad, size):
     def f(p):
         nx, nl = cyc[p]
         fx, fl = cyc[(p + 3) % 6]           # far leg, half a cycle behind
-        return compose(a, [
-            (legs, fx * fwd, -fl, FAR),     # far leg, behind and darker
-            (legs, nx * fwd, -nl, 1.0),     # near leg, in front
-            (skirt, 0, bob[p], 1.0),
-            (body, 0, bob[p], 1.0),         # torso last: the hip is covered
-        ], size, pad)
+        return side_stance(a, hip, hem, pad, size,
+                           near=(nx, nl), far=(fx, fl), body_off=(0, bob[p]))
 
-    idle = compose(a, [(legs, 0, 0, 1.0), (skirt, 0, 0, 1.0), (body, 0, 0, 1.0)],
-                   size, pad)
+    idle = side_stance(a, hip, hem, pad, size)
     return [idle] + [f(p) for p in range(6)]
+
+
+# --------------------------------------------------------------- actions
+#
+# Combat never passes a direction, so every fight renders the PROFILE. That is
+# the only view these need.
+#
+# The body cannot be cut up for them. An arm sliced out of a flat profile takes
+# the torso behind it with it, which is the same structural limit that rules out
+# rotating a limb. So the attitude of the whole figure carries the action, and
+# the two primitives below are both whole-frame, seamless by construction:
+#
+#   lean    a horizontal SHEAR. Row by row, an integer offset -- so the pixel
+#           grid survives intact. A true rotation would resample every pixel and
+#           turn crisp pixel art to mush at this size; a shear cannot, because no
+#           pixel ever lands between two others.
+#   crouch  a vertical squash about the feet, for weight dropping and for the
+#           knees going out of a body on its way down.
+#
+# Everything else is a translation, or the leg stance already used for walking.
+# One vocabulary, parameterised -- a heavy swing is the light one with a deeper
+# coil, not a second animation drawn from scratch.
+
+
+def lean(f, k, base):
+    """Shear about the ground line. +k tips the figure the way it faces."""
+    if not k:
+        return f
+    out = np.zeros_like(f)
+    H, W = f.shape[:2]
+    for y in range(H):
+        dx = int(round(k * (base - y))) * SOURCE_FACES
+        if dx == 0:
+            out[y] = f[y]
+        elif dx > 0 and dx < W:
+            out[y, dx:] = f[y, :W - dx]
+        elif dx < 0 and -dx < W:
+            out[y, :W + dx] = f[y, -dx:]
+    return out
+
+
+def crouch(f, s, base):
+    """Squash toward the ground line: s<1 compresses, feet stay put."""
+    if s == 1.0:
+        return f
+    out = np.zeros_like(f)
+    H = f.shape[0]
+    for y in range(H):
+        src = int(round(base - (base - y) / s))
+        if 0 <= src < H:
+            out[y] = f[src]
+    return out
+
+
+def _shear_x(f, k, cy):
+    out = np.zeros_like(f)
+    H, W = f.shape[:2]
+    for y in range(H):
+        dx = int(round(k * (y - cy)))
+        if dx == 0:
+            out[y] = f[y]
+        elif 0 < dx < W:
+            out[y, dx:] = f[y, :W - dx]
+        elif -W < dx < 0:
+            out[y, :W + dx] = f[y, -dx:]
+    return out
+
+
+def _shear_y(f, k, cx):
+    out = np.zeros_like(f)
+    H, W = f.shape[:2]
+    for x in range(W):
+        dy = int(round(k * (x - cx)))
+        if dy == 0:
+            out[:, x] = f[:, x]
+        elif 0 < dy < H:
+            out[dy:, x] = f[:H - dy, x]
+        elif -H < dy < 0:
+            out[:H + dy, x] = f[-dy:, x]
+    return out
+
+
+def rotate(f, deg, cx, cy):
+    """Rotate about a pivot as THREE SHEARS, the Paeth decomposition.
+
+    Death is the one action that needs a real rotation: a body tipping to the
+    ground passes through every angle from upright to flat, and the shear that
+    serves a lean cannot do it -- pushed that far it stops reading as a figure
+    falling over and starts reading as one melting sideways, which is exactly
+    what the first attempt looked like.
+
+    A straight rotation is not an option either, because it resamples: every
+    pixel lands between two others and crisp art turns to mush at 68px. Three
+    successive shears compose to the same rotation while each one only ever
+    moves whole rows or whole columns by whole pixels, so nothing is ever
+    interpolated. At 90 degrees it is exact -- tan(45) is 1 and sin(90) is 1, so
+    the shears are unit shifts.
+    """
+    if not deg:
+        return f
+    t = math.radians(deg)
+    a, b = -math.tan(t / 2), math.sin(t)
+    return _shear_x(_shear_y(_shear_x(f, a, cy), b, cx), a, cy)
+
+
+def shift(f, dx, dy):
+    if not dx and not dy:
+        return f
+    out = np.zeros_like(f)
+    H, W = f.shape[:2]
+    ys, xs = np.where(f[:, :, 3] > 0)
+    ny, nx = ys + dy, xs + dx
+    ok = (ny >= 0) & (ny < H) & (nx >= 0) & (nx < W)
+    out[ny[ok], nx[ok]] = f[ys[ok], xs[ok]]
+    return out
+
+
+# stance = (near leg dx, far leg dx), then lean, shift and squash of the whole
+# figure. Durations are matched to what combat.js actually waits for: attack
+# 0.28s, heavy 0.5s, cast 0.4s, hurt 0.28s; death holds on its last frame.
+ACTIONS = {
+    'attack': dict(fps=18, frames=[
+        # coil back onto the rear foot, then drive the whole body through it
+        ((-1, +1), -0.10, (-1, 0), 1.00),
+        ((-2, +1), -0.16, (-2, 0), 1.00),
+        ((+3, -2), +0.16, (+3, 0), 1.00),
+        ((+3, -2), +0.12, (+2, 0), 1.00),
+        ((+1, -1), +0.04, (+1, 0), 1.00),
+    ]),
+    'heavy': dict(fps=12, frames=[
+        ((-1, +1), -0.06, (-1, 0), 1.00),
+        ((-2, +2), -0.20, (-3, 0), 0.97),
+        ((-3, +2), -0.26, (-3, 0), 0.95),
+        ((+4, -3), +0.22, (+4, 0), 1.00),
+        ((+4, -3), +0.18, (+3, +1), 0.96),   # the weight lands
+        ((+2, -1), +0.06, (+1, 0), 1.00),
+    ]),
+    'cast': dict(fps=12, frames=[
+        ((0, 0), -0.04, (0, 0), 1.00),
+        ((-1, +1), -0.09, (-1, -1), 1.00),   # gather, rising onto the toes
+        ((-1, +1), -0.11, (-1, -2), 1.00),
+        ((+2, -1), +0.12, (+2, 0), 1.00),    # release
+        ((+1, 0), +0.03, (+1, 0), 1.00),
+    ]),
+    'hurt': dict(fps=14, frames=[
+        ((-2, +1), -0.24, (-3, 0), 1.00),    # snapped off the feet
+        ((-2, +1), -0.17, (-3, 0), 1.00),
+        ((-1, 0), -0.08, (-2, 0), 0.97),
+        ((0, 0), -0.02, (-1, 0), 1.00),
+    ]),
+    # Death is the exception: it carries a rotation, because a body goes all the
+    # way to the ground and a lean cannot. The pivot is the feet, so he tips like
+    # a felled tree rather than sliding over. Backwards, away from whatever hit
+    # him. The last frame holds.
+    'down': dict(fps=9, rot=[0, -12, -38, -66, -88], frames=[
+        ((-1, +1), -0.06, (0, +1), 0.95),    # the knees go
+        ((0, +1), 0.00, (0, +1), 0.88),
+        ((+1, 0), 0.00, (0, +1), 1.00),
+        ((+1, 0), 0.00, (0, +1), 1.00),
+        ((+1, 0), 0.00, (0, +1), 1.00),
+    ]),
+}
+
+
+def action_frames(a, hip, hem, pad, size, spec):
+    base = pad + a.shape[0] - 1
+    rots = spec.get('rot') or [0] * len(spec['frames'])
+    out = []
+    for ((near_dx, far_dx), k, (dx, dy), sq), deg in zip(spec['frames'], rots):
+        f = side_stance(a, hip, hem, pad, size,
+                        near=(near_dx, 0), far=(far_dx, 0))
+        f = lean(f, k, base)
+        f = crouch(f, sq, base)
+        if deg:
+            ys, xs = np.where(f[:, :, 3] > 0)
+            f = rotate(f, deg * SOURCE_FACES, float(xs.mean()), float(base))
+        out.append(fill_notches(shift(f, dx * SOURCE_FACES, dy)))
+    return out
 
 
 def baseline(frame):
@@ -245,33 +427,72 @@ def build(hero):
         art[d] = a
     hip = int(next(iter(art.values())).shape[0] * HIP)
     hem = max(hem_row(a, hip) for a in art.values())        # one hem per hero
-    pad = STRIDE + 3
+    # Room to move. A shear throws the head much further than a stride moves a
+    # foot, and a body toppling to horizontal needs its whole HEIGHT in
+    # horizontal room -- pivoting at the feet, the head ends up a figure's length
+    # to one side. Undersize this and the rotation silently clips: the first
+    # attempt lost the top half of every fallen hero, and the only symptom was a
+    # cell that came out suspiciously narrow.
+    fig = next(iter(art.values())).shape[0]
+    pad = max(STRIDE + 3,
+              int(max(abs(k) for spec in ACTIONS.values()
+                      for _, k, _, _ in spec['frames']) * fig) + 4,
+              fig + 6 if any('rot' in spec for spec in ACTIONS.values()) else 0)
 
-    views = {}
-    for d, a in art.items():
+    # Rows: the three walking views, then one per combat action. Actions are
+    # profile-only because combat never passes a direction.
+    # NB the row keys are prefixed. 'down' is BOTH a view (walking toward the
+    # camera) and a combat state (the death collapse); unprefixed they collide,
+    # and the death row silently inherits the walk row's origin.
+    rows = []
+    for d in ['side', 'up', 'down']:
+        a = art[d]
         size = (a.shape[0] + pad * 2, a.shape[1] + pad * 2)
-        views[d] = (side_frames if d == 'side' else frontal_frames)(a, hip, hem, pad, size)
+        rows.append(('view:' + d,
+                     (side_frames if d == 'side' else frontal_frames)(a, hip, hem, pad, size)))
+    a = art['side']
+    size = (a.shape[0] + pad * 2, a.shape[1] + pad * 2)
+    for name, spec in ACTIONS.items():
+        rows.append(('act:' + name, action_frames(a, hip, hem, pad, size, spec)))
 
-    # Register the three views to ONE origin: the foot centre and ground row of
-    # each view's IDLE frame. Every frame of a view gets that view's offset, so
-    # the bob and the lift survive -- re-centring each frame on its own content
-    # would silently cancel the very animation it is meant to carry.
-    order = ['side', 'up', 'down']
-    anch = {d: baseline(views[d][0]) for d in order}
-    left = max(anch[d][0] for d in order)
-    right = max(views[d][0].shape[1] - anch[d][0] for d in order)
-    top = max(anch[d][1] for d in order)
-    bot = max(views[d][0].shape[0] - anch[d][1] for d in order)
-    cw, ch = int(np.ceil(left + right)), int(top + bot)
+    # Register every row to ONE origin: the foot centre and ground row of its own
+    # FIRST frame. Every frame of a row gets that row's offset, so the bob, the
+    # lift and the lunge all survive -- re-centring each frame on its own content
+    # would silently cancel the very motion it is meant to carry.
+    #
+    # The cell is then sized to the real content of every frame, not to the
+    # padded canvas, so a deep lean fits and a light one wastes nothing.
+    anch = {name: baseline(fr[0]) for name, fr in rows}
+    left = right = top = bot = 0
+    for name, frames in rows:
+        ax, ay = anch[name]
+        for f in frames:
+            ys, xs = np.where(f[:, :, 3] > 0)
+            if not len(ys):
+                continue
+            left = max(left, ax - xs.min())
+            right = max(right, xs.max() + 1 - ax)
+            top = max(top, ay - ys.min())
+            bot = max(bot, ys.max() + 1 - ay)
+    cw, ch = int(np.ceil(left + right)), int(np.ceil(top + bot))
 
-    sheet = Image.new('RGBA', (cw * COLS, ch * len(order)), (0, 0, 0, 0))
-    for r, d in enumerate(order):
-        ox, oy = int(round(left - anch[d][0])), int(top - anch[d][1])
-        for c, fr in enumerate(views[d]):
+    sheet = Image.new('RGBA', (cw * COLS, ch * len(rows)), (0, 0, 0, 0))
+    index = {}
+    for r, (name, frames) in enumerate(rows):
+        ax, ay = anch[name]
+        ox, oy = int(round(left - ax)), int(round(top - ay))
+        for c, fr in enumerate(frames):
             sheet.alpha_composite(Image.fromarray(fr), (c * cw + ox, r * ch + oy))
+        # Pad the row out with its own first frame so no cell is ever blank.
+        for c in range(len(frames), COLS):
+            sheet.alpha_composite(Image.fromarray(frames[0]), (c * cw + ox, r * ch + oy))
+        kind, _, plain = name.partition(':')
+        index[name] = {'first': r * COLS, 'count': len(frames),
+                       'fps': ACTIONS[plain]['fps'] if kind == 'act' else None}
     sheet.save(f'{ROOT}/assets/actors/hi/{hero}.png')
-    return {'cellW': cw, 'cellH': ch, 'columns': COLS,
-            'anchorX': int(round(left)), 'anchorY': int(top) + 1, 'hem': hem}
+    return {'cellW': cw, 'cellH': ch, 'columns': COLS, 'rows': len(rows),
+            'anchorX': int(round(left)), 'anchorY': int(round(top)) + 1,
+            'hem': hem, 'index': index}
 
 
 if __name__ == '__main__':
@@ -280,5 +501,5 @@ if __name__ == '__main__':
         m = build(hero)
         meta[hero] = m
         print(f"  {hero:10s} cell {m['cellW']}x{m['cellH']}  "
-              f"anchor ({m['anchorX']},{m['anchorY']})  hem y={m['hem']}")
+              f"{m['rows']} rows  anchor ({m['anchorX']},{m['anchorY']})  hem y={m['hem']}")
     json.dump(meta, open(f'{ROOT}/assets/actors/hi/_cells.json', 'w'), indent=2)

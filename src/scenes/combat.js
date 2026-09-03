@@ -37,6 +37,7 @@ import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
 import { drawIcon, drawPineTree, drawBush, drawTorch, drawStoneFloor, drawRock } from '../gfx/props.js';
 import { drawForestArena, drawArenaSlice } from '../gfx/forestArena.js';
 import { Particles } from '../gfx/particles.js';
+import { Cutscene } from '../gfx/cutscene.js';
 import { resolveFx, playAbilityFx, CLASS_FX } from '../gfx/abilityFx.js';
 import { rand, randInt, chance, pick, weighted } from '../core/rng.js';
 import {
@@ -121,6 +122,7 @@ export class CombatScene {
     this.activeTip = null; this.activeTipT = 0;
     this.awaitingArena = false; this.arenaPrompt = false; this.inArena = false;
     this.cine = null; this.phase2 = false;
+    this.cut = null;
     this.waveNum = 0; this.waveTotal = 0;
     this.clearFlash = 0;
 
@@ -278,6 +280,14 @@ export class CombatScene {
     // Cinematic owns the frame: player input, enemy AI, spawns, timers and the
     // combat sim are all simply not run. Nothing is disabled flag-by-flag,
     // because a flag someone forgets is a boss that attacks during a cutscene.
+    // The opening cutscene freezes everything the same way the phase-2 one
+    // does: no input, no AI, no timers. Skippable on any of the confirm keys.
+    if (this.cut) {
+      this.cut.update(dt);
+      if (Input.anyPressed('confirm', 'menu', 'interact')) this.cut.skip();
+      if (this.cut.done) this._endArenaCutscene();
+      return;
+    }
     if (this.cine) {
       this.cine.update(dt);
       if (this.cine.shakeReq) this.game.addShake(this.cine.shakeReq);
@@ -406,6 +416,28 @@ export class CombatScene {
     // boss walk in from the far side as he already does.
     if (this.p) { this.p.x = this.camX + 96; this.p.depth = 210; }
     this._spawnGate(this.currentGate);
+    // The pre-rendered rise plays as he is found on his throne. The boss is
+    // spawned FIRST and simply held seated behind it, so if the video fails to
+    // load or is skipped the fight is already staged correctly underneath —
+    // the cutscene is a curtain, not a step in the setup.
+    this.cut = new Cutscene('assets/cutscenes/throne_rise.mp4');
+    this.cut.start();
+    this.message = null; this.messageT = 0; this.messageSub = null;
+    this.tutorialBox = null; this.tips = []; this.activeTip = null;
+  }
+
+  // Ends the opening cutscene and leaves him standing, exactly as the video
+  // leaves him. One place decides, so the skipped and played paths agree.
+  _endArenaCutscene() {
+    if (this.cut) { this.cut.dispose(); this.cut = null; }
+    const b = this.boss;
+    if (b) {
+      b.seated = false;
+      b.z = 0;
+      b.riseT = 0;
+      b.attackTimer = 1.0;          // a beat before he moves
+    }
+    this.bossIntroT = 0.01;         // let the title and roar land immediately
   }
 
   // ------------------------------------------------------------- player
@@ -1809,6 +1841,18 @@ export class CombatScene {
   // -------------------------------------------------------------- HUD
 
   _drawHUD(g) {
+    // The opening cutscene is the whole frame: drawn here, in screen space,
+    // after the world transform is undone, and nothing else is drawn over it.
+    if (this.cut) {
+      this.cut.draw(g, this.W, this.H);
+      if (this.cut.canSkip && this.cut.t > 1.2) {
+        g.globalAlpha = 0.45;
+        drawText(g, 'ENTER  SKIP', this.W - 10, this.H - 12, { color: '#9a9184', align: 'right' });
+        g.globalAlpha = 1;
+      }
+      return;
+    }
+
     // gold flash on area-clear
     if (this.clearFlash > 0) {
       g.globalAlpha = this.clearFlash * 0.18; g.fillStyle = '#f2c94f'; g.fillRect(0, 0, this.W, this.H); g.globalAlpha = 1;

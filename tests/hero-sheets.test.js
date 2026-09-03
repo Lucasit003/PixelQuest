@@ -28,8 +28,11 @@ function pngSize(path) {
 
 const HEROES = ['warrior', 'mage', 'rogue', 'ranger', 'paladin', 'berserker', 'summoner'];
 
-// The four-direction layout: one row per view, 1 idle + 6 walk in each.
+// Sheet layout: three walking views (1 idle + 6 walk each), then one row per
+// combat action. Actions are profile-only, because combat never passes a `dir`.
 const DIRECTIONS = ['side', 'up', 'down'];
+const ACTIONS = ['attack', 'heavy', 'cast', 'hurt', 'down'];
+const ROWS = DIRECTIONS.length + ACTIONS.length;
 const PER_ROW = 7;
 
 async function catalog() {
@@ -48,9 +51,9 @@ test('every hero sheet matches the geometry its catalog entry declares', async (
     assert.equal(w, cfg.frameWidth * cfg.columns,
       `${id}: sheet is ${w}px wide but the catalog claims ` +
       `${cfg.columns} columns of ${cfg.frameWidth}px`);
-    assert.equal(h, cfg.frameHeight * DIRECTIONS.length,
+    assert.equal(h, cfg.frameHeight * ROWS,
       `${id}: sheet is ${h}px tall but the catalog claims ` +
-      `${DIRECTIONS.length} rows of ${cfg.frameHeight}px`);
+      `${ROWS} rows of ${cfg.frameHeight}px`);
   }
 });
 
@@ -66,6 +69,27 @@ test('every frame a hero animation asks for exists on its sheet', async () => {
         assert.ok(Number.isInteger(f) && f >= 0 && f < total,
           `${id}.${name} asks for frame ${f}, but the sheet holds ${total}`);
       }
+    }
+  }
+});
+
+test('every hero can act in combat, not just stand there', async () => {
+  const sprites = await catalog();
+  for (const id of HEROES) {
+    const cfg = sprites[id];
+    for (const state of ACTIONS) {
+      const anim = cfg.animations[state];
+      // Without its own art a state falls back through STATE_FALLBACK to the
+      // single-frame idle and the hero freezes mid-fight -- silently, since a
+      // fallback is a feature rather than an error. That was the state of every
+      // hero before these rows existed: attack, heavy, cast, hurt and death all
+      // resolved to one static frame.
+      assert.ok(anim, `${id} has no ${state} animation`);
+      assert.ok(anim.frames.length > 1,
+        `${id}.${state} has ${anim.frames.length} frame(s) -- it would look frozen`);
+      // One-shots, not loops: combat holds the state for a fixed window and the
+      // pose should settle, not restart partway through.
+      assert.equal(anim.loop, false, `${id}.${state} should not loop`);
     }
   }
 });
@@ -89,13 +113,15 @@ test('every hero carries its own art for walking toward and away', async () => {
     assert.equal(sprites[id].threeQuarter, true,
       `${id} does not declare threeQuarter, so its 3/4 views will not mirror`);
 
-    // The three views must not overlap: each frame belongs to exactly one.
+    // No two animations may share a frame. They live in separate rows, so an
+    // overlap means an index went stale -- and a stale index does not error, it
+    // just plays somebody else's pose.
     const seen = new Set();
+    let total = 0;
     for (const anim of Object.values(anims)) {
       for (const f of anim.frames) seen.add(f);
+      total += anim.frames.length;
     }
-    assert.equal(seen.size, DIRECTIONS.length * PER_ROW,
-      `${id} reaches ${seen.size} distinct frames, expected ` +
-      `${DIRECTIONS.length * PER_ROW}`);
+    assert.equal(seen.size, total, `${id} has animations sharing frames`);
   }
 });
