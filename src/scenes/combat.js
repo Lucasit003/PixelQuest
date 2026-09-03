@@ -35,13 +35,31 @@ for (const [k, f] of Object.entries({
 // so he is the same character standing still, walking and swinging. Each strip
 // is a row of frames; FRAME_W/H and the ground line inside them are fixed, so
 // placing him is just "put the ground line on his feet".
-const THORN_FRAME_W = 107, THORN_FRAME_H = 148, THORN_GROUND = 121;
+const THORN_FRAME_H = 148, THORN_GROUND = 121;
+// Frame width and body centre are PER STRIP. The swings were drawn rather than
+// rigged, and a cleaver arc sweeps far outside the body, so those strips carry
+// a wider frame than the standing ones — `cx` is where his feet are inside it,
+// which is all the draw needs to line every strip up on the same spot.
 const THORN_ANIM = {};
-for (const [k, n] of Object.entries({ idle: 8, walk: 20, attack: 14, hurt: 8, summon: 12 })) {
+for (const [k, spec] of Object.entries({
+  idle:   { n: 8,  w: 107, cx: 58 },
+  walk:   { n: 20, w: 107, cx: 58 },
+  attack: { n: 7,  w: 152, cx: 76 },
+  hurt:   { n: 8,  w: 107, cx: 58 },
+  summon: { n: 12, w: 107, cx: 58 },
+})) {
   const im = new Image();
   im.src = `assets/actors/thornking_${k}.png`;
-  THORN_ANIM[k] = { img: im, n };
+  THORN_ANIM[k] = { img: im, ...spec };
 }
+
+// When each drawn frame is on screen, in seconds from the swing committing.
+// These are not evenly spaced on purpose: the blade hangs at the top of the
+// arc, snaps through the strike and settles out of it. The entry that matters
+// is the CONTACT frame — the boss lands its damage at a fixed delay (0.28 for
+// the sweep) and the blade has to be across the player on that exact frame,
+// or he takes a hit from a weapon that is still behind the King's head.
+const THORN_SWEEP_T = [0, 0.09, 0.16, 0.22, 0.28, 0.36, 0.46, 0.60];
 
 import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
          drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
@@ -309,7 +327,7 @@ export class CombatScene {
     }
     this._updateBossIntro(dt);
     this._updateBossRise(dt);
-    this._updateBossSummonPose(dt);
+    this._updateBossPose(dt);
     this._updateArenaGate();
 
     // pause toggle takes priority so you can always unpause
@@ -1542,9 +1560,28 @@ export class CombatScene {
 
   // Brings him off the platform over riseT. Purely the z drop — his own walk AI
   // carries him the rest of the way, so nothing here has to know about the fight.
-  _updateBossSummonPose(dt) {
+  // Rendering-only pose clocks for the King. Two things make a swing impossible
+  // to animate straight off `state`: the boss rewrites that field every frame,
+  // so 'attack' and 'heavy' each exist for exactly ONE — read it directly and a
+  // swing gets a single frame before dropping back to idle — and a hit landing
+  // mid-swing zeroes `animTime`, which would restart the arc from the top while
+  // the damage timer carried on. So a commit is latched here and the animation
+  // runs its own clock. Nothing in here feeds a decision: cooldown, windup,
+  // reach and damage are all untouched.
+  _updateBossPose(dt) {
     const b = this.boss;
-    if (b && b._summoning > 0) b._summoning = Math.max(0, b._summoning - dt);
+    if (!b) return;
+    if (b._summoning > 0) b._summoning = Math.max(0, b._summoning - dt);
+    if (b.state === 'attack' || b.state === 'heavy') {
+      // These states are only ever assigned at the moment of commit, so seeing
+      // one is always the start of a new swing.
+      b._swingKind = b.state === 'heavy' ? 'slam' : 'attack';
+      b._swingT = 0;
+    } else if (b._swingKind) {
+      b._swingT = (b._swingT || 0) + dt;
+      const T = b._swingKind === 'slam' ? THORN_SLAM_T : THORN_SWEEP_T;
+      if (b._swingT >= T[T.length - 1]) { b._swingKind = null; b._swingT = 0; }
+    }
   }
 
   _updateBossRise(dt) {
@@ -1727,15 +1764,21 @@ export class CombatScene {
   // Which strip and which frame. The state comes from the AI — nothing here
   // drives behaviour, it only makes the behaviour visible.
   _thornAnim(e) {
-    if (e.state === 'attack') {
-      // Played through ONCE per swing rather than looped, and keyed to the same
-      // clock the engine already uses for the windup — so the coil reads as the
-      // telegraph it actually is, instead of a pose that happens to be showing.
-      const d = e.tuning?.attackAnim ?? 0.55;
-      return { key: 'attack', u: Math.min(0.999, (e.animTime || 0) / d), loop: false };
+    // A committed swing owns the King until it finishes, and steps through an
+    // explicit time table rather than a linear sweep of the strip, so the blade
+    // hangs at the top of the arc and snaps through the strike. It also outranks
+    // being hit: the damage still lands whether or not he flinches, and letting
+    // a flinch cut the arc means his swings mostly never finish once the player
+    // is attacking at speed. The white flash already reads as the hit.
+    if (e._swingKind) {
+      const T = e._swingKind === 'slam' ? THORN_SLAM_T : THORN_SWEEP_T;
+      const t = e._swingT || 0;
+      let i = 0;
+      while (i < T.length - 2 && t >= T[i + 1]) i++;
+      return { key: e._swingKind, i };
     }
-    if (e.state === 'hurt') {
-      return { key: 'hurt', u: Math.min(0.999, (e.animTime || 0) / 0.34), loop: false };
+    if (e.hurtTimer > 0) {
+      return { key: 'hurt', u: clamp01(1 - e.hurtTimer / 0.2), loop: false };
     }
     if (e._summoning > 0) {
       return { key: 'summon', u: 1 - Math.min(1, e._summoning / 0.9), loop: false };
@@ -1769,30 +1812,32 @@ export class CombatScene {
     const a = this._thornAnim(e);
     const set = THORN_ANIM[a.key];
     if (!set || !set.img.complete || !set.img.naturalWidth) return false;
-    const i = Math.min(set.n - 1, Math.max(0, Math.floor(a.u * set.n)));
-    const sx = i * THORN_FRAME_W;
-    const dx = Math.round(e.x - 58);
+    const i = a.i !== undefined
+      ? Math.min(set.n - 1, Math.max(0, a.i))
+      : Math.min(set.n - 1, Math.max(0, Math.floor(a.u * set.n)));
+    const sx = i * set.w;
+    const dx = Math.round(e.x - set.cx);
     const dy = Math.round(e.depth - (e.z || 0) - THORN_GROUND);
     const flip = e.facing > 0;
     g.save();
     if (flip) { g.translate(Math.round(e.x) * 2, 0); g.scale(-1, 1); }
     g.globalAlpha = e.alpha ?? 1;
-    g.drawImage(set.img, sx, 0, THORN_FRAME_W, THORN_FRAME_H,
-                dx, dy, THORN_FRAME_W, THORN_FRAME_H);
+    g.drawImage(set.img, sx, 0, set.w, THORN_FRAME_H,
+                dx, dy, set.w, THORN_FRAME_H);
     // Phase 2 is the same performance seen through the thorn light, so he keeps
     // every animation instead of reverting to a single static plate.
     if (this.phase2) {
       g.globalCompositeOperation = 'lighter';
       g.globalAlpha = 0.20;
-      g.drawImage(set.img, sx, 0, THORN_FRAME_W, THORN_FRAME_H,
-                  dx, dy, THORN_FRAME_W, THORN_FRAME_H);
+      g.drawImage(set.img, sx, 0, set.w, THORN_FRAME_H,
+                  dx, dy, set.w, THORN_FRAME_H);
       g.globalCompositeOperation = 'source-over';
     }
     if (e.flash > 0) {
       g.globalAlpha = Math.min(0.7, e.flash);
       g.globalCompositeOperation = 'lighter';
-      g.drawImage(set.img, sx, 0, THORN_FRAME_W, THORN_FRAME_H,
-                  dx, dy, THORN_FRAME_W, THORN_FRAME_H);
+      g.drawImage(set.img, sx, 0, set.w, THORN_FRAME_H,
+                  dx, dy, set.w, THORN_FRAME_H);
       g.globalCompositeOperation = 'source-over';
     }
     g.globalAlpha = 1;
