@@ -62,6 +62,52 @@ export const ENEMY_BEHAVIORS = {
 
   // Backs off when crowded, closes when too far, and shoots from the gap it
   // keeps. Bone Archers.
+  // Lobs an arcing bomb at the player's ground position. A bomber RETREATS,
+  // it does not kite: pressed too close it stops throwing entirely and
+  // scrambles for room, which is the player's opening.
+  lobber: {
+    requires: ['speed', 'attack', 'attackCd', 'bombRadius', 'lobFlight'],
+    defaults: {
+      // throwMin - 12 (the throw floor) meets panic exactly: the moment he
+      // has scrambled to safety he is allowed to throw again, no dead zone
+      panic: 62, throwMin: 74, throwMax: 185, approachRate: 0.7,
+      depthChase: 0.45, fleeRate: 1.2, fireArc: 70,
+    },
+    update(e, c) {
+      const t = e.tuning;
+      const spd = e.def.speed;
+      // a heave in progress releases the bomb on its own beat
+      if (e._lob !== undefined) {
+        e._lob -= c.dt;
+        if (e._lob <= 0) { c.lob(e); e._lob = undefined; }
+      }
+      e.attackAnimT = Math.max(0, (e.attackAnimT || 0) - c.dt);
+      if (e.attackAnimT > 0) { e.state = 'attack'; return; } // planted mid-heave
+
+      if (c.dist < t.panic) {
+        e.x -= e.facing * spd * t.fleeRate * c.dt;
+        e.depth += Math.sign(-c.ddepth || 1) * spd * 0.3 * c.dt;
+        e.depth = c.clampDepth(e.depth);
+        e.state = 'walk';
+        return; // no bombs while scrambling
+      }
+      if (c.dist > t.throwMax) {
+        e.x += e.facing * spd * t.approachRate * c.dt;
+        e.state = 'walk';
+      } else e.state = 'idle';
+      e.depth += Math.sign(c.ddepth) * Math.min(Math.abs(c.ddepth), spd * t.depthChase * c.dt);
+      e.depth = c.clampDepth(e.depth);
+
+      if (e.attackTimer <= 0 && c.dist >= t.throwMin - 12 && Math.abs(c.ddepth) < t.fireArc) {
+        e.attackTimer = e.def.attackCd;
+        e.state = 'attack'; e.animTime = 0;
+        e.attackAnimT = e.def.attackAnim ?? 0;
+        if (e.def.shootDelay) e._lob = e.def.shootDelay;
+        else c.lob(e);
+      }
+    },
+  },
+
   ranged: {
     requires: ['speed', 'attack', 'attackCd', 'projSpeed'],
     defaults: {

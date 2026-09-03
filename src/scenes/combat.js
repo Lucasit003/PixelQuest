@@ -117,6 +117,7 @@ export class CombatScene {
       clampDepth: (d) => clamp(d, DEPTH_MIN, DEPTH_MAX),
       tryMelee: (e) => this._enemyTryMelee(e, this._aiContext.dt),
       shoot: (e) => this._enemyShoot(e),
+      lob: (e) => this._enemyLob(e),
     };
 
     // Gate progression: each gate spawns a wave; clearing it scrolls the camera.
@@ -765,6 +766,46 @@ export class CombatScene {
     });
   }
 
+  _enemyLob(e) {
+    // An arcing bomb thrown at the GROUND, not the player: it commits to where
+    // the player is standing at release, and the landing circle warns for the
+    // whole flight plus the fuse. Standing still is what gets you hit.
+    const p = this.p;
+    const def = e.def;
+    const tx = p.x + rand(-6, 6);
+    const tdepth = this._aiContext.clampDepth(p.depth + rand(-5, 5));
+    const T = def.lobFlight ?? 0.85;
+    const fuse = def.bombFuse ?? 0.45;
+    this.telegraphs.push({
+      shape: 'circle', x: tx, y: tdepth, r: def.bombRadius ?? 20,
+      t: 0, ttl: T + fuse,
+    });
+    this.projectiles.push({
+      lob: true, shape: 'bomb',
+      sx: e.x + e.facing * (def.projFwd ?? 6), sdepth: e.depth,
+      z0: def.projZ ?? 16,
+      tx, tdepth, T, fuse, t: 0, apex: def.lobApex ?? 46,
+      x: e.x, depth: e.depth, z: def.projZ ?? 16, r: def.bombRadius ?? 20,
+      dmg: def.attack, owner: 'enemy', color: '#f2b04a', hit: new Set(),
+      life: T + fuse + 0.2,
+    });
+  }
+
+  _explodeBomb(pr) {
+    const p = this.p;
+    this.game.addShake(4);
+    Audio.heavyHit();
+    this.particles.spawn({ x: pr.tx, y: pr.tdepth, kind: 'ring', maxR: pr.r + 4, color: '#ffd76a', life: 0.3 });
+    this.particles.hitSpark(pr.tx, pr.tdepth, 1, '#f2942b', 10);
+    this.particles.hitSpark(pr.tx, pr.tdepth, -1, '#e0483c', 8);
+    this.particles.dust(pr.tx, pr.tdepth, 8);
+    // ground-circle blast, depth squashed the same way the telegraph is drawn
+    const dx = p.x - pr.tx, dd = (p.depth - pr.tdepth) / 0.7;
+    if (Math.hypot(dx, dd) <= pr.r + 4 && p.z < 26) {
+      this._hurtPlayer(pr.dmg, Math.sign(dx) || 1);
+    }
+  }
+
   _updateBoss(b, dt) {
     const p = this.p;
     const def = b.def;
@@ -858,6 +899,29 @@ export class CombatScene {
     const p = this.p;
     for (const pr of this.projectiles) {
       pr.life -= dt;
+      if (pr.lob) {
+        // parametric arc to the committed landing point, then a grounded fuse
+        pr.t += dt;
+        const u = Math.min(1, pr.t / pr.T);
+        pr.x = pr.sx + (pr.tx - pr.sx) * u;
+        pr.depth = pr.sdepth + (pr.tdepth - pr.sdepth) * u;
+        pr.z = u >= 1 ? 0 : pr.z0 * (1 - u) + pr.apex * 4 * u * (1 - u);
+        if (pr.t >= pr.T && !pr._landed) {
+          pr._landed = true;
+          this.particles.dust(pr.tx, pr.tdepth, 4);
+        }
+        if (pr.t >= pr.T + pr.fuse) {
+          this._explodeBomb(pr);
+          pr.life = 0;
+        }
+        // fuse sparks the whole way, in flight and on the ground
+        pr.trailT = (pr.trailT || 0) + dt;
+        if (pr.trailT > 0.05) {
+          pr.trailT = 0;
+          this.particles.spawn({ x: pr.x + 2, y: pr.depth - pr.z - 4, kind: 'ember', color: pr.color, vx: 0, vy: 0, life: 0.2, size: 1 });
+        }
+        continue; // no contact damage: only the blast hurts
+      }
       pr.x += pr.vx * dt;
       if (pr.vdepth) pr.depth += pr.vdepth * dt;
       pr.trailT = (pr.trailT || 0) + dt;
@@ -1220,6 +1284,17 @@ export class CombatScene {
   _drawProjectiles(g) {
     for (const pr of this.projectiles) {
       const y = pr.depth - pr.z;
+      if (pr.shape === 'bomb') {
+        // ground shadow tracks under the arc so the landing point reads
+        g.globalAlpha = 0.25;
+        disc(g, pr.x, pr.depth, Math.max(2, 4 - pr.z * 0.04), '#000000');
+        g.globalAlpha = 1;
+        disc(g, pr.x, y - 3, 3, '#23242a');
+        disc(g, pr.x - 1, y - 4, 1, '#4a4e58');
+        const flick = (Math.floor(pr.t * 24) % 2) ? '#ffd76a' : '#f2942b';
+        disc(g, pr.x + 2, y - 7, 1, flick);
+        continue;
+      }
       if (pr.shape === 'arrow') {
         // A physical arrow drawn along its flight: wood shaft, steel head at
         // the leading end, red fletching at the tail.

@@ -81,7 +81,21 @@ const DEFS = {
   // sheets for stage 1: the pose IS the sprite, motion comes from the
   // engine (positions, knockback, flash) until each unit's action poses
   // are baked in as extra frames in its own rollout stage.
-  gob_bomber:    still('assets/actors/gob_bomber.png', 28, 34, 17, 9),
+  // The bomber fights from his own Spine rig (tools/spine/bomber): a full
+  // windup-and-heave throw whose bomb leaves the hand on the release beat,
+  // and a crumpling collapse instead of the roster's rigid topple.
+  gob_bomber: {
+    sheet: 'assets/actors/gob_bomber.png',
+    frameW: 30, frameH: 36, anchorX: 13, anchorY: 35,
+    scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 17, shadowRadius: 9,
+    anims: {
+      idle:   { row: 0, frames: 4, fps: 5, loop: true },
+      walk:   { row: 1, frames: 4, fps: 6, loop: true },
+      attack: { row: 2, frames: 6, fps: 7, loop: false },
+      hurt:   { row: 3, frames: 1, fps: 10, loop: false },
+      down:   { row: 4, frames: 4, fps: 8, loop: false },
+    },
+  },
   gob_trapper:   still('assets/actors/gob_trapper.png', 30, 35, 17, 9),
   gob_shaman:    still('assets/actors/gob_shaman.png', 29, 36, 18, 9),
   gob_brute:     still('assets/actors/gob_brute.png', 55, 55, 26, 17),

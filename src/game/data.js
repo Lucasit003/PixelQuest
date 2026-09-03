@@ -646,9 +646,12 @@ export const ENEMIES = {
   // (bomber arcs, hound circling, shaman support, captain command) arrive
   // per-enemy in later stages without touching these identities.
   gob_bomber: {
-    name: 'Goblin Bomber', sprite: 'gob_bomber', hp: 18, attack: 8, speed: 38,
-    defense: 0, reach: 150, gold: [4, 8], xp: 7, behavior: 'ranged',
-    attackCd: 2.4, w: 12, projectile: true, projSpeed: 95,
+    name: 'Goblin Bomber', sprite: 'gob_bomber', hp: 18, attack: 12, speed: 38,
+    defense: 0, reach: 150, gold: [4, 8], xp: 7, behavior: 'lobber',
+    attackCd: 3.4, w: 12,
+    // the bomb: arc time, grounded fuse, blast circle, throw animation beats
+    bombRadius: 20, lobFlight: 0.85, bombFuse: 0.45, lobApex: 46,
+    attackAnim: 0.9, shootDelay: 0.5, projFwd: 12, projZ: 20,
     bloodColor: '#3f7a3f',
   },
   gob_trapper: {
