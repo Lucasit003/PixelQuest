@@ -754,6 +754,11 @@ export class CombatScene {
 
   _enemyHitPlayer(e) {
     const p = this.p;
+    // heavy swingers get a slash arc on the strike beat, hit or miss
+    if (e.def.slashFx) {
+      this.particles.spawn({ kind: 'slash', x: e.x + e.facing * 12, y: e.depth - 14,
+        dir: e.facing, r: 10, color: '#e8e0d0', life: 0.22 });
+    }
     if (Math.abs(p.x - e.x) <= e.def.reach + 6 && Math.abs(p.depth - e.depth) < 20 && p.z < 20) {
       this._hurtPlayer(e.def.attack, e.facing);
     }

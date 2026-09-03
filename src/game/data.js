@@ -671,7 +671,7 @@ export const ENEMIES = {
     attackCd: 2.6, w: 22, telegraph: 'arc',
     // sweep hit rides the animation's strike beat; slam and charge come
     // from the brute archetype's own state machine
-    windup: 0.48, attackAnim: 1.0,
+    windup: 0.48, attackAnim: 1.0, slashFx: true,
     bloodColor: '#3f7a3f',
   },
   war_hound: {

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>relay</title></head>
+<body style="background:#223;color:#dde;font-family:monospace">
+<div id=s>relay: waiting for opener…</div>
+<script>
+const say = (m) => { document.getElementById('s').textContent = 'relay: ' + m; };
+window.addEventListener('message', async (ev) => {
+  try {
+    const { name, buf } = ev.data || {};
+    if (!buf) { say('message without buffer'); return; }
+    say('got ' + buf.byteLength + ' bytes, posting…');
+    const r = await fetch('/shot?name=' + encodeURIComponent(name || 'gemini.png'), {
+      method: 'POST', body: buf,
+    });
+    say('posted: ' + r.status);
+    if (window.opener) window.opener.postMessage({ relayDone: true }, '*');
+  } catch (e) { say('error ' + e); }
+});
+if (window.opener) window.opener.postMessage({ relayReady: true }, '*');
+</script></body></html>
