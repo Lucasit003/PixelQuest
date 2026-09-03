@@ -467,9 +467,13 @@ export class ClassSelectScene {
       g.globalAlpha = 0.3; disc(g, sx, sy + 2, 20, cls.color); g.globalAlpha = 1;
       // drawCharacter, not drawActor: it routes a class whose sprite id is
       // registered in gfx/spriteCatalog.js to its sheet and falls straight back
-      // to the procedural renderer for every id that is not. Paladin and Rogue
-      // are registered; the other five still draw exactly as before.
-      drawCharacter(g, { x: sx, y: sy, facing: 1, sprite: cls.sprite, weapon: cls.weapon, state: 'idle', animTime: this.t + i, scale: 1.6 });
+      // to the procedural renderer for every id that is not.
+      //
+      // `dir: 'down'` picks the three-quarter FRONT view. Without it the card
+      // falls through to the un-suffixed animation, which is the side art, and
+      // the roster introduces every class in profile -- a row of people looking
+      // away from you while you pick one.
+      drawCharacter(g, { x: sx, y: sy, facing: 1, dir: 'down', sprite: cls.sprite, weapon: cls.weapon, state: 'idle', animTime: this.t + i, scale: 1.6 });
 
       rect(g, cx + 8, cy + 92, cardW - 16, 9, UI.frameDark);
       drawText(g, 'RESOURCE: ' + cls.resource.toUpperCase(), cx + 12, cy + 93, { color: cls.resourceColor });

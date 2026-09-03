@@ -31,6 +31,18 @@ for (const [k, f] of Object.entries({
   cleaver: 'assets/actors/thornking_cleaver.png',
 })) { const im = new Image(); im.src = f; THORN_ART[k] = im; }
 
+// Animation strips, one per state, generated from the same rig as the cutscene
+// so he is the same character standing still, walking and swinging. Each strip
+// is a row of frames; FRAME_W/H and the ground line inside them are fixed, so
+// placing him is just "put the ground line on his feet".
+const THORN_FRAME_W = 107, THORN_FRAME_H = 148, THORN_GROUND = 121;
+const THORN_ANIM = {};
+for (const [k, n] of Object.entries({ idle: 8, walk: 20, attack: 14, hurt: 8, summon: 12 })) {
+  const im = new Image();
+  im.src = `assets/actors/thornking_${k}.png`;
+  THORN_ANIM[k] = { img: im, n };
+}
+
 import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
          drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
 import { COMBAT_ACTOR_SCALE } from '../gfx/actorScale.js';
@@ -297,6 +309,7 @@ export class CombatScene {
     }
     this._updateBossIntro(dt);
     this._updateBossRise(dt);
+    this._updateBossSummonPose(dt);
     this._updateArenaGate();
 
     // pause toggle takes priority so you can always unpause
@@ -1213,6 +1226,7 @@ export class CombatScene {
       b.summonTimer -= dt;
       if (b.summonTimer <= 0) {
         b.summonTimer = 6;
+        b._summoning = 0.9;          // drives the call animation
         const n = Math.min(phase.summon, 5 - this.enemies.filter(e => !e.isBoss && e.hp > 0).length);
         for (let i = 0; i < n; i++) {
           const m = this._spawnEnemy('goblin', b.x + rand(-30, 30), clamp(b.depth + rand(-20, 20), DEPTH_MIN, DEPTH_MAX));
@@ -1528,6 +1542,11 @@ export class CombatScene {
 
   // Brings him off the platform over riseT. Purely the z drop — his own walk AI
   // carries him the rest of the way, so nothing here has to know about the fight.
+  _updateBossSummonPose(dt) {
+    const b = this.boss;
+    if (b && b._summoning > 0) b._summoning = Math.max(0, b._summoning - dt);
+  }
+
   _updateBossRise(dt) {
     const b = this.boss;
     if (!b || b.riseT <= 0) return;
@@ -1705,33 +1724,79 @@ export class CombatScene {
     return 'p1';
   }
 
-  _drawThornKing(g, e) {
-    const img = THORN_ART[this._thornPose()];
-    if (!img || !img.complete || !img.naturalWidth) return false;
-    const x = Math.round(e.x - img.naturalWidth / 2);
-    const y = Math.round(e.depth - (e.z || 0) - img.naturalHeight);
-    // He has to be able to turn. The art faces one way; `facing` mirrors it,
-    // which is also what lets him sit facing DOWN the hall rather than staring
-    // out of the screen — a throne faces its own room.
-    const flip = e.facing > 0;
-    if (flip) {
-      g.save();
-      g.translate(Math.round(e.x) * 2, 0);
-      g.scale(-1, 1);
+  // Which strip and which frame. The state comes from the AI — nothing here
+  // drives behaviour, it only makes the behaviour visible.
+  _thornAnim(e) {
+    if (e.state === 'attack') {
+      // Played through ONCE per swing rather than looped, and keyed to the same
+      // clock the engine already uses for the windup — so the coil reads as the
+      // telegraph it actually is, instead of a pose that happens to be showing.
+      const d = e.tuning?.attackAnim ?? 0.55;
+      return { key: 'attack', u: Math.min(0.999, (e.animTime || 0) / d), loop: false };
     }
-    if (e.flash > 0) {                       // hit flash, without tinting the art
-      g.drawImage(img, x, y);
-      g.globalAlpha = Math.min(0.7, e.flash);
-      g.globalCompositeOperation = 'lighter';
-      g.drawImage(img, x, y);
-      g.globalCompositeOperation = 'source-over';
-      g.globalAlpha = 1;
-    } else {
+    if (e.state === 'hurt') {
+      return { key: 'hurt', u: Math.min(0.999, (e.animTime || 0) / 0.34), loop: false };
+    }
+    if (e._summoning > 0) {
+      return { key: 'summon', u: 1 - Math.min(1, e._summoning / 0.9), loop: false };
+    }
+    // Walking is detected from actual movement and advanced by DISTANCE, so his
+    // feet cannot skate however fast a phase makes him chase.
+    const moved = Math.abs(e.x - (e._prevX ?? e.x));
+    e._prevX = e.x;
+    if (moved > 0.08) {
+      e._gait = ((e._gait || 0) + moved / 42) % 1;
+      return { key: 'walk', u: e._gait, loop: true };
+    }
+    e._idle = ((e._idle || 0) + 1 / 60 / 2.6) % 1;
+    return { key: 'idle', u: e._idle, loop: true };
+  }
+
+  _drawThornKing(g, e) {
+    // The cinematic poses are single plates and take priority.
+    const posed = this._thornPose();
+    if (posed === 'throne' || posed === 'kneel' || this.cine) {
+      const img = THORN_ART[posed];
+      if (!img || !img.complete || !img.naturalWidth) return false;
+      const x = Math.round(e.x - img.naturalWidth / 2);
+      const y = Math.round(e.depth - (e.z || 0) - img.naturalHeight);
       g.globalAlpha = e.alpha ?? 1;
       g.drawImage(img, x, y);
       g.globalAlpha = 1;
+      return true;
     }
-    if (flip) g.restore();
+
+    const a = this._thornAnim(e);
+    const set = THORN_ANIM[a.key];
+    if (!set || !set.img.complete || !set.img.naturalWidth) return false;
+    const i = Math.min(set.n - 1, Math.max(0, Math.floor(a.u * set.n)));
+    const sx = i * THORN_FRAME_W;
+    const dx = Math.round(e.x - 58);
+    const dy = Math.round(e.depth - (e.z || 0) - THORN_GROUND);
+    const flip = e.facing > 0;
+    g.save();
+    if (flip) { g.translate(Math.round(e.x) * 2, 0); g.scale(-1, 1); }
+    g.globalAlpha = e.alpha ?? 1;
+    g.drawImage(set.img, sx, 0, THORN_FRAME_W, THORN_FRAME_H,
+                dx, dy, THORN_FRAME_W, THORN_FRAME_H);
+    // Phase 2 is the same performance seen through the thorn light, so he keeps
+    // every animation instead of reverting to a single static plate.
+    if (this.phase2) {
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = 0.20;
+      g.drawImage(set.img, sx, 0, THORN_FRAME_W, THORN_FRAME_H,
+                  dx, dy, THORN_FRAME_W, THORN_FRAME_H);
+      g.globalCompositeOperation = 'source-over';
+    }
+    if (e.flash > 0) {
+      g.globalAlpha = Math.min(0.7, e.flash);
+      g.globalCompositeOperation = 'lighter';
+      g.drawImage(set.img, sx, 0, THORN_FRAME_W, THORN_FRAME_H,
+                  dx, dy, THORN_FRAME_W, THORN_FRAME_H);
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.globalAlpha = 1;
+    g.restore();
     return true;
   }
 
