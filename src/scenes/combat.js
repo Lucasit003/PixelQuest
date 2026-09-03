@@ -122,6 +122,9 @@ export class CombatScene {
       tryMelee: (e) => this._enemyTryMelee(e, this._aiContext.dt),
       shoot: (e) => this._enemyShoot(e),
       lob: (e) => this._enemyLob(e),
+      warn: (tg) => this.telegraphs.push(tg),
+      slamHit: (e) => this._bruteSlamHit(e),
+      ram: (e) => this._bruteRamHit(e),
     };
 
     // Gate progression: each gate spawns a wave; clearing it scrolls the camera.
@@ -812,6 +815,39 @@ export class CombatScene {
     if (Math.hypot(dx, dd) <= pr.r + 4 && p.z < 26) {
       this._hurtPlayer(pr.dmg, Math.sign(dx) || 1);
     }
+  }
+
+  _bruteSlamHit(e) {
+    // The club hits the warned circle: dust shockwave, shake, flat damage
+    // inside - the depth axis squashed the same way the telegraph draws.
+    const t = e.tuning;
+    const x = e._slamX ?? e.x + e.facing * 20;
+    const y = e._slamY ?? e.depth;
+    this.game.addShake(7);
+    this.hitStop = Math.max(this.hitStop, 0.06);
+    Audio.heavyHit();
+    this.particles.spawn({ x, y, kind: 'ring', maxR: (t.slamR ?? 34) + 4, color: '#c9b18a', life: 0.32 });
+    this.particles.dust(x, y, 14);
+    this.particles.landPuff(x, y);
+    const p = this.p;
+    const dx = p.x - x, dd = (p.depth - y) / 0.7;
+    if (Math.hypot(dx, dd) <= (t.slamR ?? 34) + 4 && p.z < 24) {
+      this._hurtPlayer(Math.round(e.def.attack * (t.slamMult ?? 1.5)), Math.sign(dx) || e.facing);
+    }
+  }
+
+  _bruteRamHit(e) {
+    // Contact check while charging; connects at most once per charge.
+    const p = this.p;
+    const t = e.tuning;
+    if (Math.abs(p.x - e.x) < e.def.reach - 2 && Math.abs(p.depth - e.depth) < 15 && p.z < 22) {
+      this._hurtPlayer(Math.round(e.def.attack * (t.chargeMult ?? 1.35)), e.facing);
+      this.game.addShake(5);
+      this.hitStop = Math.max(this.hitStop, 0.05);
+      this.particles.hitSpark(p.x, p.depth - 14, e.facing, '#ffd76a', 10);
+      return true;
+    }
+    return false;
   }
 
   _updateBoss(b, dt) {

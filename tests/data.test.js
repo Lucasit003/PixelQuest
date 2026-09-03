@@ -305,7 +305,7 @@ test('every enemy is complete and renderable', () => {
       assert.ok(isFiniteNumber(e[stat]) && e[stat] > 0, `enemy ${id} has a bad ${stat}`);
     }
     assert.ok(isFiniteNumber(e.defense) && e.defense >= 0, `enemy ${id} has a bad defense`);
-    assert.ok(['chase', 'hop', 'ranged', 'lobber'].includes(e.behavior),
+    assert.ok(['chase', 'hop', 'ranged', 'lobber', 'brute'].includes(e.behavior),
       `enemy ${id} has unknown behavior "${e.behavior}"`);
   }
 });

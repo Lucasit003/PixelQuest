@@ -98,7 +98,24 @@ const DEFS = {
   },
   gob_trapper:   still('assets/actors/gob_trapper.png', 30, 35, 17, 9),
   gob_shaman:    still('assets/actors/gob_shaman.png', 29, 36, 18, 9),
-  gob_brute:     still('assets/actors/gob_brute.png', 55, 55, 26, 17),
+  // The brute's full kit rig (tools/spine/brute): arc-swept club, a
+  // shoulder-cocked slam with its own crater row, and the charge pair —
+  // a pawing windup loop and the head-down run.
+  gob_brute: {
+    sheet: 'assets/actors/gob_brute.png',
+    frameW: 94, frameH: 62, anchorX: 32, anchorY: 57,
+    scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 26, shadowRadius: 15,
+    anims: {
+      idle:       { row: 0, frames: 4, fps: 5, loop: true },
+      walk:       { row: 1, frames: 4, fps: 5, loop: true },
+      attack:     { row: 2, frames: 6, fps: 6, loop: false },
+      slam:       { row: 3, frames: 6, fps: 6, loop: false },
+      chargewind: { row: 4, frames: 2, fps: 6, loop: true },
+      charge:     { row: 5, frames: 4, fps: 10, loop: true },
+      hurt:       { row: 6, frames: 1, fps: 10, loop: false },
+      down:       { row: 7, frames: 4, fps: 6, loop: false },
+    },
+  },
   war_hound:     still('assets/actors/war_hound.png', 31, 23, 10, 12),
   gob_captain:   still('assets/actors/gob_captain.png', 28, 43, 21, 9),
   // The Risen fight from their own Spine rigs (tools/spine): spearman

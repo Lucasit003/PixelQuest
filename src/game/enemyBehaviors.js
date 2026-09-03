@@ -62,6 +62,87 @@ export const ENEMY_BEHAVIORS = {
 
   // Backs off when crowded, closes when too far, and shoots from the gap it
   // keeps. Bone Archers.
+  // The Brute's three-move kit. Stalks like chase, but: mid-range plus a
+  // ready cooldown = a slow overhead SLAM onto a warned circle; long range =
+  // a paw-the-ground CHARGE down a warned lane that ends in a stagger (the
+  // player's opening); in reach it falls back to the arc-telegraphed sweep.
+  brute: {
+    requires: ['speed', 'attack', 'attackCd', 'reach'],
+    defaults: {
+      depthArc: 16, depthChase: 0.5, windup: 0.48,
+      slamMin: 30, slamMax: 66, slamCd: 6, slamWind: 0.72, slamRec: 0.62,
+      slamR: 34, slamMult: 1.5,
+      chargeMin: 110, chargeCd: 8, chargeWind: 0.7, chargeSpeed: 250,
+      chargeRange: 230, chargeMult: 1.35, staggerT: 0.9,
+    },
+    update(e, c) {
+      const t = e.tuning, dt = c.dt;
+      e._slamT = Math.max(0, (e._slamT ?? 0) - dt);
+      e._chargeT = Math.max(0, (e._chargeT ?? 0) - dt);
+      const st = e._bs || 'stalk';
+      if (st === 'slam_wind') {
+        e._bt -= dt; e.state = 'slam';
+        if (e._bt <= 0) { c.slamHit(e); e._bs = 'slam_rec'; e._bt = t.slamRec; }
+        return;
+      }
+      if (st === 'slam_rec') {
+        e._bt -= dt; e.state = 'slam';
+        if (e._bt <= 0) e._bs = 'stalk';
+        return;
+      }
+      if (st === 'charge_wind') {
+        e._bt -= dt; e.state = 'chargewind'; e.facing = e._chargeDir;
+        if (e._bt <= 0) {
+          e._bs = 'charging'; e._bt = t.chargeRange / t.chargeSpeed;
+          e._hitDone = false; e.state = 'charge'; e.animTime = 0;
+        }
+        return;
+      }
+      if (st === 'charging') {
+        e._bt -= dt; e.state = 'charge'; e.facing = e._chargeDir;
+        e.x += e._chargeDir * t.chargeSpeed * dt;
+        if (!e._hitDone && c.ram(e)) { e._hitDone = true; e._bt = Math.min(e._bt, 0.12); }
+        if (e._bt <= 0) {
+          e._bs = 'stagger'; e._bt = t.staggerT; e._chargeT = t.chargeCd;
+          e.state = 'hurt'; e.animTime = 0;
+        }
+        return;
+      }
+      if (st === 'stagger') {
+        e._bt -= dt; e.state = 'hurt';
+        if (e._bt <= 0) e._bs = 'stalk';
+        return;
+      }
+      // stalking
+      if (c.dist >= t.chargeMin && e._chargeT <= 0 && Math.abs(c.ddepth) < 14) {
+        e._bs = 'charge_wind'; e._bt = t.chargeWind; e._chargeDir = e.facing;
+        e.state = 'chargewind'; e.animTime = 0;
+        c.warn({ shape: 'rect', x: e.x + e.facing * 10, y: e.depth,
+                 len: Math.min(c.dist + 50, t.chargeRange), w: 13,
+                 facing: e.facing, t: 0, ttl: t.chargeWind });
+        return;
+      }
+      if (c.dist >= t.slamMin && c.dist <= t.slamMax && e._slamT <= 0 &&
+          Math.abs(c.ddepth) < t.depthArc + 6) {
+        e._bs = 'slam_wind'; e._bt = t.slamWind; e._slamT = t.slamCd;
+        e._slamX = e.x + e.facing * (t.slamR * 0.75);
+        e._slamY = e.depth;
+        e.state = 'slam'; e.animTime = 0;
+        c.warn({ shape: 'circle', x: e._slamX, y: e._slamY, r: t.slamR,
+                 t: 0, ttl: t.slamWind });
+        return;
+      }
+      if (c.dist > e.def.reach || Math.abs(c.ddepth) > t.depthArc) {
+        e.x += e.facing * e.def.speed * dt;
+        e.depth += Math.sign(c.ddepth) * Math.min(Math.abs(c.ddepth), e.def.speed * t.depthChase * dt);
+        e.depth = c.clampDepth(e.depth);
+        e.state = 'walk';
+      } else {
+        c.tryMelee(e); // the arc-telegraphed sweep
+      }
+    },
+  },
+
   // Lobs an arcing bomb at the player's ground position. A bomber RETREATS,
   // it does not kite: pressed too close it stops throwing entirely and
   // scrambles for room, which is the player's opening.

@@ -667,8 +667,12 @@ export const ENEMIES = {
   },
   gob_brute: {
     name: 'Goblin Brute', sprite: 'gob_brute', hp: 95, attack: 16, speed: 26,
-    defense: 6, reach: 26, gold: [10, 18], xp: 16, behavior: 'chase',
-    attackCd: 2.6, w: 22, telegraph: 'arc', bloodColor: '#3f7a3f',
+    defense: 6, reach: 30, gold: [10, 18], xp: 16, behavior: 'brute',
+    attackCd: 2.6, w: 22, telegraph: 'arc',
+    // sweep hit rides the animation's strike beat; slam and charge come
+    // from the brute archetype's own state machine
+    windup: 0.48, attackAnim: 1.0,
+    bloodColor: '#3f7a3f',
   },
   war_hound: {
     name: 'War Hound', sprite: 'war_hound', hp: 22, attack: 8, speed: 88,
