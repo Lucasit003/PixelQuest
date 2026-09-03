@@ -44,8 +44,7 @@ const THORN_ANIM = {};
 for (const [k, spec] of Object.entries({
   idle:   { n: 8,  w: 107, cx: 58 },
   walk:   { n: 20, w: 107, cx: 58 },
-  attack: { n: 7,  w: 152, cx: 76 },
-  slam:   { n: 5,  w: 126, cx: 66 },
+  attack: { n: 14, w: 107, cx: 58 },
   hurt:   { n: 8,  w: 107, cx: 58 },
   summon: { n: 12, w: 107, cx: 58 },
 })) {
@@ -53,18 +52,6 @@ for (const [k, spec] of Object.entries({
   im.src = `assets/actors/thornking_${k}.png`;
   THORN_ANIM[k] = { img: im, ...spec };
 }
-
-// When each drawn frame is on screen, in seconds from the swing committing.
-// These are not evenly spaced on purpose: the blade hangs at the top of the
-// arc, snaps through the strike and settles out of it. The entry that matters
-// is the CONTACT frame — the boss lands its damage at a fixed delay (0.28 for
-// the sweep) and the blade has to be across the player on that exact frame,
-// or he takes a hit from a weapon that is still behind the King's head.
-const THORN_SWEEP_T = [0, 0.09, 0.16, 0.22, 0.28, 0.36, 0.46, 0.60];
-// The slam is the heavier of the two and telegraphs longer: he hangs at the top
-// with the cleaver overhead before it comes down. Its damage lands at 0.40, on
-// the frame where the blade is already buried in the floor.
-const THORN_SLAM_T  = [0, 0.12, 0.28, 0.40, 0.56, 0.78];
 
 import { ThornCinematic, drawLetterbox, drawCinematicLine, drawCinematicGrade,
          drawRoots, drawEye, drawFloorFracture } from '../gfx/thornCinematic.js';
@@ -332,7 +319,7 @@ export class CombatScene {
     }
     this._updateBossIntro(dt);
     this._updateBossRise(dt);
-    this._updateBossPose(dt);
+    this._updateBossSummonPose(dt);
     this._updateArenaGate();
 
     // pause toggle takes priority so you can always unpause
@@ -1565,225 +1552,18 @@ export class CombatScene {
 
   // Brings him off the platform over riseT. Purely the z drop — his own walk AI
   // carries him the rest of the way, so nothing here has to know about the fight.
-  // Rendering-only pose clocks for the King. Two things make a swing impossible
-  // to animate straight off `state`: the boss rewrites that field every frame,
-  // so 'attack' and 'heavy' each exist for exactly ONE — read it directly and a
-  // swing gets a single frame before dropping back to idle — and a hit landing
-  // mid-swing zeroes `animTime`, which would restart the arc from the top while
-  // the damage timer carried on. So a commit is latched here and the animation
-  // runs its own clock. Nothing in here feeds a decision: cooldown, windup,
-  // reach and damage are all untouched.
-  _updateBossPose(dt) {
+  _updateBossSummonPose(dt) {
     const b = this.boss;
-    if (!b) return;
-    if (b._summoning > 0) b._summoning = Math.max(0, b._summoning - dt);
-    if (b.state === 'attack' || b.state === 'heavy') {
-      // These states are only ever assigned at the moment of commit, so seeing
-      // one is always the start of a new swing.
-      b._swingKind = b.state === 'heavy' ? 'slam' : 'attack';
-      b._swingT = 0;
-    } else if (b._swingKind) {
-      b._swingT = (b._swingT || 0) + dt;
-      const T = b._swingKind === 'slam' ? THORN_SLAM_T : THORN_SWEEP_T;
-      if (b._swingT >= T[T.length - 1]) { b._swingKind = null; b._swingT = 0; }
-    }
+    if (b && b._summoning > 0) b._summoning = Math.max(0, b._summoning - dt);
   }
 
-  _updateBossRise(dt) {
-    const b = this.boss;
-    if (!b || b.riseT <= 0) return;
-    b.riseT = Math.max(0, b.riseT - dt);
-    const u = 1 - b.riseT / 0.75;
-    b.z = 16 * (1 - u * u);
-    if (b.riseT === 0) b.z = 0;
-  }
-
-  // ================================================================ draw
-
-  draw(g) {
-    // Shake is applied to the WORLD layer only; the HUD stays perfectly still.
-    const sh = this.game.shakeOffset();
-    const ox = -Math.round(this.camX) + sh.x;
-
-    g.save();
-    // The cinematic substitutes its own lens. The world underneath is still
-    // drawn in world coordinates around the same camX, so the chamber does not
-    // move a pixel while the camera roams it — the shots are of THIS room.
-    if (this.cine) { g.translate(sh.x, sh.y); this.cine.applyCamera(g); }
-    else g.translate(ox, sh.y);
-    this._drawWorld(g);
-    if (this.cine) this._drawCinematicWorld(g);
-
-    // y-sort actors by depth
-    const actors = [this.p, ...this.enemies];
-    actors.sort((a, b) => a.depth - b.depth);
-    for (const a of actors) {
-      if (a === this.p) this._drawPlayer(g);
-      else this._drawEnemy(g, a);
-    }
-    // Seat the King INTO the dais: the step edge goes back over his legs.
-    if (this.boss && this.boss.seated && this.inArena) {
-      drawArenaSlice(g, THRONE_FG.x, THRONE_FG.y, THRONE_FG.w, THRONE_FG.h);
-    }
-
-    // projectiles + drops on top of actors roughly
-    this._drawTotems(g);
-    this._drawProjectiles(g);
-    this._drawDrops(g);
-    this._drawLightning(g);
-    this.particles.draw(g);
-    this.toasts.draw(g);
-    g.restore();
-
-    // HUD is screen-space: no camera translate, no shake.
-    this._drawHUD(g);
-    if (this.state === 'reward') this._drawRewardScreen(g);
-    if (this.state === 'defeat' && this.endTimer > 0.6) this._drawDefeatScreen(g);
-    if (this.paused) this._drawPause(g);
-  }
-
-  _drawWorld(g) {
-    // The environment lives in gfx/forestArena.js — an ancient enchanted forest
-    // clearing. Everything it needs is passed in; it reads no scene state and
-    // holds none, so the fight and the art can be worked on independently.
-    const camX = this.camX;
-    const gi = this.currentGate || 0;
-    const n = (this.gates ? this.gates.length : 5) - 1;
-    // `awake` ramps the forest through the run: dormant on wave 1, runes by 2,
-    // motes and goblin torches by 3, the hollow lit for the boss.
-    const awake = clamp01(gi / Math.max(1, n));
-    // The root circle stirs during a wave transition and for the boss, and is
-    // dark while you are actually fighting, so it never competes with VFX.
-    const md = this.messageDur || 1;
-    const msg = clamp01((this.messageT || 0) / md);
-    drawForestArena(g, {
-      camX, W: this.W, H: this.H, t: this.t,
-      gates: this.gates, gateIndex: gi, awake,
-      sealCharge: clamp01(Math.max(msg * 0.8, camX > 1050 ? 0.75 : 0)),
-      bossZone: camX > 1050,
-      arena: this.inArena,
-      // A wave banner is up exactly while a wave is walking in, so it doubles
-      // as the cue for the grove's arrival tell at the right edge.
-      arriving: this.boss ? 0 : msg,
-    });
-  }
-
-  _drawBossZone(g, camX) {
-    const sky = ['#1a0f18', '#241220', '#2e1626', '#3a1a2a'];
-    for (let i = 0; i < sky.length; i++) rect(g, camX, i * (DEPTH_MIN / 4), this.W, DEPTH_MIN / 4 + 1, sky[i]);
-    for (let x = Math.floor(camX / 60) * 60 - 60; x < camX + this.W + 60; x += 60) {
-      g.fillStyle = '#2a1830';
-      g.fillRect(x - (camX * 0.3) % 60, 80, 30, DEPTH_MIN - 80);
-    }
-    drawStoneFloor(g, camX, DEPTH_MIN - 20, this.W, this.H - (DEPTH_MIN - 20), Math.floor(camX / 16));
-    for (let x = Math.floor(camX / 120) * 120; x < camX + this.W + 40; x += 120) {
-      drawTorch(g, x + 30, DEPTH_MIN - 8, this.t + x);
-    }
-    g.fillStyle = 'rgba(0,0,0,0.14)';
-    g.fillRect(camX, DEPTH_MAX + 10, this.W, this.H - DEPTH_MAX - 10);
-  }
-
-  _drawPlayer(g) {
-    const p = this.p;
-    // dodge afterimages (drawn behind the hero)
-    for (const tr of p.trail) {
-      g.globalAlpha = 0.3 * (1 - tr.t / 0.22);
-      drawCharacter(g, { x: tr.x, y: tr.depth, z: 0, facing: tr.facing, sprite: p.sprite, weapon: p.weapon, state: 'dodge', animTime: 0, scale: ACTOR_SCALE, tint: '#8a7fd0' });
-    }
-    g.globalAlpha = 1;
-
-    // shield bubble
-    if (p.buffs.shield && p.shieldHp > 0) {
-      g.globalAlpha = 0.25 + Math.sin(this.t * 8) * 0.05;
-      disc(g, p.x, p.depth - 12, 15, '#9d8bff');
-      g.globalAlpha = 1;
-    }
-    // rage aura
-    if (p.buffs.rage && Math.floor(this.t * 10) % 2) {
-      g.globalAlpha = 0.18; disc(g, p.x, p.depth - 13, 13, '#ff5a3c'); g.globalAlpha = 1;
-    }
-    drawCharacter(g, {
-      x: p.x, y: p.depth, z: p.z, facing: p.facing,
-      sprite: p.sprite, weapon: p.weapon, state: p.state,
-      animTime: p.animTime, animDuration: p.animDuration, scale: ACTOR_SCALE,
-      flash: p.flash, alpha: p.invuln > 0 && Math.floor(this.t * 20) % 2 ? 0.5 : 1,
-    });
-
-    // small magical glow at the mage's staff tip (readability, not a big aura)
-    if (p.sprite === 'mage') {
-      const tx = p.x + p.facing * 12;
-      const ty = p.depth - p.z - 26;
-      g.globalAlpha = 0.5 + Math.sin(this.t * 5) * 0.15;
-      disc(g, tx, ty, 3, '#b8a8ff');
-      g.globalAlpha = 0.9;
-      disc(g, tx, ty, 1, '#eae2ff');
-      g.globalAlpha = 1;
-      if (Math.random() < 0.15) this.particles.spawn({ x: tx, y: ty, kind: 'ember', color: '#c2b2ff', vx: 0, vy: -6, life: 0.5, size: 1 });
-    }
-  }
-
-  // World-space cinematic layers: grade, roots, eye, floor. Drawn inside the
-  // cinematic transform so they sit in the room rather than on the screen.
-  _drawCinematicWorld(g) {
-    const c = this.cine, b = this.boss;
-    if (!c) return;
-    const camX = this.camX;
-    // The grade is SCREEN space only — see _drawCinematicOverlay. Drawing it in
-    // world space too put a second vignette in the frame, centred on the
-    // gameplay camera rather than the cinematic one, which is what was darkening
-    // one side of every zoomed shot.
-    if (b) {
-      const h = actorHeight(b.sprite) * (b.scale || 1.6);
-      drawFloorFracture(g, c, Math.round(b.x), Math.round(b.depth + 2),
-                        camX, this.W, this.H);
-      drawRoots(g, c, Math.round(b.x), Math.round(b.depth), h);
-      drawEye(g, c, Math.round(b.x), Math.round(b.depth), h);
-    }
-  }
-
-  // Screen-space: bars and subtitle, after the lens is undone so neither
-  // scales with the shot.
-  _drawCinematicOverlay(g) {
-    const c = this.cine;
-    if (!c) return;
-    drawCinematicGrade(g, c, 0, this.W, this.H);
-    drawLetterbox(g, c, this.W, this.H);
-    drawCinematicLine(g, c, this.W, this.H, drawText);
-    if (c.canSkip) {
-      g.globalAlpha = 0.5;
-      drawText(g, 'ENTER  SKIP', this.W - 10, this.H - 14, { color: '#9a9184', align: 'right' });
-      g.globalAlpha = 1;
-    }
-  }
-
-  // Which approved pose the King is in. One place decides, so the cinematic,
-  // the throne and the fight can never disagree about who he currently is.
-  _thornPose() {
-    const c = this.cine;
-    if (this.phase2) return 'p2';
-    if (c) return c.pose.kneel > 0.5 ? 'kneel' : (c.pose.phase2 > 0.5 ? 'p2' : 'p1');
-    if (this.boss && this.boss.seated) return 'throne';
-    return 'p1';
-  }
-
-  // Which strip and which frame. The state comes from the AI — nothing here
-  // drives behaviour, it only makes the behaviour visible.
   _thornAnim(e) {
-    // A committed swing owns the King until it finishes, and steps through an
-    // explicit time table rather than a linear sweep of the strip, so the blade
-    // hangs at the top of the arc and snaps through the strike. It also outranks
-    // being hit: the damage still lands whether or not he flinches, and letting
-    // a flinch cut the arc means his swings mostly never finish once the player
-    // is attacking at speed. The white flash already reads as the hit.
-    if (e._swingKind) {
-      const T = e._swingKind === 'slam' ? THORN_SLAM_T : THORN_SWEEP_T;
-      const t = e._swingT || 0;
-      let i = 0;
-      while (i < T.length - 2 && t >= T[i + 1]) i++;
-      return { key: e._swingKind, i };
+    if (e.state === 'attack') {
+      const d = e.tuning?.attackAnim ?? 0.55;
+      return { key: 'attack', u: Math.min(0.999, (e.animTime || 0) / d), loop: false };
     }
-    if (e.hurtTimer > 0) {
-      return { key: 'hurt', u: clamp01(1 - e.hurtTimer / 0.2), loop: false };
+    if (e.state === 'hurt') {
+      return { key: 'hurt', u: Math.min(0.999, (e.animTime || 0) / 0.34), loop: false };
     }
     if (e._summoning > 0) {
       return { key: 'summon', u: 1 - Math.min(1, e._summoning / 0.9), loop: false };
