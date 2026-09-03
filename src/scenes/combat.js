@@ -36,8 +36,12 @@ for (const [k, f] of Object.entries({
 // is a row of frames; FRAME_W/H and the ground line inside them are fixed, so
 // placing him is just "put the ground line on his feet".
 const THORN_FRAME_H = 148, THORN_GROUND = 121;
-// World px covered by one full walk cycle. Measured from the packed strip.
-const THORN_STRIDE = 114;
+// World px covered by one full walk cycle, measured off the packed strip: a
+// planted foot sweeps backward through the frame by exactly the distance the
+// body travels during that foot's stance, so cycle = sweep / stance fraction
+// (~0.62). Measured sweep is 39px, giving 63. Getting this wrong is precisely
+// what reads as skating — too large and the legs cycle slower than he moves.
+const THORN_STRIDE = 63;
 // Frame width and body centre are PER STRIP. The swings were drawn rather than
 // rigged, and a cleaver arc sweeps far outside the body, so those strips carry
 // a wider frame than the standing ones — `cx` is where his feet are inside it,
