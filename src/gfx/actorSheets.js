@@ -106,7 +106,7 @@ const DEFS = {
     frameW: 106, frameH: 74, anchorX: 32, anchorY: 68,
     scale: 1 / COMBAT_ACTOR_SCALE, logicalHeight: 26, shadowRadius: 15,
     anims: {
-      idle:       { row: 0, frames: 4, fps: 5, loop: true },
+      idle:       { row: 0, frames: 1, fps: 1, loop: true },
       walk:       { row: 1, frames: 4, fps: 5, loop: true },
       attack:     { row: 2, frames: 6, fps: 6, loop: false },
       slam:       { row: 3, frames: 6, fps: 5, loop: false },
