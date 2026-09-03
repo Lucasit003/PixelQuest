@@ -67,6 +67,10 @@ export class CombatScene {
     this.enemies = [];
     this.projectiles = [];
     this.telegraphs = [];
+    // bomb blasts: sprite-sheet explosions playing at their landing points
+    this._blasts = [];
+    this._fxBoom = new Image();
+    this._fxBoom.src = 'assets/fx/explosion.png';
     this.drops = [];
     this.hitStop = 0;              // freeze frames on big hits
     this.slowmo = 0;
@@ -241,6 +245,8 @@ export class CombatScene {
     this._updatePlayer(sdt);
     this._updateEnemies(sdt);
     this.telegraphs = updateTelegraphs(this.telegraphs, sdt);
+    for (const b of this._blasts) b.t += sdt;
+    this._blasts = this._blasts.filter((b) => b.t < 0.5);
     this._updateProjectiles(sdt);
     this._updateDrops(sdt);
     this._updateCamera(sdt);
@@ -793,7 +799,9 @@ export class CombatScene {
 
   _explodeBomb(pr) {
     const p = this.p;
-    this.game.addShake(4);
+    this.game.addShake(6);
+    this.hitStop = Math.max(this.hitStop, 0.05);
+    this._blasts.push({ x: pr.tx, y: pr.tdepth, t: 0 });
     Audio.heavyHit();
     this.particles.spawn({ x: pr.tx, y: pr.tdepth, kind: 'ring', maxR: pr.r + 4, color: '#ffd76a', life: 0.3 });
     this.particles.hitSpark(pr.tx, pr.tdepth, 1, '#f2942b', 10);
@@ -1103,6 +1111,14 @@ export class CombatScene {
 
     // projectiles + drops on top of actors roughly
     this._drawProjectiles(g);
+    for (const b of this._blasts) {
+      // 7 frames over 0.5s, drawn above the actors well past the damage
+      // circle - the blast should look bigger than it hits, never smaller
+      const f = Math.min(6, Math.floor(b.t / 0.5 * 7));
+      g.imageSmoothingEnabled = false;
+      g.drawImage(this._fxBoom, f * 52, 0, 52, 52,
+        Math.round(b.x) - 38, Math.round(b.y) - 68, 76, 76);
+    }
     this._drawDrops(g);
     this._drawLightning(g);
     this.particles.draw(g);

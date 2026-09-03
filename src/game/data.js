@@ -650,7 +650,7 @@ export const ENEMIES = {
     defense: 0, reach: 150, gold: [4, 8], xp: 7, behavior: 'lobber',
     attackCd: 3.4, w: 12,
     // the bomb: arc time, grounded fuse, blast circle, throw animation beats
-    bombRadius: 20, lobFlight: 0.85, bombFuse: 0.45, lobApex: 46,
+    bombRadius: 22, lobFlight: 0.85, bombFuse: 0.45, lobApex: 46,
     attackAnim: 0.9, shootDelay: 0.5, projFwd: 12, projZ: 20,
     bloodColor: '#3f7a3f',
   },
