@@ -194,6 +194,24 @@ def side_stance(a, hip, hem, pad, size, near=(0, 0), far=(0, 0), body_off=(0, 0)
     ], size, pad)
 
 
+# Weight, as a pelvis drop rather than a bob of the whole sprite.
+#
+# The drawn frames carry none: they measure 310-313px in the source, a 1%
+# spread, because the generator was asked for six figures of equal height so
+# they would pack cleanly. Equal height means the body never rises or falls,
+# and a walk without that reads as a sprite sliding sideways through poses.
+#
+# So the torso is dropped INTO the legs at the beats where a real body sinks --
+# lowest at contact where the weight lands, level as a leg passes under it and
+# carries the body over its own straight support. Only the part above the hip
+# moves; the feet stay where they were planted, which is what makes it read as
+# the legs absorbing the weight rather than the whole figure bouncing.
+#
+# Two pixels at 68px authored is about two screen pixels in town. Any more looks
+# like a limp at this size.
+WALK_BOB = [2, 1, 0, 2, 1, 0]
+
+
 def authored_walk(hero, pad, size):
     """Six drawn walk frames, if they exist, in place of the composed ones.
 
@@ -220,6 +238,17 @@ def authored_walk(hero, pad, size):
         ny, nx = ys + oy, xs + ox
         ok = (ny >= 0) & (ny < H) & (nx >= 0) & (nx < W)
         f[ny[ok], nx[ok]] = cell[ys[ok], xs[ok]]
+        drop = WALK_BOB[i]
+        if drop:
+            # Legs stay put; everything above the hip sinks into them. Drawn
+            # last, so the hip join is covered by construction, exactly as the
+            # composed frames handle it.
+            hip = int(pad + 68 * HIP)
+            upper = f[:hip].copy()
+            f[:hip] = 0
+            moved = np.zeros_like(f)
+            moved[drop:hip + drop] = upper
+            f = np.where(moved[:, :, 3:4] > 0, moved, f)
         # Drawn frames get the same pinhole repair as composed ones -- a
         # generated figure can enclose a few transparent pixels between an arm
         # and the body just as readily as a cut-up one can.

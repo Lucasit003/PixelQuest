@@ -236,7 +236,18 @@ function heroDirs() {
   return {
     // the three walking views
     idle:     { frames: [0], fps: 1 },
-    walk:     { frames: [1, 2, 3, 4, 5, 6], fps: 12 },
+    // 14fps, not 12, because the cycle length is what stops the feet skating.
+    // The step measures 31px of a 68px figure, so a full cycle covers 2 x 45.6%
+    // of his height = 41.9 world units. At 12fps the cycle lasts 0.5s and the
+    // town moves him 100 units/s, which is 50 -- he was outrunning his own feet
+    // by 19% and the planted foot dragged forward every step. 14fps brings the
+    // cycle to 0.43s and the travel to 42.9, within 2%.
+    //
+    // `holds` then retimes the poses inside that fixed duration: contact and
+    // passing are what a walk is read from and hold a beat longer; the
+    // transitions between them pass quickly.
+    walk:     { frames: [1, 2, 3, 4, 5, 6], fps: 14,
+                holds: [1.15, 0.85, 1.05, 1.15, 0.85, 1.05] },
     idleUp:   { frames: [7], fps: 1 },
     walkUp:   { frames: [8, 9, 10, 11, 12, 13], fps: 12 },
     idleDown: { frames: [14], fps: 1 },

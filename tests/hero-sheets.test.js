@@ -94,6 +94,51 @@ test('every hero can act in combat, not just stand there', async () => {
   }
 });
 
+test('retiming a walk does not change how long the cycle takes', async () => {
+  const { frameIndexFor } = await import('../src/gfx/sprites.js');
+  // The cycle duration is load-bearing: it is what keeps the stride in step
+  // with the movement speed, so `holds` must redistribute time WITHIN the
+  // cycle and never stretch it. A cycle that ran long would put the feet back
+  // to skating, silently.
+  const flat = { frames: [0, 1, 2, 3, 4, 5], fps: 14 };
+  const held = { frames: [0, 1, 2, 3, 4, 5], fps: 14,
+                 holds: [1.15, 0.85, 1.05, 1.15, 0.85, 1.05] };
+  const dur = flat.frames.length / flat.fps;
+  // both wrap at exactly one cycle
+  assert.equal(frameIndexFor(held, 0), 0);
+  assert.equal(frameIndexFor(held, dur - 1e-6), held.frames.length - 1);
+  assert.equal(frameIndexFor(held, dur + 1e-6), 0);
+  // every pose is reached, and the long ones really are longer
+  const counts = new Array(6).fill(0);
+  const N = 6000;
+  for (let i = 0; i < N; i++) counts[frameIndexFor(held, i * dur / N)]++;
+  for (let i = 0; i < 6; i++) assert.ok(counts[i] > 0, `pose ${i} never shows`);
+  assert.ok(counts[0] > counts[1], 'contact should hold longer than the transition');
+  assert.ok(counts[2] > counts[1], 'passing should hold longer than the transition');
+  // and a flat animation is untouched by the new code path
+  for (let i = 0; i < 50; i++) {
+    assert.equal(frameIndexFor(flat, i * dur / 50),
+                 Math.floor(i * dur / 50 * flat.fps) % 6);
+  }
+});
+
+test('a hero walk cycle covers the ground his stride does', async () => {
+  const sprites = await catalog();
+  // Measured on the art: one step spans 45.6% of the figure's height, so a
+  // full cycle of two steps covers 0.912 of his height. He is drawn 45.9 world
+  // units tall and town walks him at 100 units a second. If the cycle lasts
+  // longer than that stride takes, the planted foot drags -- which is exactly
+  // what a 12fps cycle was doing, by 19%.
+  const STRIDE = 0.912 * 45.9;
+  const SPEED = 100;
+  const walk = sprites.warrior.animations.walk;
+  const travel = SPEED * (walk.frames.length / walk.fps);
+  const slide = Math.abs(travel / STRIDE - 1);
+  assert.ok(slide < 0.06,
+    `walk cycle travels ${travel.toFixed(1)} units against a ${STRIDE.toFixed(1)} ` +
+    `unit stride -- ${(slide * 100).toFixed(0)}% of foot slide`);
+});
+
 test('every hero carries its own art for walking toward and away', async () => {
   const sprites = await catalog();
   for (const id of HEROES) {

@@ -210,9 +210,28 @@ export function frameIndexFor(anim, time) {
   const n = anim.frames.length;
   if (n <= 1) return 0;
   const fps = anim.fps || 8;
-  const raw = Math.floor(Math.max(0, time) * fps);
-  if (anim.loop === false) return Math.min(raw, n - 1);
-  return raw % n;
+  const t = Math.max(0, time) * fps;          // measured in frame-slots
+  if (!anim.holds) {
+    const raw = Math.floor(t);
+    return anim.loop === false ? Math.min(raw, n - 1) : raw % n;
+  }
+  // `holds` gives each pose a RELATIVE duration. Not every pose deserves the
+  // same time on screen: contact and passing are the poses a walk is read from
+  // and want a beat longer, while the transitions between them can go past
+  // quickly. The weights are normalised back to n slots, so retiming a cycle
+  // never changes how long it takes -- which matters here, because the cycle
+  // duration is what keeps the stride in step with the movement speed.
+  const h = anim.holds;
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += h[i];
+  const k = n / sum;
+  let u = anim.loop === false ? Math.min(t, n - 1e-6) : t % n;
+  for (let i = 0; i < n; i++) {
+    const d = h[i] * k;
+    if (u < d) return i;
+    u -= d;
+  }
+  return n - 1;
 }
 
 /** Everything needed to draw one frame: which cell, and whether a one-shot ended. */

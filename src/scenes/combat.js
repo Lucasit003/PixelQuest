@@ -36,6 +36,8 @@ for (const [k, f] of Object.entries({
 // is a row of frames; FRAME_W/H and the ground line inside them are fixed, so
 // placing him is just "put the ground line on his feet".
 const THORN_FRAME_H = 148, THORN_GROUND = 121;
+// World px covered by one full walk cycle. Measured from the packed strip.
+const THORN_STRIDE = 114;
 // Frame width and body centre are PER STRIP. The swings were drawn rather than
 // rigged, and a cleaver arc sweeps far outside the body, so those strips carry
 // a wider frame than the standing ones — `cx` is where his feet are inside it,
@@ -43,7 +45,7 @@ const THORN_FRAME_H = 148, THORN_GROUND = 121;
 const THORN_ANIM = {};
 for (const [k, spec] of Object.entries({
   idle:   { n: 8,  w: 107, cx: 58 },
-  walk:   { n: 20, w: 107, cx: 58 },
+  walk:   { n: 8,  w: 107, cx: 58 },
   attack: { n: 14, w: 107, cx: 58 },
   hurt:   { n: 8,  w: 107, cx: 58 },
   summon: { n: 12, w: 107, cx: 58 },
@@ -1569,11 +1571,15 @@ export class CombatScene {
       return { key: 'summon', u: 1 - Math.min(1, e._summoning / 0.9), loop: false };
     }
     // Walking is detected from actual movement and advanced by DISTANCE, so his
-    // feet cannot skate however fast a phase makes him chase.
+    // feet cannot skate however fast a phase makes him chase. THORN_STRIDE is
+    // measured off the art, not guessed: the widest foot separation in the walk
+    // strip is one step, and a cycle is two of them. Get it wrong and his legs
+    // cycle at a speed his body is not travelling at, which is exactly what
+    // reads as skating.
     const moved = Math.abs(e.x - (e._prevX ?? e.x));
     e._prevX = e.x;
     if (moved > 0.08) {
-      e._gait = ((e._gait || 0) + moved / 42) % 1;
+      e._gait = ((e._gait || 0) + moved / THORN_STRIDE) % 1;
       return { key: 'walk', u: e._gait, loop: true };
     }
     e._idle = ((e._idle || 0) + 1 / 60 / 2.6) % 1;
